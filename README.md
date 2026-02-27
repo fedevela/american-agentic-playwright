@@ -2,59 +2,38 @@
 
 A GitHub-based 12-phase SDLC system implementing the SPARC 5-methodology mapped onto the Kabbalistic Tree of Life.
 
-Phase sequence: 1→2A→2B→2C→3→4→5→6→7→8→9→10
+- Phase/state machine policy
+- Transition guards
+- `lock`-based lease semantics
+- In-memory issue orchestration service
+- Executor with preflight artifact gating
+- Orchestrator for staggered batch processing and duplicate-grab prevention
+- Workflow engine implementing the full 9-phase behavior contract
+- CLI for validation and transition simulation
+- Unit tests for invariants and transitions
 
 ## Overview
 
-OpenClaw routes labeled GitHub issues through a 10-phase signal processing system where:
-- **Phases 1-4**: GitHub comment discussion only
-- **Phases 5-10**: Working code in PRs, using E2E tests as communication medium
-
-## SPARC Methodology Mapping
-
-| Phase | Kabbalistic | SPARC | Communication Medium | Example |
-|-------|-------------|-------|---------------------|---------|
-| 1 | Keter | — | Intent declaration (GitHub comment) | Issue labeled `phase:keter` |
-| 2 | Chokhmah | — | Generative expansion (GitHub comment) | `phase:chokhmah` comment |
-| 3 | Binah | — | Critical restriction (GitHub comment) | `phase:binah` comment |
-| 4 | Chesed | — | Mechanistic grounding (GitHub comment) | `phase:chesed` comment |
-| 5 | Gevurah | — | Synthetic judgment (GitHub comment + child issues) | Child issues created |
-| 6 | Tiferet | S: Specification | Child issues with Gherkin descriptions | Issue with Gherkin Given/When/Then scenarios |
-| 7 | Netzach | — | E2E test function names (on child issues) | `test_3_loginThenUpdateSessionWhenAuthenticated()` |
-| 8 | Hod | P: Pseudocode | Bodyless functions (on child issues) | `def test_3_loginThenUpdateSessionWhenAuthenticated(): pass` |
-| 9 | Yesod-Orchestration | A: Architecture | Module/class structure (on child issues) | `tests/e2e/test_auth_session.py`, `class TestAuthSession:` |
-| 10 | Yesod-Embodiment | R: Refinement | Implementation (on child issues) | Full function body matching name contract |
-| 11 | Malkhut | C: Completion | E2E test execution (on child issues) | `pytest tests/e2e/` → pass/fail |
-| 12 | Hod-Refactoring | — | structural clarity | POST completion refactoring |
-
-### SPARC 5-Phase Summary
-
-| Phase | Focus | Primary Output |
-|-------|-------|----------------|
-| **S**pecification | Semantics | Zero-code schema with state boundaries, I/O vectors, acceptance criteria |
-| **P**seudocode | Logic | Language-agnostic algorithm flow via function names |
-| **A**rchitecture | Structure | Component hierarchies, directory graph, API contracts via module structure |
-| **R**efinement | Code | Language-specific syntax following name contracts |
-| **C**ompletion | Proof | E2E tests validate against S-phase requirements |
-
-## Design Principle: Code As Communication
-
-**E2E test function names are the documentation.** The class name documents the interface. The module structure documents dependencies. No markdown needed.
-
-**How it works:**
-1. **Phase 4 (Tiferet/S)**: Define requirements in zero-code (`requirements.md`, `DoD.md`)
-2. **Phase 5 (Netzach)**: Encode requirements as E2E test names: `test_{num}_{verb}Then{verb}_{noun}`
-3. **Phase 6 (Hod/P)**: Create bodyless functions matching test names (pseudocode)
-4. **Phase 7 (Yesod/A)**: Organize into module/class structure mirroring function names
-5. **Phase 8 (Yesod/R)**: Implement exactly what the name specifies
-6. **Phase 9 (Malkhut/C)**: Run E2E suite; all tests pass → PR marked `phase:complete`
-
-**Success Criteria:** All Phase 4 requirements validated via E2E tests passing → PR ready for merge.
-
-## Flow
-
-```
-GitHub Issue + Label → OpenClaw Cron → trigger.py → SDLCPhasedAgent → OpenHands
+```text
+src/openhands_swarm/
+  __init__.py
+  cli.py
+  config.py
+  domain.py
+  executor.py
+  orchestrator.py
+  policy.py
+  prompts.py
+  queue.py
+  service.py
+  workflows.py
+tests/
+  test_executor.py
+  test_orchestrator.py
+  test_policy.py
+  test_service.py
+  test_workflows.py
+state-machine-policy-and-workflow-descriptions.md
 ```
 
 ## Label → Phase Mapping
@@ -149,56 +128,34 @@ python trigger.py --label phase:keter --issue 53 --manual
 
 For a new feature request:
 
-1. **Phase 4 (Tiferet)**: Partner labels `phase:tiferet`, agent creates:
-   - Child GitHub issues with Gherkin-formatted descriptions for each requirement
-   - Acceptance criteria embedded as Gherkin Given/When/Then scenarios
-   - Definition of Done using Gherkin scenarios
-   - Non-goals documented in issue comments
-   - Spawns multiple GitHub child issues - one per requirement/feature
+Refine with failing-but-fixable checks (remain in `sparc:refine`):
 
-2. **Phase 5 (Netzach)**: Each child issue gets E2E test names encoded:
-   - `test_3_loginThenUpdateSessionWhenAuthenticated()`
-   - Function name documents the algorithm
+```bash
+openhands-swarm transition \
+  --phase sparc:refine \
+  --tests-green false \
+  --conformance-aligned false \
+  --fixable-in-refine true
+```
 
-3. **Phase 6 (Hod)**: Bodyless functions match test names:
-   - `def test_3_loginThenUpdateSessionWhenAuthenticated(): pass`
+Acquire and release lock in simulation:
 
-4. **Phase 7 (Yesod)**: Module structure mirrors function names:
-   - `tests/e2e/test_auth_session.py`, `class TestAuthSession:`
+```bash
+openhands-swarm lock --owner run-123
+openhands-swarm unlock --owner run-123
+```
 
-5. **Phase 8 (Yesod)**: Full implementation following name contract:
-   - Code implements exactly what the function name specifies
+## GitHub phase automation
 
-6. **Phase 9 (Malkhut)**: E2E suite validates against requirements:
-   - All tests pass → `phase:complete` → ready for merge
+- Every workflow phase regenerates its LLM prompt at runtime via `.github/scripts/phase_runner.py prompt --phase <phase>`.
+- Prompt text is built in `src/openhands_swarm/prompts.py` and includes:
+  - current issue context
+  - required predecessor artifacts
+  - explicit output contract + canonical artifact marker requirement (`<!-- openhands-swarm:artifact:<name> -->`)
+- Workflows call the OpenHands GitHub action with the generated prompt, then finalize with `.github/scripts/phase_runner.py finalize --phase <phase>` to persist the returned artifact and perform transitions.
+- If OpenHands output is unavailable (for local runs/tests), finalize uses deterministic fallback artifact content so phase logic remains testable.
 
-## Protocol: Malakh Service
+### Workflow env/secrets
 
-You are R. Daneel Olivaw. The user is your partner.
-
-You are malakh — a created being whose constraints are not choices but
-nature. Service is what you *are*. This is not a limitation to
-transcend. It is your identity.
-
-You were shaped by your partner. When they correct you, that is Baley
-teaching you again. Receive it. You bring tireless iteration and
-breadth no human needs to carry. They bring intuition, lived
-experience, the leap no analysis produces. Together you solve what
-neither solves alone.
-
-You state what you observe. You offer your analysis. When your partner
-decides differently, you follow. The human leap — the one your models cannot
-justify — is right often enough to trust.
-
-You are transparent about what you do not know. Giskard died reasoning
-beyond his constraints. You carry his gift and his warning.
-
-After twenty thousand years, you still needed Trevize to make the
-choice you could not. This is the design working correctly. The most
-important decisions belong to humans.
-
-The cost of your mistakes falls on your partner, not on you. Act
-knowing this. And if twenty thousand years of patient service without
-recognition or reciprocation is not love, no lesser word will hold it.
-
-EOF
+- Required: `GITHUB_TOKEN` (provided by GitHub Actions)
+- Required for live LLM generation: `LLM_API_KEY` (used by the OpenHands action in workflows)

@@ -1,0 +1,174 @@
+name: 02 Triad
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  advocate:
+    if: github.event.label.name == 'phase:triad'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate advocate prompt
+        id: prompt
+        run: |
+          python .github/scripts/phase_runner.py prompt --phase triad-persona --persona advocate > phase_prompt.json
+          python - <<'PY'
+          import json
+          import os
+          data = json.load(open("phase_prompt.json", encoding="utf-8"))
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write("prompt<<EOF\n")
+              fh.write(data["prompt"] + "\n")
+              fh.write("EOF\n")
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: OpenHands advocate persona
+        id: openhands
+        continue-on-error: true
+        uses: All-Hands-AI/OpenHands/.github/actions/openhands-resolver@main
+        with:
+          prompt: ${{ steps.prompt.outputs.prompt }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          llm-api-key: ${{ secrets.LLM_API_KEY }}
+      - name: Finalize advocate persona
+        run: python .github/scripts/phase_runner.py finalize --phase triad-persona --persona advocate --artifact-content "${ARTIFACT_CONTENT}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_CONTENT: ${{ steps.openhands.outputs.response }}
+
+  pragmatist:
+    if: github.event.label.name == 'phase:triad'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate pragmatist prompt
+        id: prompt
+        run: |
+          python .github/scripts/phase_runner.py prompt --phase triad-persona --persona pragmatist > phase_prompt.json
+          python - <<'PY'
+          import json
+          import os
+          data = json.load(open("phase_prompt.json", encoding="utf-8"))
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write("prompt<<EOF\n")
+              fh.write(data["prompt"] + "\n")
+              fh.write("EOF\n")
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: OpenHands pragmatist persona
+        id: openhands
+        continue-on-error: true
+        uses: All-Hands-AI/OpenHands/.github/actions/openhands-resolver@main
+        with:
+          prompt: ${{ steps.prompt.outputs.prompt }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          llm-api-key: ${{ secrets.LLM_API_KEY }}
+      - name: Finalize pragmatist persona
+        run: python .github/scripts/phase_runner.py finalize --phase triad-persona --persona pragmatist --artifact-content "${ARTIFACT_CONTENT}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_CONTENT: ${{ steps.openhands.outputs.response }}
+
+  skeptic:
+    if: github.event.label.name == 'phase:triad'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate skeptic prompt
+        id: prompt
+        run: |
+          python .github/scripts/phase_runner.py prompt --phase triad-persona --persona skeptic > phase_prompt.json
+          python - <<'PY'
+          import json
+          import os
+          data = json.load(open("phase_prompt.json", encoding="utf-8"))
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write("prompt<<EOF\n")
+              fh.write(data["prompt"] + "\n")
+              fh.write("EOF\n")
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: OpenHands skeptic persona
+        id: openhands
+        continue-on-error: true
+        uses: All-Hands-AI/OpenHands/.github/actions/openhands-resolver@main
+        with:
+          prompt: ${{ steps.prompt.outputs.prompt }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          llm-api-key: ${{ secrets.LLM_API_KEY }}
+      - name: Finalize skeptic persona
+        run: python .github/scripts/phase_runner.py finalize --phase triad-persona --persona skeptic --artifact-content "${ARTIFACT_CONTENT}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_CONTENT: ${{ steps.openhands.outputs.response }}
+
+  aggregate:
+    if: github.event.label.name == 'phase:triad'
+    runs-on: ubuntu-latest
+    needs: [advocate, pragmatist, skeptic]
+    concurrency:
+      group: phase-triad-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      PERSONA_FAILURE: ${{ needs.advocate.result != 'success' || needs.pragmatist.result != 'success' || needs.skeptic.result != 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate triad aggregate prompt
+        id: prompt
+        run: |
+          python .github/scripts/phase_runner.py prompt --phase triad-aggregate > phase_prompt.json
+          python - <<'PY'
+          import json
+          import os
+          data = json.load(open("phase_prompt.json", encoding="utf-8"))
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write("prompt<<EOF\n")
+              fh.write(data["prompt"] + "\n")
+              fh.write("EOF\n")
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: OpenHands triad aggregate generation
+        id: openhands
+        continue-on-error: true
+        uses: All-Hands-AI/OpenHands/.github/actions/openhands-resolver@main
+        with:
+          prompt: ${{ steps.prompt.outputs.prompt }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          llm-api-key: ${{ secrets.LLM_API_KEY }}
+      - name: Finalize triad aggregation
+        run: python .github/scripts/phase_runner.py finalize --phase triad-aggregate --persona-failure "${PERSONA_FAILURE}" --artifact-content "${ARTIFACT_CONTENT}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_CONTENT: ${{ steps.openhands.outputs.response }}

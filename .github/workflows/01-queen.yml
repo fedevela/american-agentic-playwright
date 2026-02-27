@@ -1,0 +1,53 @@
+name: 01 Queen
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  queen:
+    if: github.event.label.name == 'phase:queen'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: phase-queen-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate queen prompt
+        id: prompt
+        run: |
+          python .github/scripts/phase_runner.py prompt --phase queen > phase_prompt.json
+          python - <<'PY'
+          import json
+          import os
+          data = json.load(open("phase_prompt.json", encoding="utf-8"))
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"artifact_name={data['artifact_name']}\n")
+              fh.write("prompt<<EOF\n")
+              fh.write(data["prompt"] + "\n")
+              fh.write("EOF\n")
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: OpenHands queen generation
+        id: openhands
+        continue-on-error: true
+        uses: All-Hands-AI/OpenHands/.github/actions/openhands-resolver@main
+        with:
+          prompt: ${{ steps.prompt.outputs.prompt }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          llm-api-key: ${{ secrets.LLM_API_KEY }}
+      - name: Finalize queen phase
+        run: python .github/scripts/phase_runner.py finalize --phase queen --artifact-content "${ARTIFACT_CONTENT}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_CONTENT: ${{ steps.openhands.outputs.response }}

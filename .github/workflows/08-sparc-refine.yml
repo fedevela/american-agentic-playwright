@@ -1,0 +1,54 @@
+name: 08 SPARC Refine
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  refine:
+    if: github.event.label.name == 'sparc:refine'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: phase-refine-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install project
+        run: python -m pip install -e .[dev]
+      - name: Generate SPARC refine prompt
+        id: prompt
+        run: |
+          python .github/scripts/phase_runner.py prompt --phase refine > phase_prompt.json
+          python - <<'PY'
+          import json
+          import os
+          data = json.load(open("phase_prompt.json", encoding="utf-8"))
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write("prompt<<EOF\n")
+              fh.write(data["prompt"] + "\n")
+              fh.write("EOF\n")
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: OpenHands refine generation
+        id: openhands
+        continue-on-error: true
+        uses: All-Hands-AI/OpenHands/.github/actions/openhands-resolver@main
+        with:
+          prompt: ${{ steps.prompt.outputs.prompt }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          llm-api-key: ${{ secrets.LLM_API_KEY }}
+      - name: Finalize SPARC refine phase
+        run: python .github/scripts/phase_runner.py finalize --phase refine --artifact-content "${ARTIFACT_CONTENT}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_CONTENT: ${{ steps.openhands.outputs.response }}

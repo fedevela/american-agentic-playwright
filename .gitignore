@@ -12,3 +12,4 @@ workspace/
 __pycache__
 .opencode/
 .pytest_cache
+.opencode
