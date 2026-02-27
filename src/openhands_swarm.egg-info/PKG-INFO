@@ -1,0 +1,70 @@
+Metadata-Version: 2.4
+Name: openhands-swarm
+Version: 0.1.0
+Summary: State-machine driven issue orchestration for OpenHands Swarm
+Author: OpenHands Swarm
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: openhands-ai<1.0,>=0.30
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+
+# OpenHands Swarm
+
+Well-structured Python implementation of the OpenHands issue orchestration model, including:
+
+- Phase/state machine policy
+- Transition guards
+- `lock`-based lease semantics
+- In-memory issue orchestration service
+- CLI for validation and transition simulation
+- Unit tests for invariants and transitions
+
+## Project layout
+
+```text
+src/openhands_swarm/
+  __init__.py
+  cli.py
+  config.py
+  domain.py
+  policy.py
+  service.py
+tests/
+  test_policy.py
+  test_service.py
+state-machine-policy-and-workflow-descriptions.md
+```
+
+## Install
+
+```bash
+python -m pip install -e .[dev]
+```
+
+## Run tests
+
+```bash
+pytest
+```
+
+## CLI examples
+
+Validate issue labels:
+
+```bash
+openhands-swarm validate --phase-labels phase:queen --meta-labels lock
+```
+
+Simulate transition:
+
+```bash
+openhands-swarm transition --phase phase:queen --open-questions false
+```
+
+Acquire and release lock in simulation:
+
+```bash
+openhands-swarm lock --owner run-123
+openhands-swarm unlock --owner run-123
+```

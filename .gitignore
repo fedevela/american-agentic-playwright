@@ -8,3 +8,7 @@ workspace/
 .openhands/workspace/.sdlc-state.json
 **/workspace/
 .DS_Store
+.venv
+__pycache__
+.opencode/
+.pytest_cache

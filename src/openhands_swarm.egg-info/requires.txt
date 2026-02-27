@@ -1,0 +1,4 @@
+openhands-ai<1.0,>=0.30
+
+[dev]
+pytest>=8.0
