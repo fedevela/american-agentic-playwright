@@ -54,6 +54,13 @@ class InMemoryIssueService:
         has_open_questions: bool = False,
         requires_semantic_contract_change: bool = False,
         mapping_insufficient: bool = False,
+        persona_failure: bool = False,
+        ambiguity_or_missing_info: bool = False,
+        scope_change: bool = False,
+        tests_green: bool = True,
+        conformance_aligned: bool = True,
+        semantic_wording_change: bool = False,
+        fixable_in_refine: bool = False,
     ) -> TransitionResult:
         """Acquire lock, evaluate policy transition, mutate labels, and release lock."""
         self.acquire_lock(issue, owner)
@@ -63,6 +70,13 @@ class InMemoryIssueService:
                 has_open_questions=has_open_questions,
                 requires_semantic_contract_change=requires_semantic_contract_change,
                 mapping_insufficient=mapping_insufficient,
+                persona_failure=persona_failure,
+                ambiguity_or_missing_info=ambiguity_or_missing_info,
+                scope_change=scope_change,
+                tests_green=tests_green,
+                conformance_aligned=conformance_aligned,
+                semantic_wording_change=semantic_wording_change,
+                fixable_in_refine=fixable_in_refine,
             )
             self.apply_transition(issue, result)
             return result

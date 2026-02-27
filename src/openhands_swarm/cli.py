@@ -26,6 +26,13 @@ def build_parser() -> argparse.ArgumentParser:
     transition.add_argument("--open-questions", choices=["true", "false"], default="false")
     transition.add_argument("--semantic-change", choices=["true", "false"], default="false")
     transition.add_argument("--mapping-insufficient", choices=["true", "false"], default="false")
+    transition.add_argument("--persona-failure", choices=["true", "false"], default="false")
+    transition.add_argument("--ambiguity", choices=["true", "false"], default="false")
+    transition.add_argument("--scope-change", choices=["true", "false"], default="false")
+    transition.add_argument("--tests-green", choices=["true", "false"], default="true")
+    transition.add_argument("--conformance-aligned", choices=["true", "false"], default="true")
+    transition.add_argument("--semantic-wording-change", choices=["true", "false"], default="false")
+    transition.add_argument("--fixable-in-refine", choices=["true", "false"], default="false")
 
     lock = subparsers.add_parser("lock", help="Acquire lock in simulation")
     lock.add_argument("--owner", required=True)
@@ -76,6 +83,13 @@ def main() -> int:
             has_open_questions=args.open_questions == "true",
             requires_semantic_contract_change=args.semantic_change == "true",
             mapping_insufficient=args.mapping_insufficient == "true",
+            persona_failure=args.persona_failure == "true",
+            ambiguity_or_missing_info=args.ambiguity == "true",
+            scope_change=args.scope_change == "true",
+            tests_green=args.tests_green == "true",
+            conformance_aligned=args.conformance_aligned == "true",
+            semantic_wording_change=args.semantic_wording_change == "true",
+            fixable_in_refine=args.fixable_in_refine == "true",
         )
         print(f"add={list(result.add)} remove={list(result.remove)} reason={result.reason}")
         print(f"labels={sorted(issue.labels)}")

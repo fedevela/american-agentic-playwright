@@ -41,6 +41,8 @@ class StateMachinePolicy:
     def can_advance(self, issue: Issue) -> None:
         if "needs:human" in issue.labels:
             raise PolicyError("Issue is blocked by needs:human")
+        if "blocked" in issue.labels:
+            raise PolicyError("Issue is blocked by blocked label")
 
     def next_phase(self, issue: Issue) -> str:
         current = self.validate_single_phase_label(issue)
@@ -62,14 +64,35 @@ class StateMachinePolicy:
         has_open_questions: bool = False,
         requires_semantic_contract_change: bool = False,
         mapping_insufficient: bool = False,
+        persona_failure: bool = False,
+        ambiguity_or_missing_info: bool = False,
+        scope_change: bool = False,
+        tests_green: bool = True,
+        conformance_aligned: bool = True,
+        semantic_wording_change: bool = False,
+        fixable_in_refine: bool = False,
     ) -> TransitionResult:
         current = self.validate_single_phase_label(issue)
+
+        if current == Phase.TRIAD.value and persona_failure:
+            return TransitionResult(
+                add=("blocked",),
+                remove=(),
+                reason="At least one persona run failed; triad remains active",
+            )
 
         if current == Phase.QUEEN.value and has_open_questions:
             return TransitionResult(
                 add=("needs:human",),
                 remove=(Phase.QUEEN.value,),
                 reason="Open questions require human input",
+            )
+
+        if current == Phase.CONTRACT.value and ambiguity_or_missing_info:
+            return TransitionResult(
+                add=("needs:human",),
+                remove=(),
+                reason="Contract has ambiguity/missing information",
             )
 
         if current == Phase.SPEC.value and requires_semantic_contract_change:
@@ -86,11 +109,37 @@ class StateMachinePolicy:
                 reason="Pseudo needs stronger spec mapping",
             )
 
+        if current == Phase.ARCH.value and scope_change:
+            return TransitionResult(
+                add=("restart:contract", "needs:human"),
+                remove=(Phase.ARCH.value,),
+                reason="Architecture implies scope change",
+            )
+
         if current in {Phase.ARCH.value, Phase.REFINE.value} and requires_semantic_contract_change:
             return TransitionResult(
                 add=("restart:contract", "needs:human"),
                 remove=(current,),
                 reason="Semantic contract change required",
+            )
+
+        if current == Phase.REFINE.value and (not tests_green or not conformance_aligned):
+            if semantic_wording_change:
+                return TransitionResult(
+                    add=("restart:contract", "needs:human"),
+                    remove=(Phase.REFINE.value,),
+                    reason="Refine found semantic contract/test wording drift",
+                )
+            if fixable_in_refine:
+                return TransitionResult(
+                    add=(),
+                    remove=(),
+                    reason="Refine failures fixable in code/tests; remain in refine",
+                )
+            return TransitionResult(
+                add=(),
+                remove=(),
+                reason="Refine checks not green; remain in refine",
             )
 
         self.can_advance(issue)
