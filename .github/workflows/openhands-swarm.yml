@@ -1,0 +1,95 @@
+name: OpenHands Swarm (Reusable)
+
+'on':
+  workflow_call:
+    inputs:
+      issue_number:
+        description: Issue number to process in the caller repository
+        required: true
+        type: number
+      label_name:
+        description: Label that triggered the caller workflow (e.g. phase:queen)
+        required: true
+        type: string
+      swarm_repository:
+        description: Repository containing the OpenHands Swarm implementation (owner/repo)
+        required: true
+        type: string
+      swarm_ref:
+        description: Git ref for the OpenHands Swarm repository (branch/tag/sha)
+        required: false
+        type: string
+        default: main
+    secrets:
+      LLM_API_KEY:
+        description: LLM API key used by OpenHands resolver
+        required: true
+      GITHUB_TOKEN:
+        description: GitHub token used for issue/comment/label mutations in caller repo
+        required: true
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  queen:
+    if: inputs.label_name == 'phase:queen'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: openhands-swarm-queen-${{ github.repository }}-${{ inputs.issue_number }}
+      cancel-in-progress: false
+    env:
+      ISSUE_NUMBER: ${{ inputs.issue_number }}
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@v4
+
+      - name: Checkout OpenHands Swarm repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.swarm_repository }}
+          ref: ${{ inputs.swarm_ref }}
+          path: .openhands-swarm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install OpenHands Swarm dependencies
+        run: python -m pip install -e ./.openhands-swarm
+
+      - name: Generate queen prompt (from src/openhands_swarm/prompts.py)
+        id: prompt
+        run: |
+          python ./.openhands-swarm/.github/scripts/phase_runner.py prompt --phase queen > phase_prompt.json
+          python - <<'PY'
+          import json
+          import os
+          data = json.load(open("phase_prompt.json", encoding="utf-8"))
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"artifact_name={data['artifact_name']}\n")
+              fh.write("prompt<<EOF\n")
+              fh.write(data["prompt"] + "\n")
+              fh.write("EOF\n")
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: OpenHands queen generation
+        id: openhands
+        continue-on-error: true
+        uses: All-Hands-AI/OpenHands/.github/actions/openhands-resolver@main
+        with:
+          prompt: ${{ steps.prompt.outputs.prompt }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          llm-api-key: ${{ secrets.LLM_API_KEY }}
+
+      - name: Finalize queen phase
+        run: >-
+          python ./.openhands-swarm/.github/scripts/phase_runner.py finalize
+          --phase queen
+          --artifact-content "${ARTIFACT_CONTENT}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_CONTENT: ${{ steps.openhands.outputs.response }}

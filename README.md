@@ -159,3 +159,40 @@ openhands-swarm unlock --owner run-123
 
 - Required: `GITHUB_TOKEN` (provided by GitHub Actions)
 - Required for live LLM generation: `LLM_API_KEY` (used by the OpenHands action in workflows)
+
+## Reusable cross-repo workflow (single app-repo workflow)
+
+This repository now provides a reusable workflow at:
+
+- `.github/workflows/openhands-swarm.yml`
+
+Use it from your **application repository** with a single workflow file. The app repo owns the issues and labels; this repo owns the phase logic and prompt generation.
+
+```yaml
+name: OpenHands Swarm
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  swarm:
+    uses: <SWARM_OWNER>/openhands-swarm/.github/workflows/openhands-swarm.yml@v1
+    with:
+      issue_number: ${{ github.event.issue.number }}
+      label_name: ${{ github.event.label.name }}
+      swarm_repository: <SWARM_OWNER>/openhands-swarm
+      swarm_ref: v1
+    secrets:
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Notes:
+- Start by labeling an issue with `phase:queen`.
+- The reusable workflow currently implements Queen routing and is structured to extend with later phases without app-repo workflow changes.
+- Pin to a major tag (for example `@v1`) so you can receive compatible central updates safely.
