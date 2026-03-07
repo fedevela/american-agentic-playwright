@@ -1,6 +1,6 @@
 # OpenHands Swarm
 
-This repository hosts the microagent definitions and configurations for the OpenHands Swarm architecture. It defines the roles and behaviors of agents operating within the OpenHands environment.
+This repository hosts my opinions around the microagent definitions and configurations for a developer team swarm. It builds upon the most excellent https://raw.githubusercontent.com/zot/humble-master and I run it locally with the help of OpenClaw.
 
 ## Overview
 
