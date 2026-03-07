@@ -1,0 +1,49 @@
+name: Queen Phase
+
+on:
+  issues:
+    types:
+      - labeled
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  queen:
+    if: github.event.label.name == 'phase:ingestion'
+    runs-on: ubuntu-latest
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build Queen prompt
+        shell: bash
+        run: |
+          sed "s#<ISSUE_NUMBER>#${ISSUE_NUMBER}#g" .openhands/microagents/queen.md > "$RUNNER_TEMP/queen-prompt.md"
+          cat <<EOF >> "$RUNNER_TEMP/queen-prompt.md"
+
+          ## Runtime Context
+
+          - Repository: ${{ github.repository }}
+          - Issue number: #${ISSUE_NUMBER}
+          - Trigger label: ${{ github.event.label.name }}
+          - Mode: headless
+          EOF
+
+      - name: Run Queen headlessly
+        uses: All-Hands-AI/openhands-github-action@v2
+        with:
+          prompt: ${{ runner.temp }}/queen-prompt.md
+          repository: ${{ github.repository }}
+          selected-branch: ${{ github.event.repository.default_branch }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          openhands-api-key: ${{ secrets.OPENHANDS_API_KEY }}
+          poll: "true"
+          timeout-seconds: "1200"
+          poll-interval-seconds: "20"
