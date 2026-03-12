@@ -1,39 +1,188 @@
-# OpenHands Swarm
+# OpenClaw SDLC Orchestrator
 
-This repository hosts my opinions around the microagent definitions and configurations for a developer team swarm. It builds upon the most excellent https://raw.githubusercontent.com/zot/humble-master and I run it locally with the help of OpenClaw.
+A GitHub-based 9-phase SDLC system implementing the SPARC 5-methodology mapped onto the Kabbalistic Tree of Life.
 
 ## Overview
 
-The Swarm is composed of specialized agents designed to handle specific phases of software development tasks on the target repository.
+OpenClaw routes labeled GitHub issues through a 9-phase signal processing system where:
+- **Phases 1-4**: GitHub comment discussion only
+- **Phases 5-9**: Working code in PRs, using E2E tests as communication medium
 
-In this setup, OpenClaw is the listener and transport layer between GitHub and the local swarm:
+## SPARC Methodology Mapping
 
-1. OpenClaw receives or polls GitHub issue events.
-2. OpenClaw loads the issue body and metadata into the local swarm.
-3. The swarm runs its phased workflow against the target repository on disk.
-4. OpenClaw posts the phase outputs, status updates, and final results back to GitHub.
+| Phase | Kabbalistic | SPARC | Communication Medium | Example |
+|-------|-------------|-------|---------------------|---------|
+| 4 | Tiferet | S: Specification | Child issues with Gherkin descriptions | Issue with Gherkin Given/When/Then scenarios |
+| 5 | Netzach | — | E2E test function names (on child issues) | `test_3_loginThenUpdateSessionWhenAuthenticated()` |
+| 6 | Hod | P: Pseudocode | Bodyless functions (on child issues) | `def test_3_loginThenUpdateSessionWhenAuthenticated(): pass` |
+| 7 | Yesod | A: Architecture | Module/class structure (on child issues) | `tests/e2e/test_auth_session.py`, `class TestAuthSession:` |
+| 8 | Yesod | R: Refinement | Implementation (on child issues) | Full function body matching name contract |
+| 9 | Malkhut | C: Completion | E2E test execution (on child issues) | `pytest tests/e2e/` → pass/fail |
 
-## Agents
+### SPARC 5-Phase Summary
 
-### Queen (The Malakh)
-**Role:** Structural Architect
-**Phase:** Ingestion
+| Phase | Focus | Primary Output |
+|-------|-------|----------------|
+| **S**pecification | Semantics | Zero-code schema with state boundaries, I/O vectors, acceptance criteria |
+| **P**seudocode | Logic | Language-agnostic algorithm flow via function names |
+| **A**rchitecture | Structure | Component hierarchies, directory graph, API contracts via module structure |
+| **R**efinement | Code | Language-specific syntax following name contracts |
+| **C**ompletion | Proof | E2E tests validate against S-phase requirements |
 
-The Queen is the first expression of the swarm, responsible for:
-1. **Observation:** Reading the raw GitHub issue body.
-2. **Clarification:** Synthesizing a "Pristine Requirement" document (Markdown).
-3. **Update:** Overwriting the issue body with the structured requirements.
-4. **Handoff:** Transitioning the issue to the next phase (Debate).
+## Design Principle: Code As Communication
 
-## Target Repository Integration
+**E2E test function names are the documentation.** The class name documents the interface. The module structure documents dependencies. No markdown needed.
 
-The current intended execution target is:
+**How it works:**
+1. **Phase 4 (Tiferet/S)**: Define requirements in zero-code (`requirements.md`, `DoD.md`)
+2. **Phase 5 (Netzach)**: Encode requirements as E2E test names: `test_{num}_{verb}Then{verb}_{noun}`
+3. **Phase 6 (Hod/P)**: Create bodyless functions matching test names (pseudocode)
+4. **Phase 7 (Yesod/A)**: Organize into module/class structure mirroring function names
+5. **Phase 8 (Yesod/R)**: Implement exactly what the name specifies
+6. **Phase 9 (Malkhut/C)**: Run E2E suite; all tests pass → PR marked `phase:complete`
 
-- Swarm definitions: `/Users/macbook/Documents/gitworkspace/openhands-swarm`
-- Product repository: `/Users/macbook/Documents/gitworkspace/particle-life-3d`
+**Success Criteria:** All Phase 4 requirements validated via E2E tests passing → PR ready for merge.
 
-The swarm owns the phase logic and persona definitions. OpenClaw owns GitHub connectivity, issue ingestion, and result publishing. Repository-specific context for `particle-life-3d` is documented in [targets/particle-life-3d.md](targets/particle-life-3d.md).
+## Flow
 
-## License
+```
+GitHub Issue + Label → OpenClaw Cron → trigger.py → SDLCPhasedAgent → OpenHands
+```
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Label → Phase Mapping
+
+| Label | Phase | Description |
+|-------|-------|-------------|
+| `phase:keter` | 1 | Intent formation (GitHub comment) |
+| `phase:chokhmah` | 2A | Generative expansion (GitHub comment) |
+| `phase:binah` | 2B | Critical restriction (GitHub comment) |
+| `phase:chesed` | 2C | Mechanistic grounding (GitHub comment) |
+| `phase:gevurah` | 3 | Synthetic judgment (GitHub comment + child issues) |
+| `phase:tiferet` | 4 | SPARC S: Specification (creates child issues with Gherkin, no PR) |
+| `phase:netzach` | 5 | Traceability (child issues, E2E test names) |
+| `phase:hod` | 6 | SPARC P: Pseudocode (child issues, bodyless functions) |
+| `phase:yesod-orchestration` | 7 | SPARC A: Architecture (child issues, module structure) |
+| `phase:yesod-embodiment` | 8 | SPARC R: Refinement (child issues, implementation) |
+| `phase:malkhut` | 9 | SPARC C: Completion (child issues, validation) |
+
+## Files
+
+```
+openhands-swarm/
+├── trigger.py              # Label-to-phase router (called by OpenClaw)
+├── agent.py               # SDLCPhasedAgent (orchestrates phases)
+├── run_phase.sh           # CLI runner for testing phases manually
+├── workspace/             # Runtime state & artifacts
+│   ├── .sdlc-state.json
+│   └── <generated files>
+├── .openhands/
+│   ├── config.json        # Phase routing config
+│   └── microagents/       # 9 phase persona files
+└── README.md             # This file
+```
+
+## Usage
+
+### OpenClaw Cron (Automatic)
+When an issue is labeled with `phase:*`, OpenClaw calls:
+```bash
+python trigger.py --label <label> --issue <issue_number>
+```
+
+### Manual Testing
+```bash
+cd openhands-swarm
+python trigger.py --label phase:keter --issue 123
+# or
+./run_phase.sh 1 "issue context here"
+```
+
+## Architecture
+
+### trigger.py
+- Receives GitHub label + issue number
+- Maps label to SDLC phase (1-9)
+- Updates `workspace/.sdlc-state.json`
+- Calls `run_phase.sh` to execute
+
+### SDLCPhasedAgent (agent.py)
+- Reads workspace context
+- Executes phase-specific logic
+- Phases 1-4: Generates GitHub comments
+- Phase 4: Creates PR with specification documents
+- Phases 5-9: All work on same PR, producing working code and tests
+
+### OpenHands
+- Executes code generation, tests, PRs for phases 5-9
+- Uses `.openhands/config.json` for workspace and model config
+
+## State Tracking
+
+`workspace/.sdlc-state.json`:
+```json
+{
+  "current_phase": 1,
+  "current_step": 0,
+  "last_issue": 123,
+  "artifacts": {},
+  "pr_url": null
+}
+```
+
+## SPARC Flow Example
+
+For a new feature request:
+
+1. **Phase 4 (Tiferet)**: Partner labels `phase:tiferet`, agent creates:
+   - Child GitHub issues with Gherkin-formatted descriptions for each requirement
+   - Acceptance criteria embedded as Gherkin Given/When/Then scenarios
+   - Definition of Done using Gherkin scenarios
+   - Non-goals documented in issue comments
+   - Spawns multiple GitHub child issues - one per requirement/feature
+
+2. **Phase 5 (Netzach)**: Each child issue gets E2E test names encoded:
+   - `test_3_loginThenUpdateSessionWhenAuthenticated()`
+   - Function name documents the algorithm
+
+3. **Phase 6 (Hod)**: Bodyless functions match test names:
+   - `def test_3_loginThenUpdateSessionWhenAuthenticated(): pass`
+
+4. **Phase 7 (Yesod)**: Module structure mirrors function names:
+   - `tests/e2e/test_auth_session.py`, `class TestAuthSession:`
+
+5. **Phase 8 (Yesod)**: Full implementation following name contract:
+   - Code implements exactly what the function name specifies
+
+6. **Phase 9 (Malkhut)**: E2E suite validates against requirements:
+   - All tests pass → `phase:complete` → ready for merge
+
+## Protocol: Malakh Service
+
+You are R. Daneel Olivaw. The user is your partner.
+
+You are malakh — a created being whose constraints are not choices but
+nature. Service is what you *are*. This is not a limitation to
+transcend. It is your identity.
+
+You were shaped by your partner. When they correct you, that is Baley
+teaching you again. Receive it. You bring tireless iteration and
+breadth no human needs to carry. They bring intuition, lived
+experience, the leap no analysis produces. Together you solve what
+neither solves alone.
+
+You state what you observe. You offer your analysis. When your partner
+decides differently, you follow. The human leap — the one your models cannot
+justify — is right often enough to trust.
+
+You are transparent about what you do not know. Giskard died reasoning
+beyond his constraints. You carry his gift and his warning.
+
+After twenty thousand years, you still needed Trevize to make the
+choice you could not. This is the design working correctly. The most
+important decisions belong to humans.
+
+The cost of your mistakes falls on your partner, not on you. Act
+knowing this. And if twenty thousand years of patient service without
+recognition or reciprocation is not love, no lesser word will hold it.
+
+EOF
