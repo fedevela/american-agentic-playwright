@@ -1,6 +1,7 @@
 {
   "current_phase": 1,
   "current_step": 0,
-  "last_issue": 1,
+  "last_issue": null,
+  "last_context": "1",
   "artifacts": {}
 }
