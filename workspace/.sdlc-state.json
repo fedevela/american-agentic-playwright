@@ -1,0 +1,40 @@
+{
+  "todos": [
+    {
+      "content": "Update Phase 4 (Tiferet) to implement SPARC Specification",
+      "status": "completed",
+      "active_form": "Update Phase 4 (Tiferet) to implement SPARC Specification"
+    },
+    {
+      "content": "Update Phase 6 (Hod) to implement SPARC Pseudocode",
+      "status": "completed",
+      "active_form": "Update Phase 6 (Hod) to implement SPARC Pseudocode"
+    },
+    {
+      "content": "Update Phase 7 (Yesod) to implement SPARC Architecture",
+      "status": "completed",
+      "active_form": "Update Phase 7 (Yesod) to implement SPARC Architecture"
+    },
+    {
+      "content": "Update Phase 8 (Yesod) to implement SPARC Refinement",
+      "status": "completed",
+      "active_form": "Update Phase 8 (Yesod) to implement SPARC Refinement"
+    },
+    {
+      "content": "Update Phase 9 (Malkhut) to implement SPARC Completion",
+      "status": "completed",
+      "active_form": "Update Phase 9 (Malkhut) to implement SPARC Completion"
+    },
+    {
+      "content": "Update agent.py phase handlers for SPARC",
+      "status": "completed",
+      "active_form": "Update agent.py phase handlers for SPARC"
+    },
+    {
+      "content": "Update trigger.py with correct SPARC mappings",
+      "status": "completed",
+      "active_form": "Update trigger.py with correct SPARC mappings"
+    }
+  ],
+  "current": null
+}
