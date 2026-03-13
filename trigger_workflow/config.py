@@ -81,6 +81,10 @@ PHASE_LABEL_METADATA = {
         "description": "Phase 9 Malkhut: SPARC Completion",
         "color": "D1242F",
     },
+    "phase:needsHuman": {
+        "description": "Workflow halted: requires human intervention",
+        "color": "B60205",
+    },
 }
 
 # Single-successor handoff chain. Each phase advances to exactly one next label.
@@ -99,6 +103,7 @@ NEXT_LABEL_MAP = {
 }
 
 PHASE_LABELS = tuple(NEXT_LABEL_MAP.keys())
+NEEDS_HUMAN_LABEL = "phase:needsHuman"
 
 PERSONA_FILE_MAP = {
     "1": "keter_intentformation.md",
@@ -150,7 +155,9 @@ KETER_DERIVED_PHASES = {"2a", "2b", "2c"}
 SPECIFICATION_PHASE = "4"
 PRE_IMPLEMENTATION_PHASES = DISCUSSION_PHASES | {SPECIFICATION_PHASE}
 IMPLEMENTATION_PHASES = {"5", "6", "7", "8", "9"}
-STRICTLY_INDEPENDENT_PHASES = PRE_IMPLEMENTATION_PHASES
+# Session policy: only the phase-2 expansion variants are isolated; phase 1 and
+# all later phases share the same per-issue OpenHands session.
+STRICTLY_INDEPENDENT_PHASES = KETER_DERIVED_PHASES
 
 TARGET_REPO_CONFIG_MAP = {
     "fedevela/particle-life-3d": TargetRepoConfig(

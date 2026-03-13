@@ -5,7 +5,7 @@ import subprocess
 import time
 from typing import Any
 
-from .config import NEXT_LABEL_MAP, PHASE_LABELS, PHASE_LABEL_METADATA, TIFERET_AUTO_ISSUE_PREFIX
+from .config import NEEDS_HUMAN_LABEL, NEXT_LABEL_MAP, PHASE_LABELS, PHASE_LABEL_METADATA, TIFERET_AUTO_ISSUE_PREFIX
 from .logging_utils import log_error, log_info
 
 
@@ -80,7 +80,8 @@ def ensure_phase_labels(repo: str) -> None:
     created = 0
     updated = 0
 
-    for label_name in PHASE_LABELS:
+    canonical_labels = tuple(PHASE_LABEL_METADATA.keys())
+    for label_name in canonical_labels:
         expected = PHASE_LABEL_METADATA[label_name]
         current = existing_by_name.get(label_name)
 
@@ -129,7 +130,7 @@ def ensure_phase_labels(repo: str) -> None:
             raise SystemExit(f"Failed to update label '{label_name}' in {repo}.")
         updated += 1
 
-    log_info(f"Canonical labels ensured: {len(PHASE_LABELS)} total, {created} created, {updated} updated")
+    log_info(f"Canonical labels ensured: {len(canonical_labels)} total, {created} created, {updated} updated")
 
 
 def resolve_issue_by_label(repo: str, label: str) -> int:
@@ -267,6 +268,13 @@ def remove_issue_label(repo: str, issue_number: int, label: str) -> None:
     log_info(f"Removing label '{label}' from issue #{issue_number}")
     edit_issue_labels(repo, issue_number, remove=[label])
     log_info("Label removed")
+
+
+def tag_issue_needs_human(repo: str, issue_number: int) -> None:
+    """Tag an issue for explicit human intervention."""
+    log_info(f"Tagging issue #{issue_number} with '{NEEDS_HUMAN_LABEL}'")
+    edit_issue_labels(repo, issue_number, add=[NEEDS_HUMAN_LABEL])
+    log_info("Human intervention label applied")
 
 
 def parse_repo(repo: str) -> tuple[str, str]:

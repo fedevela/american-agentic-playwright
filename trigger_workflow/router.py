@@ -10,6 +10,7 @@ from .config import (
     MICROAGENTS_DIR,
     NEXT_LABEL_MAP,
     PHASE_DISPLAY_NAME_MAP,
+    PRE_IMPLEMENTATION_PHASES,
     SPECIFICATION_PHASE,
     STRICTLY_INDEPENDENT_PHASES,
     WORKSPACE,
@@ -24,9 +25,11 @@ from .github_ops import (
     remove_issue_label,
     resolve_issue_by_label,
     resolve_oldest_phased_issue,
+    tag_issue_needs_human,
 )
 from .logging_utils import log_error, log_info, log_multiline, log_section, log_step
 from .openhands_runner import (
+    create_issue_branches_for_child_issues,
     resolve_openhands_model_connection,
     run_openhands_comment_phase,
     run_openhands_json_phase,
@@ -64,13 +67,13 @@ def conversation_scope_for_phase(phase: str) -> str:
 
 
 def describe_phase_conversation_policy(phase: str, session_scope: str) -> str:
-    """Describe whether the phase starts from an empty session or a shared delivery session."""
+    """Describe whether the phase starts from an empty session or the shared per-issue session."""
     if session_scope:
         return (
             f"strictly independent phase session '{session_scope}' "
             "(starts with empty OpenHands conversation context)"
     )
-    return "shared delivery session (resumes the per-issue implementation conversation)"
+    return "shared per-issue session policy (OpenHands runs start fresh by runner policy)"
 
 
 def log_prompt_size_and_conversation_policy(prompt: str, phase: str) -> str:
@@ -115,6 +118,22 @@ def post_phase_machine_comment(request: PhaseExecutionRequest, body: str) -> Non
         request.issue,
         format_phase_comment(request.phase, request.label, body),
     )
+
+
+def execute_phase_with_needs_human_tagging(
+    request: PhaseExecutionRequest,
+    executor: Callable[[PhaseExecutionRequest], None],
+) -> None:
+    """Execute a phase and mark pre-Netzach failures for explicit human intervention."""
+    try:
+        executor(request)
+    except SystemExit:
+        if request.phase in PRE_IMPLEMENTATION_PHASES:
+            log_error(
+                f"Phase {request.phase.upper()} failed before Netzach; tagging issue for human intervention."
+            )
+            tag_issue_needs_human(request.repo, request.issue)
+        raise
 
 
 def run_labeled_issue_phase(label: Optional[str] = None, issue: Optional[int] = None, repo: Optional[str] = None) -> None:
@@ -170,7 +189,7 @@ def run_labeled_issue_phase(label: Optional[str] = None, issue: Optional[int] = 
     log_step("Step 4: Executing phase workflow")
     if phase in DISCUSSION_PHASES:
         log_info(f"Running discussion workflow for phase {phase.upper()}")
-        execute_comment_phase_handoff(
+        execute_phase_with_needs_human_tagging(
             PhaseExecutionRequest(
                 label=label,
                 issue=issue,
@@ -178,13 +197,14 @@ def run_labeled_issue_phase(label: Optional[str] = None, issue: Optional[int] = 
                 microagent_content=microagent_content,
                 phase=phase,
                 issue_data=issue_data,
-            )
+            ),
+            execute_comment_phase_handoff,
         )
         return
 
     if phase == SPECIFICATION_PHASE:
         log_info("Running specification workflow for phase 4")
-        execute_tiferet_specification_phase(
+        execute_phase_with_needs_human_tagging(
             PhaseExecutionRequest(
                 label=label,
                 issue=issue,
@@ -192,7 +212,8 @@ def run_labeled_issue_phase(label: Optional[str] = None, issue: Optional[int] = 
                 microagent_content=microagent_content,
                 phase=phase,
                 issue_data=issue_data,
-            )
+            ),
+            execute_tiferet_specification_phase,
         )
         return
 
@@ -262,6 +283,10 @@ def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
     log_info(f"Creating {len(payload['sub_issues'])} ordered child issues with parent and dependency links...")
     created = create_child_issues(request.repo, request.issue, payload["sub_issues"])
     log_info(f"Created and linked {len(created)} child issues")
+    child_issue_numbers = [int(item["number"]) for item in created]
+    log_info("Creating child issue branches for downstream implementation phases...")
+    create_issue_branches_for_child_issues(request.repo, child_issue_numbers)
+    log_info(f"Created/verified {len(child_issue_numbers)} child issue branches")
 
     log_info("Posting summary comment...")
     summary_comment = build_phase_four_summary(created)
@@ -288,6 +313,9 @@ def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
         session_scope=session_scope,
     )
     log_info("Agent execution complete")
+    log_info("Advancing to next phase label...")
+    advance_issue_label(request.repo, request.issue, request.label)
+    log_info("Label advanced")
 
 
 def run_trigger_cli() -> None:

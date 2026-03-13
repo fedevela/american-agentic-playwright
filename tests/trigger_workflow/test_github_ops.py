@@ -20,6 +20,7 @@ from trigger_workflow.github_ops import (
     normalize_tiferet_child_title,
     parse_repo,
     remove_issue_label,
+    tag_issue_needs_human,
     advance_issue_label,
     verify_parent_sub_issue_ids,
 )
@@ -223,6 +224,11 @@ class GitHubOpsTests(unittest.TestCase):
     def test_remove_issue_label_uses_shared_label_editor(self, edit_issue_labels_mock) -> None:
         remove_issue_label("owner/repo", 77, "phase:tiferet")
         edit_issue_labels_mock.assert_called_once_with("owner/repo", 77, remove=["phase:tiferet"])
+
+    @patch("trigger_workflow.github_ops.edit_issue_labels")
+    def test_tag_issue_needs_human_uses_shared_label_editor(self, edit_issue_labels_mock) -> None:
+        tag_issue_needs_human("owner/repo", 77)
+        edit_issue_labels_mock.assert_called_once_with("owner/repo", 77, add=["phase:needsHuman"])
 
     @patch("trigger_workflow.github_ops.fetch_parent_sub_issue_ids", return_value=set())
     @patch("trigger_workflow.github_ops.add_blocked_by_dependency")

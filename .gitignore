@@ -7,3 +7,4 @@ workspace/
 .openhands/workspace/
 .openhands/workspace/.sdlc-state.json
 **/workspace/
+.DS_Store

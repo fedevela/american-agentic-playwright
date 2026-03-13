@@ -16,7 +16,10 @@ from .config import (
     WORKSPACE,
     TargetRepoConfig,
 )
-from .logging_utils import log_error, log_info
+from .logging_utils import log_error, log_info, log_multiline
+
+TEST_FIX_MAX_ATTEMPTS = 3
+TEST_OUTPUT_MAX_CHARS = 12000
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,21 @@ class OpenHandsTargetContext:
 
     local_path: Path
     branch: str
+
+
+def managed_repo_root() -> Path:
+    """Return the directory that stores isolated OpenHands-managed repository checkouts."""
+    return WORKSPACE / ".openhands" / "repos"
+
+
+def managed_repo_slug(repo: str) -> str:
+    """Normalize owner/repo into a filesystem-safe stable directory name."""
+    return repo.replace("/", "__")
+
+
+def managed_repo_path(repo: str) -> Path:
+    """Return the isolated checkout path for a repository."""
+    return managed_repo_root() / managed_repo_slug(repo)
 
 
 def resolve_openhands_model_connection() -> tuple[str, str]:
@@ -116,6 +134,60 @@ def resolve_target_repo_config(repo: str) -> TargetRepoConfig:
     return config
 
 
+def ensure_managed_repo_checkout(repo: str, source_path: Path) -> Path:
+    """Create or reuse an isolated managed clone used exclusively by OpenHands runs."""
+    managed_path = managed_repo_path(repo)
+    if (managed_path / ".git").exists():
+        log_info(f"Using existing OpenHands managed checkout: {managed_path}")
+        return managed_path
+
+    if managed_path.exists():
+        raise SystemExit(f"OpenHands managed checkout path exists but is not a git checkout: {managed_path}")
+
+    managed_path.parent.mkdir(parents=True, exist_ok=True)
+    log_info(f"Creating OpenHands managed checkout from source: {source_path} -> {managed_path}")
+    clone_result = subprocess.run(
+        ["git", "clone", "--no-hardlinks", str(source_path), str(managed_path)],
+        text=True,
+        capture_output=True,
+        timeout=300,
+    )
+    if clone_result.returncode != 0:
+        raise SystemExit(
+            "Failed to create OpenHands managed checkout for "
+            f"{repo}.\nstdout:\n{clone_result.stdout}\nstderr:\n{clone_result.stderr}"
+        )
+
+    source_origin_result = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=source_path,
+        text=True,
+        capture_output=True,
+        timeout=60,
+    )
+    source_origin = (source_origin_result.stdout or "").strip()
+    if source_origin_result.returncode == 0 and source_origin:
+        set_origin_result = subprocess.run(
+            ["git", "remote", "set-url", "origin", source_origin],
+            cwd=managed_path,
+            text=True,
+            capture_output=True,
+            timeout=60,
+        )
+        if set_origin_result.returncode != 0:
+            raise SystemExit(
+                "Failed to set managed checkout origin URL from source repository.\n"
+                f"stdout:\n{set_origin_result.stdout}\nstderr:\n{set_origin_result.stderr}"
+            )
+    else:
+        raise SystemExit(
+            "Failed to read source repository origin URL; cannot initialize managed checkout deterministically.\n"
+            f"stdout:\n{source_origin_result.stdout}\nstderr:\n{source_origin_result.stderr}"
+        )
+
+    return managed_path
+
+
 def resolve_phase_execution_branch(repo: str, phase: str, issue: int) -> str:
     """Return the branch that should back this phase run."""
     config = resolve_target_repo_config(repo)
@@ -154,7 +226,7 @@ def branch_exists(local_path: Path, branch: str) -> bool:
 
 
 def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> None:
-    """Switch to the requested branch, creating it from the base branch when needed."""
+    """Switch to the requested branch, requiring non-base branches to exist already."""
     active_branch = current_branch(local_path)
     if active_branch == branch:
         log_info(f"Git branch already active: {branch}")
@@ -170,14 +242,38 @@ def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> Non
     if branch == base_branch:
         raise SystemExit(f"Base branch '{base_branch}' does not exist locally in {local_path}.")
 
-    log_info(f"Creating implementation branch '{branch}' from '{base_branch}'")
-    result = git_run(local_path, ["switch", "-c", branch, base_branch], capture_output=True)
-    if result.returncode != 0:
-        raise SystemExit(f"Failed to create branch '{branch}' from '{base_branch}' in {local_path}.")
+    raise SystemExit(
+        f"Required branch '{branch}' does not exist in {local_path}. "
+        "Phase 4/Tiferet must create child issue branches before downstream phase execution."
+    )
+
+
+def create_issue_branches_for_child_issues(repo: str, issue_numbers: list[int]) -> None:
+    """Create missing issue branches for Tiferet-created child issues in the managed checkout."""
+    config, local_path = prepare_target_repo_checkout(repo)
+    ensure_git_branch(local_path, config.main_branch, base_branch=config.main_branch)
+
+    for issue_number in issue_numbers:
+        branch_name = f"{config.issue_branch_prefix}{issue_number}"
+        if branch_exists(local_path, branch_name):
+            log_info(f"Issue branch already exists: {branch_name}")
+            continue
+
+        # Always branch from the configured main branch for deterministic child issue roots.
+        ensure_git_branch(local_path, config.main_branch, base_branch=config.main_branch)
+        log_info(f"Creating child issue branch '{branch_name}' from '{config.main_branch}'")
+        result = git_run(local_path, ["switch", "-c", branch_name, config.main_branch], capture_output=True)
+        if result.returncode != 0:
+            raise SystemExit(
+                f"Failed to create child issue branch '{branch_name}' from '{config.main_branch}' "
+                f"in {local_path}."
+            )
+
+    ensure_git_branch(local_path, config.main_branch, base_branch=config.main_branch)
 
 
 def prepare_target_repo_checkout(repo: str) -> tuple[TargetRepoConfig, Path]:
-    """Resolve the configured target repository and verify that the checkout exists."""
+    """Resolve the configured source checkout and return the isolated managed checkout path."""
     config = resolve_target_repo_config(repo)
     log_info(
         "Loaded target repository config: "
@@ -189,8 +285,13 @@ def prepare_target_repo_checkout(repo: str) -> tuple[TargetRepoConfig, Path]:
         raise SystemExit(f"Configured target repository path does not exist for {repo}: {local_path}")
     if not (local_path / ".git").exists():
         raise SystemExit(f"Configured target repository path is not a git checkout: {local_path}")
-    log_info(f"Verified target repository path exists: {local_path}")
-    return config, local_path
+    log_info(f"Verified source repository path exists: {local_path}")
+
+    managed_path = ensure_managed_repo_checkout(repo, local_path)
+    if not managed_path.exists() or not (managed_path / ".git").exists():
+        raise SystemExit(f"OpenHands managed checkout is missing or invalid after setup: {managed_path}")
+    log_info(f"Verified managed repository path exists: {managed_path}")
+    return config, managed_path
 
 
 def prepare_branch_context(repo: str, *, branch: str, branch_log_label: str) -> OpenHandsTargetContext:
@@ -224,26 +325,19 @@ def run_openhands(
     session_scope: str = "",
 ) -> subprocess.CompletedProcess[str]:
     """Run OpenHands headlessly and capture output in the configured target repository."""
-    state = load_session_state()
-    key = openhands_session_key(repo, issue, session_scope)
-    conversation_id = state.get(key, "")
     context = (
         prepare_phase_execution_context(repo, phase, issue)
         if branch_override is None
         else prepare_openhands_branch_context(repo, branch_override)
     )
 
-    log_info(f"OpenHands session key: {key}")
     if session_scope:
-        log_info("OpenHands session scope: strict phase isolation is active for this run")
-    log_info(f"Session mode: {'resume existing conversation' if conversation_id else 'start new conversation'}")
+        log_info(f"OpenHands session scope metadata: {session_scope}")
+    log_info("Session mode: start new conversation (resume disabled by policy)")
     log_info(f"OpenHands target repository loaded: {context.local_path}")
     log_info(f"OpenHands target branch loaded: {context.branch}")
 
     command = ["openhands"]
-    if conversation_id:
-        command.extend(["--resume", conversation_id])
-        log_info(f"Resuming conversation {conversation_id[:8]}...")
     command.extend(
         [
             "--task",
@@ -265,17 +359,63 @@ def run_openhands(
         env=openhands_env(),
     )
     log_info(f"OpenHands exit code: {result.returncode}")
-    new_conversation_id = extract_conversation_id(result.stdout)
-    if new_conversation_id:
-        state[key] = new_conversation_id
-        save_session_state(state)
-        log_info(f"Saved conversation ID {new_conversation_id[:8]}...")
     return result
 
 
 def prepare_openhands_branch_context(repo: str, branch: str) -> OpenHandsTargetContext:
     """Resolve and verify the target repository checkout for a specific explicit branch."""
     return prepare_branch_context(repo, branch=branch, branch_log_label="Resolved explicit target branch")
+
+
+def run_phase_tests(
+    *,
+    repo: str,
+    issue: int,
+    phase: str,
+    branch_override: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run repository validation command for a phase using the same checkout/branch context as OpenHands."""
+    context = (
+        prepare_phase_execution_context(repo, phase, issue)
+        if branch_override is None
+        else prepare_openhands_branch_context(repo, branch_override)
+    )
+    log_info("Running validation command: npm run test")
+    return subprocess.run(
+        ["npm", "run", "test"],
+        cwd=context.local_path,
+        text=True,
+        capture_output=True,
+        timeout=1200,
+    )
+
+
+def summarize_test_output(result: subprocess.CompletedProcess[str]) -> str:
+    """Build a bounded combined test output payload suitable for prompt feedback."""
+    parts: list[str] = []
+    if result.stdout:
+        parts.append(result.stdout)
+    if result.stderr:
+        parts.append(result.stderr)
+    combined = "\n".join(parts).strip() or "(no test output captured)"
+    if len(combined) <= TEST_OUTPUT_MAX_CHARS:
+        return combined
+    return combined[-TEST_OUTPUT_MAX_CHARS:]
+
+
+def build_test_failure_fix_task(test_output: str, *, attempt: int, max_attempts: int) -> str:
+    """Build a follow-up task that asks OpenHands to fix failing tests based on captured output."""
+    return (
+        "Your previous changes were applied, but required repository validation failed.\n\n"
+        "Run and satisfy exactly this command contract:\n"
+        "- `npm run test`\n\n"
+        f"Current fix attempt: {attempt} of {max_attempts}.\n\n"
+        "Failure output:\n"
+        "```text\n"
+        f"{test_output}\n"
+        "```\n\n"
+        "Apply minimal code changes to make `npm run test` pass, then finish."
+    )
 
 
 def extract_message_events(output: str) -> list[dict[str, Any]]:
@@ -386,20 +526,47 @@ def run_openhands_implementation_phase(
     print(f"Task: {task[:200]}...")
     print("=" * 60)
 
-    result = run_openhands(
-        task,
-        repo=repo,
-        issue=issue,
-        phase=phase,
-        branch_override=branch_override,
-        session_scope=session_scope,
-    )
-    if result.stdout:
-        print(result.stdout)
-    if result.stderr:
-        print(result.stderr, file=sys.stderr)
+    pending_task = task
+    for attempt in range(1, TEST_FIX_MAX_ATTEMPTS + 1):
+        result = run_openhands(
+            pending_task,
+            repo=repo,
+            issue=issue,
+            phase=phase,
+            branch_override=branch_override,
+            session_scope=session_scope,
+        )
+        if result.returncode != 0:
+            if result.stdout:
+                print(result.stdout)
+            if result.stderr:
+                print(result.stderr, file=sys.stderr)
+            sys.exit(result.returncode)
 
-    if result.returncode != 0:
-        sys.exit(result.returncode)
+        assistant_message = last_assistant_message(result.stdout)
+        if assistant_message:
+            log_multiline("Assistant message", assistant_message)
+        elif result.stdout:
+            log_info("OpenHands run completed with no parsed assistant message (raw output suppressed).")
 
-    print("\nAgent execution complete.")
+        test_result = run_phase_tests(repo=repo, issue=issue, phase=phase, branch_override=branch_override)
+        if test_result.stdout:
+            print(test_result.stdout)
+        if test_result.stderr:
+            print(test_result.stderr, file=sys.stderr)
+
+        if test_result.returncode == 0:
+            print("\nAgent execution complete.")
+            return
+
+        if attempt >= TEST_FIX_MAX_ATTEMPTS:
+            raise SystemExit(
+                f"Validation command `npm run test` failed after {TEST_FIX_MAX_ATTEMPTS} attempts."
+            )
+
+        log_error("Validation command failed; requesting OpenHands to apply a targeted fix.")
+        pending_task = build_test_failure_fix_task(
+            summarize_test_output(test_result),
+            attempt=attempt + 1,
+            max_attempts=TEST_FIX_MAX_ATTEMPTS,
+        )

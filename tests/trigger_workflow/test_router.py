@@ -51,25 +51,30 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         )
 
         log_multiline_mock.assert_called_once_with("Generated comment", "Line one\nLine two")
-        self.assertEqual(run_openhands_for_comment_mock.call_args.kwargs["session_scope"], "phase-1")
+        self.assertEqual(run_openhands_for_comment_mock.call_args.kwargs["session_scope"], "")
 
     @patch("trigger_workflow.router.post_issue_comment")
     @patch("trigger_workflow.router.remove_issue_label")
+    @patch("trigger_workflow.router.create_issue_branches_for_child_issues")
     @patch("trigger_workflow.router.log_multiline")
     @patch("trigger_workflow.router.build_phase_four_summary", return_value="Summary body")
-    @patch("trigger_workflow.router.create_child_issues", return_value=[])
+    @patch(
+        "trigger_workflow.router.create_child_issues",
+        return_value=[{"number": 101, "id": 1001, "title": "child", "url": "https://example.com/101"}],
+    )
     @patch("trigger_workflow.router.validate_tiferet_specification_payload_structure")
     @patch(
         "trigger_workflow.router.run_openhands_json_phase",
         return_value={"comment": "Parent body", "sub_issues": []},
     )
-    def test_execute_specification_phase_uses_strict_phase_session_scope(
+    def test_execute_specification_phase_uses_shared_issue_session_scope(
         self,
         run_openhands_for_json_mock,
         validate_phase_four_payload_mock,
         create_child_issues_mock,
         build_phase_four_summary_mock,
         log_multiline_mock,
+        create_issue_branches_for_child_issues_mock,
         remove_issue_label_mock,
         post_issue_comment_mock,
     ) -> None:
@@ -114,11 +119,17 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(run_openhands_for_json_mock.call_args.kwargs["session_scope"], "phase-4")
+        self.assertEqual(run_openhands_for_json_mock.call_args.kwargs["session_scope"], "")
+        create_issue_branches_for_child_issues_mock.assert_called_once_with("owner/repo", [101])
         remove_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:tiferet")
 
+    @patch("trigger_workflow.router.advance_issue_label")
     @patch("trigger_workflow.router.run_openhands_implementation_phase")
-    def test_execute_agent_phase_uses_shared_issue_session_scope(self, run_openhands_task_mock) -> None:
+    def test_execute_agent_phase_uses_shared_issue_session_scope(
+        self,
+        run_openhands_task_mock,
+        advance_issue_label_mock,
+    ) -> None:
         execute_implementation_phase_task(
             PhaseExecutionRequest(
                 label="phase:netzach",
@@ -131,6 +142,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         )
 
         self.assertEqual(run_openhands_task_mock.call_args.kwargs["session_scope"], "")
+        advance_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:netzach")
 
     @patch("trigger_workflow.router.execute_implementation_phase_task")
     @patch("trigger_workflow.router.execute_tiferet_specification_phase")
@@ -163,6 +175,37 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         execute_discussion_mock.assert_called_once()
         execute_specification_mock.assert_not_called()
         execute_agent_mock.assert_not_called()
+
+    @patch("trigger_workflow.router.log_error")
+    @patch("trigger_workflow.router.tag_issue_needs_human")
+    @patch("trigger_workflow.router.execute_tiferet_specification_phase", side_effect=SystemExit("phase failed"))
+    @patch("trigger_workflow.router.fetch_issue_data")
+    @patch("trigger_workflow.router.read_microagent_for_label")
+    @patch("trigger_workflow.router.ensure_phase_labels")
+    def test_trigger_agent_tags_needs_human_when_pre_netzach_phase_fails(
+        self,
+        ensure_phase_labels_mock,
+        read_microagent_for_label_mock,
+        fetch_issue_data_mock,
+        execute_tiferet_specification_phase_mock,
+        tag_issue_needs_human_mock,
+        log_error_mock,
+    ) -> None:
+        del ensure_phase_labels_mock
+        del execute_tiferet_specification_phase_mock
+        del log_error_mock
+        read_microagent_for_label_mock.return_value = "prompt"
+        fetch_issue_data_mock.return_value = {
+            "title": "Issue",
+            "labels": [{"name": "phase:tiferet"}],
+            "comments": [],
+        }
+
+        with self.assertRaises(SystemExit) as exc:
+            run_labeled_issue_phase(label="phase:tiferet", issue=55, repo="owner/repo")
+
+        self.assertIn("phase failed", str(exc.exception))
+        tag_issue_needs_human_mock.assert_called_once_with("owner/repo", 55)
 
     @patch("trigger_workflow.router.log_error")
     @patch("trigger_workflow.router.fetch_issue_data")

@@ -50,10 +50,12 @@ class PhaseWorkflowNamingTests(unittest.TestCase):
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "5", 12), "issue/12")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "9", 12), "issue/12")
 
-    def test_session_scope_for_phase_isolated_for_early_phases_and_shared_for_delivery(self) -> None:
-        self.assertEqual(conversation_scope_for_phase("1"), "phase-1")
+    def test_session_scope_for_phase_isolated_for_phase_2_variants_and_shared_otherwise(self) -> None:
+        self.assertEqual(conversation_scope_for_phase("1"), "")
+        self.assertEqual(conversation_scope_for_phase("2a"), "phase-2a")
         self.assertEqual(conversation_scope_for_phase("2b"), "phase-2b")
-        self.assertEqual(conversation_scope_for_phase("4"), "phase-4")
+        self.assertEqual(conversation_scope_for_phase("2c"), "phase-2c")
+        self.assertEqual(conversation_scope_for_phase("4"), "")
         self.assertEqual(conversation_scope_for_phase("5"), "")
         self.assertEqual(conversation_scope_for_phase("9"), "")
 
