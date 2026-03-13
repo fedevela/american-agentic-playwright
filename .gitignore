@@ -1,5 +1,9 @@
 conversations
 __pycache__
 workspace/
+.history/
+# OpenHands local runtime state, including workspace SDLC snapshots.
 .openhands/
+.openhands/workspace/
+.openhands/workspace/.sdlc-state.json
 **/workspace/
