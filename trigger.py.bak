@@ -9,7 +9,16 @@ Workflow:
   or more child issues, post the comment, then create the child issues.
 - Phases 5-9: run OpenHands headlessly for implementation/validation work.
 
-Phase sequence: 1→2a→2b→2c→3→4→5→6→7→8→9
+Phase labels:
+- Phase 1: keter
+- Phase 2: chokhmah (2a), binah (2b), chesed (2c) - run sequentially
+- Phase 3: gevurah
+- Phase 4: tiferet
+- Phase 5: netzach
+- Phase 6: hod
+- Phase 7: yesod-orchestration
+- Phase 8: yesod-embodiment
+- Phase 9: malkhut
 """
 
 from __future__ import annotations
@@ -26,6 +35,33 @@ WORKSPACE = Path(__file__).parent
 MICROAGENTS_DIR = WORKSPACE / ".openhands" / "microagents"
 DEFAULT_REPO = "fedevela/particle-life-3d"
 SESSION_STATE_PATH = WORKSPACE / "workspace" / ".session-state.json"
+# Phase 2 has three sub-labels that run sequentially: chokhmah -> binah -> chesed
+NEXT_LABEL_MAP = {
+    "phase:keter": "phase:chokhmah",
+    "phase:chokhmah": "phase:binah",
+    "phase:binah": "phase:chesed",
+    "phase:chesed": "phase:gevurah",
+    "phase:gevurah": "phase:tiferet",
+    "phase:tiferet": "phase:netzach",
+    "phase:netzach": "phase:hod",
+    "phase:hod": "phase:yesod-orchestration",
+    "phase:yesod-orchestration": "phase:yesod-embodiment",
+    "phase:yesod-embodiment": "phase:malkhut",
+}
+PHASE_LABELS = (
+    "phase:keter",
+    "phase:chokhmah",
+    "phase:binah",
+    "phase:chesed",
+    "phase:gevurah",
+    "phase:tiferet",
+    "phase:netzach",
+    "phase:hod",
+    "phase:yesod-orchestration",
+    "phase:yesod-embodiment",
+    "phase:malkhut",
+)
+
 PHASE_DISPLAY_NAME_MAP = {
     1: "Keter",
     2: "Chokhmah",
@@ -39,182 +75,59 @@ PHASE_DISPLAY_NAME_MAP = {
     10: "Yesod-Embodiment",
     11: "Malkhut",
 }
-NEXT_LABEL_MAP = {
-    "phase:keter": "phase:chokhmah",
-    "phase:chokhmah": "phase:binah",
-    "phase:binah": "phase:chesed",
-    "phase:chesed": "phase:gevurah",
-    "phase:gevurah": "phase:tiferet",
-    "phase:tiferet": "phase:netzach",
-    "phase:netzach": "phase:hod",
-    "phase:hod": "phase:yesod-orchestration",
-    "phase:yesod-orchestration": "phase:yesod-embodiment",
-    "phase:yesod-embodiment": "phase:malkhut",
-    "phase:malkhut": None,
-}
-PHASE_LABELS = tuple(NEXT_LABEL_MAP.keys())
-
-
-def log_section(title: str) -> None:
-    """Print a visible section divider for the console."""
-    print("\n" + "=" * 70)
-    print(f"  {title}")
-    print("=" * 70)
-
-
-def log_step(step: str) -> None:
-    """Print a step marker for the console."""
-    print(f"\n[✓] {step}")
-
-
-def log_info(msg: str) -> None:
-    """Print an info message."""
-    print(f"    → {msg}")
 
 
 def trigger_agent(label: Optional[str] = None, issue: Optional[int] = None, repo: Optional[str] = None) -> None:
     """Route the label to the correct phase workflow."""
     repo = repo or DEFAULT_REPO
-    log_section("STARTING PHASE EXECUTION")
-    log_info(f"Repository: {repo}")
-
-    # Step 1a: Determine which issue and label to work with
-    log_step("Step 1a: Resolving issue and label")
     if label is None:
-        log_info("No label provided, finding oldest phased issue...")
         issue, label = resolve_oldest_phased_issue(repo)
-        log_info(f"Selected issue #{issue} with label '{label}'")
 
-    # Step 1b: Determine phase number from label
-    log_step("Step 1b: Determining phase number")
     phase = determine_phase_from_label(label)
     if not phase:
-        log_info(f"ERROR: Unknown label '{label}'. Cannot determine phase.")
+        print(f"Unknown label '{label}'. Cannot determine phase.")
         sys.exit(1)
-    log_info(f"Label '{label}' → Phase {phase} ({PHASE_DISPLAY_NAME_MAP.get(phase, 'Unknown')})")
 
-    # Step 1c: Resolve issue number if not provided
-    log_step("Step 1c: Resolving issue number")
     if issue is None:
-        log_info(f"Finding issue with label '{label}'...")
         issue = resolve_issue_by_label(repo, label)
-    log_info(f"Issue number: #{issue}")
 
-    # Print sequence context
-    log_step("Sequence Context")
-    log_info(f"Current: Phase {phase}")
-    next_phase = determine_phase_from_label(NEXT_LABEL_MAP.get(label, ""))
-    if next_phase:
-        log_info(f"Next: Phase {next_phase} ({PHASE_DISPLAY_NAME_MAP.get(next_phase, 'Unknown')})")
-    else:
-        log_info("Next: Final phase (no further handoff)")
+    print(f"Triggering phase {phase} for label '{label}' on {repo}#{issue}")
 
-    # Step 2: Read microagent prompt
-    log_step("Step 2: Reading microagent prompt")
     microagent_content = read_microagent_for_label(label, phase)
     if not microagent_content:
-        log_info("ERROR: No microagent found for this label.")
+        print("No microagent found for this label.")
         sys.exit(1)
-    log_info(f"Microagent: phase_{phase:02d}_*.md loaded ({len(microagent_content)} bytes)")
 
-    # Step 3: Fetch issue data from GitHub
-    log_step("Step 3: Fetching issue data from GitHub")
     issue_data = fetch_issue_data(repo, issue)
     if not issue_data:
-        log_info(f"ERROR: Could not fetch issue #{issue} from {repo}.")
+        print(f"Could not fetch issue #{issue} from {repo}.")
         sys.exit(1)
-    log_info(f"Issue #{issue} fetched: '{issue_data.get('title', 'Unknown')}'")
-    log_info(f"Current labels: {', '.join([l.get('name', '') for l in issue_data.get('labels', []) if l.get('name')])}")
-
-    # Verify issue has the expected label
     if not issue_has_label(issue_data, label):
-        log_info(f"ERROR: Issue #{issue} in {repo} is not labeled '{label}'. Skipping phase execution.")
+        print(f"Issue #{issue} in {repo} is not labeled '{label}'. Skipping phase execution.")
         sys.exit(1)
-    log_info("Label verification: PASSED")
-
-    # Step 4: Execute phase-specific workflow
-    log_step("Step 4: Executing phase workflow")
 
     if phase <= 3:
-        log_info(f"Running discussion workflow (phase {phase})")
-        _execute_discussion_phase(label, issue, repo, microagent_content, phase, issue_data)
+        prompt = build_discussion_prompt(label, issue, repo, microagent_content, phase, issue_data)
+        comment = run_openhands_for_comment(prompt, repo=repo, issue=issue)
+        post_issue_comment(repo, issue, format_phase_comment(phase, label, comment))
+        advance_issue_label(repo, issue, label, phase)
         return
 
     if phase == 4:
-        log_info("Running specification workflow (phase 4)")
-        _execute_specification_phase(label, issue, repo, microagent_content, phase, issue_data)
+        prompt = build_spec_prompt(label, issue, repo, microagent_content, phase, issue_data)
+        payload = run_openhands_for_json(prompt, repo=repo, issue=issue)
+        validate_phase_four_payload(payload)
+        post_issue_comment(repo, issue, format_phase_comment(phase, label, payload["comment"].strip()))
+        created = create_child_issues(repo, issue, payload["sub_issues"])
+        post_issue_comment(repo, issue, format_phase_comment(phase, label, build_phase_four_summary(created)))
         return
 
-    log_info(f"Running agent implementation workflow (phase {phase})")
-    _execute_agent_phase(label, issue, repo, microagent_content, phase, issue_data)
-
-
-def _execute_discussion_phase(
-    label: str, issue: int, repo: str, microagent_content: str, phase: int, issue_data: dict[str, Any]
-) -> None:
-    """Execute phases 1-3: OpenHands discussion with GitHub comment output."""
-    log_info("Building discussion prompt...")
-    prompt = build_discussion_prompt(label, issue, repo, microagent_content, phase, issue_data)
-    log_info(f"Prompt built ({len(prompt)} chars)")
-
-    log_info(f"Running OpenHands for phase {phase}...")
-    comment = run_openhands_for_comment(prompt, repo=repo, issue=issue)
-    log_info(f"Comment generated ({len(comment)} chars)")
-
-    log_info("Posting comment to GitHub...")
-    post_issue_comment(repo, issue, format_phase_comment(phase, label, comment))
-    log_info("Comment posted")
-
-    log_info("Advancing to next phase label...")
-    advance_issue_label(repo, issue, label, phase)
-    log_info("Label advanced")
-
-
-def _execute_specification_phase(
-    label: str, issue: int, repo: str, microagent_content: str, phase: int, issue_data: dict[str, Any]
-) -> None:
-    """Execute phase 4: OpenHands JSON spec generation with child issues."""
-    log_info("Building specification prompt...")
-    prompt = build_spec_prompt(label, issue, repo, microagent_content, phase, issue_data)
-    log_info(f"Prompt built ({len(prompt)} chars)")
-
-    log_info("Running OpenHands for JSON payload...")
-    payload = run_openhands_for_json(prompt, repo=repo, issue=issue)
-    log_info("JSON payload received")
-
-    log_info("Validating payload schema...")
-    validate_phase_four_payload(payload)
-    log_info("Validation passed")
-
-    log_info("Posting parent comment...")
-    post_issue_comment(repo, issue, format_phase_comment(phase, label, payload["comment"].strip()))
-    log_info("Parent comment posted")
-
-    log_info(f"Creating {len(payload['sub_issues'])} child issues...")
-    created = create_child_issues(repo, issue, payload["sub_issues"])
-    log_info(f"Created {len(created)} child issues")
-
-    log_info("Posting summary comment...")
-    post_issue_comment(repo, issue, format_phase_comment(phase, label, build_phase_four_summary(created)))
-    log_info("Summary comment posted")
-
-
-def _execute_agent_phase(
-    label: str, issue: int, repo: str, microagent_content: str, phase: int, issue_data: dict[str, Any]
-) -> None:
-    """Execute phases 5-9: OpenHands headless implementation."""
-    log_info("Building agent prompt...")
     prompt = build_agent_prompt(label, issue, repo, microagent_content, phase, issue_data)
-    log_info(f"Prompt built ({len(prompt)} chars)")
-
-    log_info("Running OpenHands agent...")
     run_openhands_task(prompt, repo=repo, issue=issue)
-    log_info("Agent execution complete")
 
 
 def fetch_issue_data(repo: str, issue_number: int) -> dict[str, Any]:
     """Fetch issue title and body from GitHub."""
-    log_info(f"Running: gh issue view #{issue_number} --json title,body,number,labels,comments")
     result = run_gh(
         ["issue", "view", str(issue_number), "--repo", repo, "--json", "title,body,number,labels,comments"],
         capture_output=True,
@@ -231,7 +144,6 @@ def fetch_issue_data(repo: str, issue_number: int) -> dict[str, Any]:
 
 def resolve_issue_by_label(repo: str, label: str) -> int:
     """Resolve a single open issue by label."""
-    log_info(f"Running: gh issue list --label {label} --state open")
     result = run_gh(
         ["issue", "list", "--repo", repo, "--label", label, "--state", "open", "--json", "number,title"],
         capture_output=True,
@@ -258,8 +170,7 @@ def resolve_issue_by_label(repo: str, label: str) -> int:
 def issue_has_label(issue_data: dict[str, Any], label: str) -> bool:
     """Return True when the issue currently carries the requested label."""
     labels = issue_data.get("labels") or []
-    found = any(item.get("name") == label for item in labels if isinstance(item, dict))
-    return found
+    return any(item.get("name") == label for item in labels if isinstance(item, dict))
 
 
 def issue_phase_labels(issue_data: dict[str, Any]) -> list[str]:
@@ -274,8 +185,6 @@ def issue_phase_labels(issue_data: dict[str, Any]) -> list[str]:
 
 def extract_phase_1_comment(issue_data: dict[str, Any]) -> Optional[str]:
     """Extract the Phase 1 comment body from issue comments."""
-    # The comment data should be embedded in issue_data when fetched with --comments
-    # If not present, return None and adjust fetch_issue_data call accordingly
     comments = issue_data.get("comments") or []
     for comment in comments:
         if not isinstance(comment, dict):
@@ -304,8 +213,7 @@ def extract_phase_1_comment(issue_data: dict[str, Any]) -> Optional[str]:
 
 
 def resolve_oldest_phased_issue(repo: str) -> tuple[int, str]:
-    """Resolve the oldest open issue carrying exactly one known phase label."""
-    log_info("Running: gh issue list --state open --json number,title,createdAt,labels")
+    """Resolve the oldest open issue carrying a known phase label."""
     result = run_gh(
         ["issue", "list", "--repo", repo, "--state", "open", "--json", "number,title,createdAt,labels"],
         capture_output=True,
@@ -317,69 +225,64 @@ def resolve_oldest_phased_issue(repo: str) -> tuple[int, str]:
     if not isinstance(issues, list):
         raise SystemExit(f"Invalid issue list payload for {repo}.")
 
-    phased_issues: list[dict[str, Any]] = []
+    phased_issues: list[tuple[dict[str, Any], list[str]]] = []
     for issue in issues:
         if not isinstance(issue, dict):
             continue
         labels = issue_phase_labels(issue)
         if labels:
-            phased_issues.append(issue)
+            phased_issues.append((issue, labels))
 
     if not phased_issues:
         raise SystemExit(f"No open issues with a phase label found in {repo}.")
 
-    log_info(f"Found {len(phased_issues)} phased issues, sorting by creation date...")
-    phased_issues.sort(key=lambda item: item.get("createdAt", ""))
-    selected = phased_issues[0]
-    labels = issue_phase_labels(selected)
+    # Sort by issue creation date (oldest first)
+    phased_issues.sort(key=lambda item: item[0].get("createdAt", ""))
+
+    selected_issue, labels = phased_issues[0]
+
     if len(labels) != 1:
-        issue_number = selected.get("number", "?")
+        issue_number = selected_issue.get("number", "?")
         raise SystemExit(
             f"Issue #{issue_number} in {repo} has multiple phase labels: {', '.join(labels)}. "
             "Pass --label and --issue explicitly."
         )
 
-    log_info(f"Selected oldest: issue #{selected['number']} with label '{labels[0]}'")
-    return int(selected["number"]), labels[0]
+    return int(selected_issue["number"]), labels[0]
 
 
 def determine_phase_from_label(label: str) -> Optional[int]:
-    """Determine phase number from label."""
+    """Determine phase number from label. Phase 2 has sub-phases: 20, 21, 22."""
     label_phase_map = {
-        "phase:keter": 1,
-        "phase:chokhmah": 2,
-        "phase:binah": 3,
-        "phase:chesed": 4,
-        "phase:gevurah": 5,
-        "phase:tiferet": 6,
-        "phase:netzach": 7,
-        "phase:hod": 8,
-        "phase:yesod-orchestration": 9,
-        "phase:yesod-embodiment": 10,
-        "phase:malkhut": 11,
+        "phase:keter": 10,
+        "phase:chokhmah": 20,
+        "phase:binah": 21,
+        "phase:chesed": 22,
+        "phase:gevurah": 30,
+        "phase:tiferet": 40,
+        "phase:netzach": 50,
+        "phase:hod": 60,
+        "phase:yesod-orchestration": 70,
+        "phase:yesod-embodiment": 80,
+        "phase:malkhut": 90,
     }
     return label_phase_map.get(label)
 
 
 def read_microagent_for_label(label: str, phase: Optional[int]) -> Optional[str]:
     """Read the microagent prompt for a given label."""
-    log_info(f"Looking for phase_{phase:02d}_*.md pattern...")
     if phase:
         pattern = f"phase_{phase:02d}*.md"
         microagent_files = list(MICROAGENTS_DIR.glob(pattern))
         if microagent_files:
-            log_info(f"Found match: {microagent_files[0].name}")
             return microagent_files[0].read_text()
 
-    log_info("Pattern match failed, searching by label in content...")
     label_name = label.replace("phase:", "")
     for md_file in MICROAGENTS_DIR.glob("*.md"):
         content = md_file.read_text()
         if label_name in content.lower():
-            log_info(f"Found match by content: {md_file.name}")
             return content
 
-    log_info("No microagent found")
     return None
 
 
@@ -481,15 +384,15 @@ def build_spec_prompt(
 Return valid JSON only. No markdown fences. No explanation outside JSON.
 
 Use this exact schema:
-{{
+{
   "comment": "GitHub comment body for the parent issue",
   "sub_issues": [
-    {{
+    {
       "title": "Short actionable issue title",
       "body": "Gherkin-oriented child issue body with Given/When/Then scenarios"
-    }}
+    }
   ]
-}}
+}
 
 Requirements:
 - `comment` must summarize the specification and explain that child issues were spawned.
@@ -570,12 +473,9 @@ def run_openhands(prompt: str, *, repo: str, issue: int) -> subprocess.Completed
     state = load_session_state()
     conversation_id = state.get(session_key(repo, issue), "")
 
-    log_info(f"Session state: {'resume' if conversation_id else 'new session'}")
-
     command = ["openhands"]
     if conversation_id:
         command.extend(["--resume", conversation_id])
-        log_info(f"Resuming conversation: {conversation_id[:8]}...")
     command.extend(
         [
             "--task",
@@ -587,7 +487,6 @@ def run_openhands(prompt: str, *, repo: str, issue: int) -> subprocess.Completed
         ]
     )
 
-    log_info(f"Running: {' '.join(command[:3])} [...]")
     result = subprocess.run(
         command,
         text=True,
@@ -599,7 +498,6 @@ def run_openhands(prompt: str, *, repo: str, issue: int) -> subprocess.Completed
     if new_conversation_id:
         state[session_key(repo, issue)] = new_conversation_id
         save_session_state(state)
-        log_info(f"Saved new conversation ID: {new_conversation_id[:8]}...")
     return result
 
 
@@ -651,7 +549,6 @@ def last_assistant_message(output: str) -> str:
 
 def run_openhands_for_comment(prompt: str, *, repo: str, issue: int) -> str:
     """Run OpenHands and return the assistant reply text."""
-    log_info("Calling run_openhands...")
     result = run_openhands(prompt, repo=repo, issue=issue)
     if result.returncode != 0:
         print(result.stdout)
@@ -661,17 +558,14 @@ def run_openhands_for_comment(prompt: str, *, repo: str, issue: int) -> str:
     comment = last_assistant_message(result.stdout)
     if not comment:
         print(result.stdout)
-        log_info("ERROR: OpenHands returned no assistant message.")
+        print("OpenHands returned no assistant message.", file=sys.stderr)
         sys.exit(1)
-    log_info(f"Assistant message extracted ({len(comment)} chars)")
     return comment
 
 
 def run_openhands_for_json(prompt: str, *, repo: str, issue: int) -> dict[str, Any]:
     """Run OpenHands and parse the final assistant reply as JSON."""
-    log_info("Calling run_openhands_for_comment for JSON payload...")
     content = run_openhands_for_comment(prompt, repo=repo, issue=issue)
-    log_info(f"Parsing JSON from assistant reply...")
     try:
         return json.loads(content)
     except json.JSONDecodeError as exc:
@@ -701,31 +595,24 @@ def run_openhands_task(task: str, *, repo: str, issue: int) -> None:
 
 def validate_phase_four_payload(payload: dict[str, Any]) -> None:
     """Validate the minimal schema for phase 4 child issue creation."""
-    log_info("Validating payload structure...")
     if not isinstance(payload, dict):
         raise SystemExit("Phase 4 payload must be a JSON object.")
     if not isinstance(payload.get("comment"), str) or not payload["comment"].strip():
         raise SystemExit("Phase 4 payload must include a non-empty `comment`.")
-    log_info("✓ Payload has valid 'comment' field")
-
     sub_issues = payload.get("sub_issues")
     if not isinstance(sub_issues, list) or not sub_issues:
         raise SystemExit("Phase 4 payload must include at least one `sub_issues` entry.")
-    log_info(f"✓ Payload has {len(sub_issues)} sub_issues")
-
-    for i, item in enumerate(sub_issues):
+    for item in sub_issues:
         if not isinstance(item, dict):
             raise SystemExit("Each phase 4 child issue must be an object.")
         if not isinstance(item.get("title"), str) or not item["title"].strip():
             raise SystemExit("Each phase 4 child issue must include a non-empty `title`.")
         if not isinstance(item.get("body"), str) or not item["body"].strip():
             raise SystemExit("Each phase 4 child issue must include a non-empty `body`.")
-    log_info("✓ All sub_issues have valid structure")
 
 
 def run_gh(args: list[str], *, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
     """Run a GitHub CLI command."""
-    log_info(f"GitHub CLI: gh {' '.join(args[:5])}{'...' if len(args) > 5 else ''}")
     return subprocess.run(
         ["gh", *args],
         text=True,
@@ -736,8 +623,6 @@ def run_gh(args: list[str], *, capture_output: bool = False) -> subprocess.Compl
 
 def phase_display_name(phase: int, label: str) -> str:
     """Build a stable display name for a phase comment boundary."""
-    if phase == 2:
-        return label.replace("phase:", "").capitalize()
     return PHASE_DISPLAY_NAME_MAP.get(phase, label.replace("phase:", "").capitalize())
 
 
@@ -759,7 +644,6 @@ def format_phase_comment(phase: int, label: str, body: str) -> str:
 
 def post_issue_comment(repo: str, issue_number: int, body: str) -> None:
     """Post a GitHub comment to the target issue."""
-    log_info(f"Running: gh issue comment #{issue_number} --body (truncated)")
     result = run_gh(["issue", "comment", str(issue_number), "--repo", repo, "--body", body])
     if result.returncode != 0:
         raise SystemExit(f"Failed to post comment to {repo}#{issue_number}.")
@@ -769,11 +653,7 @@ def advance_issue_label(repo: str, issue_number: int, current_label: str, phase:
     """Advance the issue to the next configured phase label."""
     next_label = NEXT_LABEL_MAP.get(current_label)
     if not next_label:
-        log_info("No next label defined (final phase)")
         return
-
-    log_info(f"Removing label: {current_label}")
-    log_info(f"Adding label: {next_label}")
 
     result = run_gh(
         [
@@ -793,16 +673,13 @@ def advance_issue_label(repo: str, issue_number: int, current_label: str, phase:
             f"Posted the phase comment to {repo}#{issue_number}, but failed to hand off label "
             f"from '{current_label}' to '{next_label}'."
         )
-    log_info("Label handoff complete")
 
 
 def create_child_issues(repo: str, parent_issue: int, sub_issues: list[dict[str, str]]) -> list[dict[str, str]]:
     """Create child issues and attach a parent reference in the body."""
-    log_info(f"Creating {len(sub_issues)} child issues...")
     created: list[dict[str, str]] = []
 
-    for i, item in enumerate(sub_issues, 1):
-        log_info(f"Creating child issue #{i}: {item['title'][:50]}...")
+    for item in sub_issues:
         body = item["body"].strip()
         if f"Parent issue: #{parent_issue}" not in body:
             body = f"Parent issue: #{parent_issue}\n\n{body}"
@@ -813,17 +690,13 @@ def create_child_issues(repo: str, parent_issue: int, sub_issues: list[dict[str,
         )
         if result.returncode != 0:
             raise SystemExit(f"Failed to create child issue '{item['title']}'.")
-        url = result.stdout.strip()
-        log_info(f"  → Created: {url}")
-        created.append({"title": item["title"].strip(), "url": url})
+        created.append({"title": item["title"].strip(), "url": result.stdout.strip()})
 
-    log_info(f"All {len(created)} child issues created successfully")
     return created
 
 
 def build_phase_four_summary(created: list[dict[str, str]]) -> str:
     """Build a short summary comment listing created child issues."""
-    log_info("Building phase 4 summary...")
     lines = ["Spawned child issues:"]
     for item in created:
         lines.append(f"- {item['title']}: {item['url']}")
@@ -832,10 +705,6 @@ def build_phase_four_summary(created: list[dict[str, str]]) -> str:
 
 def main() -> None:
     """Main entry point."""
-    log_section("OPENHANDS SWARM PHASE ROUTER")
-    log_info(f"Working directory: {WORKSPACE}")
-    log_info(f"Microagents directory: {MICROAGENTS_DIR}")
-
     parser = argparse.ArgumentParser(description="Trigger OpenHands / GitHub phase workflow")
     parser.add_argument("--label", help="GitHub label triggering the phase")
     parser.add_argument("--issue", type=int, help="Issue number")
@@ -843,8 +712,6 @@ def main() -> None:
     args = parser.parse_args()
 
     trigger_agent(args.label, args.issue, args.repo)
-
-    log_section("PHASE EXECUTION COMPLETE")
 
 
 if __name__ == "__main__":

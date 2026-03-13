@@ -1,6 +1,8 @@
 # OpenClaw SDLC Orchestrator
 
-A GitHub-based 9-phase SDLC system implementing the SPARC 5-methodology mapped onto the Kabbalistic Tree of Life.
+A GitHub-based 11-phase SDLC system implementing the SPARC 5-methodology mapped onto the Kabbalistic Tree of Life.
+
+Phase sequence: 1→2a→2b→2c→3→4→5→6→7→8→9
 
 ## Overview
 
@@ -12,12 +14,17 @@ OpenClaw routes labeled GitHub issues through a 9-phase signal processing system
 
 | Phase | Kabbalistic | SPARC | Communication Medium | Example |
 |-------|-------------|-------|---------------------|---------|
-| 4 | Tiferet | S: Specification | Child issues with Gherkin descriptions | Issue with Gherkin Given/When/Then scenarios |
-| 5 | Netzach | — | E2E test function names (on child issues) | `test_3_loginThenUpdateSessionWhenAuthenticated()` |
-| 6 | Hod | P: Pseudocode | Bodyless functions (on child issues) | `def test_3_loginThenUpdateSessionWhenAuthenticated(): pass` |
-| 7 | Yesod | A: Architecture | Module/class structure (on child issues) | `tests/e2e/test_auth_session.py`, `class TestAuthSession:` |
-| 8 | Yesod | R: Refinement | Implementation (on child issues) | Full function body matching name contract |
-| 9 | Malkhut | C: Completion | E2E test execution (on child issues) | `pytest tests/e2e/` → pass/fail |
+| 1 | Keter | — | Intent declaration (GitHub comment) | Issue labeled `phase:keter` |
+| 2 | Chokhmah | — | Generative expansion (GitHub comment) | `phase:chokhmah` comment |
+| 3 | Binah | — | Critical restriction (GitHub comment) | `phase:binah` comment |
+| 4 | Chesed | — | Mechanistic grounding (GitHub comment) | `phase:chesed` comment |
+| 5 | Gevurah | — | Synthetic judgment (GitHub comment + child issues) | Child issues created |
+| 6 | Tiferet | S: Specification | Child issues with Gherkin descriptions | Issue with Gherkin Given/When/Then scenarios |
+| 7 | Netzach | — | E2E test function names (on child issues) | `test_3_loginThenUpdateSessionWhenAuthenticated()` |
+| 8 | Hod | P: Pseudocode | Bodyless functions (on child issues) | `def test_3_loginThenUpdateSessionWhenAuthenticated(): pass` |
+| 9 | Yesod-Orchestration | A: Architecture | Module/class structure (on child issues) | `tests/e2e/test_auth_session.py`, `class TestAuthSession:` |
+| 10 | Yesod-Embodiment | R: Refinement | Implementation (on child issues) | Full function body matching name contract |
+| 11 | Malkhut | C: Completion | E2E test execution (on child issues) | `pytest tests/e2e/` → pass/fail |
 
 ### SPARC 5-Phase Summary
 
@@ -54,13 +61,13 @@ GitHub Issue + Label → OpenClaw Cron → trigger.py → SDLCPhasedAgent → Op
 | Label | Phase | Description |
 |-------|-------|-------------|
 | `phase:keter` | 1 | Intent formation (GitHub comment) |
-| `phase:chokhmah` | 2A | Generative expansion (GitHub comment) |
-| `phase:binah` | 2B | Critical restriction (GitHub comment) |
-| `phase:chesed` | 2C | Mechanistic grounding (GitHub comment) |
+| `phase:chokhmah` | 2a | Generative expansion (GitHub comment) |
+| `phase:binah` | 2b | Critical restriction (GitHub comment) |
+| `phase:chesed` | 2c | Mechanistic grounding (GitHub comment) |
 | `phase:gevurah` | 3 | Synthetic judgment (GitHub comment + child issues) |
 | `phase:tiferet` | 4 | SPARC S: Specification (creates child issues with Gherkin, no PR) |
 | `phase:netzach` | 5 | Traceability (child issues, E2E test names) |
-| `phase:hod` | 6 | SPARC P: Pseudocode (child issues, bodyless functions) |
+| `phase:hod` | 6 | SPARC P: pseudocode (child issues, bodyless functions) |
 | `phase:yesod-orchestration` | 7 | SPARC A: Architecture (child issues, module structure) |
 | `phase:yesod-embodiment` | 8 | SPARC R: Refinement (child issues, implementation) |
 | `phase:malkhut` | 9 | SPARC C: Completion (child issues, validation) |
@@ -77,7 +84,7 @@ openhands-swarm/
 │   └── <generated files>
 ├── .openhands/
 │   ├── config.json        # Phase routing config
-│   └── microagents/       # 9 phase persona files
+│   └── microagents/       # 11 phase persona files
 └── README.md             # This file
 ```
 
