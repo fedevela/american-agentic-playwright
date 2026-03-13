@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from .config import (
@@ -42,6 +43,18 @@ from .prompts import (
 from .validation import validate_tiferet_specification_payload_structure, validate_tiferet_requirement_traceability
 
 
+@dataclass(frozen=True)
+class PhaseExecutionRequest:
+    """Bundle the runtime inputs shared by all phase execution paths."""
+
+    label: str
+    issue: int
+    repo: str
+    microagent_content: str
+    phase: str
+    issue_data: dict[str, Any]
+
+
 def conversation_scope_for_phase(phase: str) -> str:
     """Return the OpenHands session scope policy for the given phase."""
     if phase in STRICTLY_INDEPENDENT_PHASES:
@@ -75,6 +88,32 @@ def build_phase_prompt_and_conversation_scope(
     """Build a phase prompt and return it with the resolved session-scope policy."""
     prompt = builder(*args)
     return prompt, log_prompt_size_and_conversation_policy(prompt, phase)
+
+
+def build_phase_execution_prompt(
+    request: PhaseExecutionRequest,
+    prompt_builder: Callable[..., str],
+) -> tuple[str, str]:
+    """Build a phase prompt using the common execution request payload."""
+    return build_phase_prompt_and_conversation_scope(
+        request.phase,
+        prompt_builder,
+        request.label,
+        request.issue,
+        request.repo,
+        request.microagent_content,
+        request.phase,
+        request.issue_data,
+    )
+
+
+def post_phase_machine_comment(request: PhaseExecutionRequest, body: str) -> None:
+    """Post a wrapped phase comment back to the parent issue."""
+    post_issue_comment(
+        request.repo,
+        request.issue,
+        format_phase_comment(request.phase, request.label, body),
+    )
 
 
 def run_labeled_issue_phase(label: Optional[str] = None, issue: Optional[int] = None, repo: Optional[str] = None) -> None:
@@ -130,107 +169,119 @@ def run_labeled_issue_phase(label: Optional[str] = None, issue: Optional[int] = 
     log_step("Step 4: Executing phase workflow")
     if phase in DISCUSSION_PHASES:
         log_info(f"Running discussion workflow for phase {phase.upper()}")
-        execute_comment_phase_handoff(label, issue, repo, microagent_content, phase, issue_data)
+        execute_comment_phase_handoff(
+            PhaseExecutionRequest(
+                label=label,
+                issue=issue,
+                repo=repo,
+                microagent_content=microagent_content,
+                phase=phase,
+                issue_data=issue_data,
+            )
+        )
         return
 
     if phase == SPECIFICATION_PHASE:
         log_info("Running specification workflow for phase 4")
-        execute_tiferet_specification_phase(label, issue, repo, microagent_content, phase, issue_data)
+        execute_tiferet_specification_phase(
+            PhaseExecutionRequest(
+                label=label,
+                issue=issue,
+                repo=repo,
+                microagent_content=microagent_content,
+                phase=phase,
+                issue_data=issue_data,
+            )
+        )
         return
 
     log_info(f"Running implementation workflow for phase {phase.upper()}")
-    execute_implementation_phase_task(label, issue, repo, microagent_content, phase, issue_data)
-
-
-def execute_comment_phase_handoff(
-    label: str, issue: int, repo: str, microagent_content: str, phase: str, issue_data: dict[str, Any]
-) -> None:
-    """Execute comment-only phases by generating and posting a phase comment."""
-    log_info("Building discussion prompt...")
-    prompt, session_scope = build_phase_prompt_and_conversation_scope(
-        phase,
-        build_comment_phase_prompt,
-        label,
-        issue,
-        repo,
-        microagent_content,
-        phase,
-        issue_data,
+    execute_implementation_phase_task(
+        PhaseExecutionRequest(
+            label=label,
+            issue=issue,
+            repo=repo,
+            microagent_content=microagent_content,
+            phase=phase,
+            issue_data=issue_data,
+        )
     )
 
-    log_info(f"Running OpenHands for phase {phase.upper()}...")
-    comment = run_openhands_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+
+def execute_comment_phase_handoff(request: PhaseExecutionRequest) -> None:
+    """Execute comment-only phases by generating and posting a phase comment."""
+    log_info("Building discussion prompt...")
+    prompt, session_scope = build_phase_execution_prompt(request, build_comment_phase_prompt)
+
+    log_info(f"Running OpenHands for phase {request.phase.upper()}...")
+    comment = run_openhands_comment_phase(
+        prompt,
+        repo=request.repo,
+        issue=request.issue,
+        phase=request.phase,
+        session_scope=session_scope,
+    )
     log_info(f"Comment generated ({len(comment)} chars)")
     log_multiline("Generated comment", comment)
 
     log_info("Posting comment to GitHub...")
-    post_issue_comment(repo, issue, format_phase_comment(phase, label, comment))
+    post_phase_machine_comment(request, comment)
     log_info("Comment posted")
 
     log_info("Advancing to next phase label...")
-    advance_issue_label(repo, issue, label)
+    advance_issue_label(request.repo, request.issue, request.label)
     log_info("Label advanced")
 
 
-def execute_tiferet_specification_phase(
-    label: str, issue: int, repo: str, microagent_content: str, phase: str, issue_data: dict[str, Any]
-) -> None:
+def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
     """Execute phase 4/Tiferet by generating a parent comment and child issues."""
     log_info("Building specification prompt...")
-    prompt, session_scope = build_phase_prompt_and_conversation_scope(
-        phase,
-        build_tiferet_specification_prompt,
-        label,
-        issue,
-        repo,
-        microagent_content,
-        phase,
-        issue_data,
-    )
+    prompt, session_scope = build_phase_execution_prompt(request, build_tiferet_specification_prompt)
 
     log_info("Running OpenHands for JSON payload...")
-    payload = run_openhands_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+    payload = run_openhands_json_phase(
+        prompt,
+        repo=request.repo,
+        issue=request.issue,
+        phase=request.phase,
+        session_scope=session_scope,
+    )
     log_info("JSON payload received")
 
     log_info("Validating payload schema...")
     validate_tiferet_specification_payload_structure(payload)
-    validate_tiferet_requirement_traceability(payload, issue_data)
+    validate_tiferet_requirement_traceability(payload, request.issue_data)
     log_info("Validation passed")
     log_multiline("Generated parent comment", payload["comment"].strip())
 
     log_info("Posting parent comment...")
-    post_issue_comment(repo, issue, format_phase_comment(phase, label, payload["comment"].strip()))
+    post_phase_machine_comment(request, payload["comment"].strip())
     log_info("Parent comment posted")
 
     log_info(f"Creating {len(payload['sub_issues'])} ordered child issues with parent and dependency links...")
-    created = create_child_issues(repo, issue, payload["sub_issues"])
+    created = create_child_issues(request.repo, request.issue, payload["sub_issues"])
     log_info(f"Created and linked {len(created)} child issues")
 
     log_info("Posting summary comment...")
     summary_comment = build_phase_four_summary(created)
     log_multiline("Generated summary comment", summary_comment)
-    post_issue_comment(repo, issue, format_phase_comment(phase, label, summary_comment))
+    post_phase_machine_comment(request, summary_comment)
     log_info("Summary comment posted")
 
 
-def execute_implementation_phase_task(
-    label: str, issue: int, repo: str, microagent_content: str, phase: str, issue_data: dict[str, Any]
-) -> None:
+def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
     """Execute phases 5-9 headlessly in OpenHands."""
     log_info("Building agent prompt...")
-    prompt, session_scope = build_phase_prompt_and_conversation_scope(
-        phase,
-        build_implementation_phase_prompt,
-        label,
-        issue,
-        repo,
-        microagent_content,
-        phase,
-        issue_data,
-    )
+    prompt, session_scope = build_phase_execution_prompt(request, build_implementation_phase_prompt)
 
     log_info("Running OpenHands agent...")
-    run_openhands_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+    run_openhands_implementation_phase(
+        prompt,
+        repo=request.repo,
+        issue=request.issue,
+        phase=request.phase,
+        session_scope=session_scope,
+    )
     log_info("Agent execution complete")
 
 

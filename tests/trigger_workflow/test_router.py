@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from trigger_workflow.router import (
+    PhaseExecutionRequest,
     execute_implementation_phase_task,
     execute_comment_phase_handoff,
     execute_tiferet_specification_phase,
@@ -39,12 +40,14 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         del post_issue_comment_mock
         del advance_issue_label_mock
         execute_comment_phase_handoff(
-            "phase:keter",
-            55,
-            "owner/repo",
-            "prompt",
-            "1",
-            {"title": "Issue", "body": "Body", "comments": []},
+            PhaseExecutionRequest(
+                label="phase:keter",
+                issue=55,
+                repo="owner/repo",
+                microagent_content="prompt",
+                phase="1",
+                issue_data={"title": "Issue", "body": "Body", "comments": []},
+            )
         )
 
         log_multiline_mock.assert_called_once_with("Generated comment", "Line one\nLine two")
@@ -99,12 +102,14 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             ],
         }
         execute_tiferet_specification_phase(
-            "phase:tiferet",
-            55,
-            "owner/repo",
-            "prompt",
-            "4",
-            issue_data,
+            PhaseExecutionRequest(
+                label="phase:tiferet",
+                issue=55,
+                repo="owner/repo",
+                microagent_content="prompt",
+                phase="4",
+                issue_data=issue_data,
+            )
         )
 
         self.assertEqual(run_openhands_for_json_mock.call_args.kwargs["session_scope"], "phase-4")
@@ -112,12 +117,14 @@ class RouterPhaseExecutionTests(unittest.TestCase):
     @patch("trigger_workflow.router.run_openhands_implementation_phase")
     def test_execute_agent_phase_uses_shared_issue_session_scope(self, run_openhands_task_mock) -> None:
         execute_implementation_phase_task(
-            "phase:netzach",
-            55,
-            "owner/repo",
-            "prompt",
-            "5",
-            {"title": "Issue", "body": "Body", "comments": []},
+            PhaseExecutionRequest(
+                label="phase:netzach",
+                issue=55,
+                repo="owner/repo",
+                microagent_content="prompt",
+                phase="5",
+                issue_data={"title": "Issue", "body": "Body", "comments": []},
+            )
         )
 
         self.assertEqual(run_openhands_task_mock.call_args.kwargs["session_scope"], "")
