@@ -17,6 +17,7 @@ from trigger_workflow.openhands_runner import (
     OpenHandsTargetContext,
     create_issue_branches_for_child_issues,
     ensure_git_branch,
+    finalize_phase_delivery,
     run_openhands_implementation_phase,
     resolve_phase_execution_branch,
     load_session_state,
@@ -287,6 +288,111 @@ class OpenHandsRunnerTests(unittest.TestCase):
         subprocess_run_mock.assert_called_once()
         self.assertEqual(subprocess_run_mock.call_args.kwargs["cwd"], target_path)
 
+    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
+    @patch("trigger_workflow.openhands_runner.subprocess.run")
+    def test_finalize_phase_delivery_commits_pushes_and_returns_summary(
+        self,
+        subprocess_run_mock,
+        prepare_phase_execution_context_mock,
+    ) -> None:
+        target_path = Path("/tmp/particle-life-3d")
+        prepare_phase_execution_context_mock.return_value = OpenHandsTargetContext(
+            local_path=target_path,
+            branch="issue/21",
+        )
+        subprocess_run_mock.side_effect = [
+            subprocess.CompletedProcess(args=["git", "status"], returncode=0, stdout=" M src/app.ts\n", stderr=""),
+            subprocess.CompletedProcess(args=["git", "add"], returncode=0, stdout="", stderr=""),
+            subprocess.CompletedProcess(args=["git", "commit"], returncode=0, stdout="[issue/21 abc123] msg", stderr=""),
+            subprocess.CompletedProcess(args=["git", "push"], returncode=0, stdout="", stderr=""),
+            subprocess.CompletedProcess(args=["git", "rev-parse"], returncode=0, stdout="abc123full\n", stderr=""),
+            subprocess.CompletedProcess(
+                args=["git", "ls-remote"],
+                returncode=0,
+                stdout="abc123full\trefs/heads/issue/21\n",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(args=["gh", "pr", "list"], returncode=0, stdout="[]", stderr=""),
+            subprocess.CompletedProcess(
+                args=["gh", "pr", "create"],
+                returncode=0,
+                stdout="https://github.com/owner/repo/pull/21\n",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(args=["git", "rev-parse"], returncode=0, stdout="abc123\n", stderr=""),
+            subprocess.CompletedProcess(args=["git", "show"], returncode=0, stdout="src/app.ts\n", stderr=""),
+        ]
+
+        summary = finalize_phase_delivery(repo="fedevela/particle-life-3d", issue=21, phase="5")
+
+        self.assertIn("Branch: `issue/21`", summary)
+        self.assertIn("PR: https://github.com/owner/repo/pull/21", summary)
+        self.assertIn("Commit: `abc123`", summary)
+        self.assertIn("- `src/app.ts`", summary)
+        self.assertEqual(subprocess_run_mock.call_count, 10)
+
+    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
+    @patch("trigger_workflow.openhands_runner.subprocess.run")
+    def test_finalize_phase_delivery_strips_auto_tiferet_prefix_from_commit_message(
+        self,
+        subprocess_run_mock,
+        prepare_phase_execution_context_mock,
+    ) -> None:
+        target_path = Path("/tmp/particle-life-3d")
+        prepare_phase_execution_context_mock.return_value = OpenHandsTargetContext(
+            local_path=target_path,
+            branch="issue/21",
+        )
+        subprocess_run_mock.side_effect = [
+            subprocess.CompletedProcess(args=["git", "status"], returncode=0, stdout=" M src/app.ts\n", stderr=""),
+            subprocess.CompletedProcess(args=["git", "add"], returncode=0, stdout="", stderr=""),
+            subprocess.CompletedProcess(args=["git", "commit"], returncode=0, stdout="[issue/21 abc123] msg", stderr=""),
+            subprocess.CompletedProcess(args=["git", "push"], returncode=0, stdout="", stderr=""),
+            subprocess.CompletedProcess(args=["git", "rev-parse"], returncode=0, stdout="abc123full\n", stderr=""),
+            subprocess.CompletedProcess(
+                args=["git", "ls-remote"],
+                returncode=0,
+                stdout="abc123full\trefs/heads/issue/21\n",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(args=["gh", "pr", "list"], returncode=0, stdout='[{"url":"https://github.com/owner/repo/pull/21"}]', stderr=""),
+            subprocess.CompletedProcess(args=["git", "rev-parse"], returncode=0, stdout="abc123\n", stderr=""),
+            subprocess.CompletedProcess(args=["git", "show"], returncode=0, stdout="src/app.ts\n", stderr=""),
+        ]
+
+        finalize_phase_delivery(
+            repo="fedevela/particle-life-3d",
+            issue=21,
+            phase="6",
+            issue_title="[AUTO/TIFERET] Example Child Issue",
+        )
+
+        commit_call = subprocess_run_mock.call_args_list[2]
+        commit_cmd = commit_call.args[0]
+        self.assertEqual(commit_cmd[0:3], ["git", "commit", "-m"])
+        self.assertEqual(commit_cmd[3], "phase:6 issue #21: Example Child Issue")
+
+    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
+    @patch("trigger_workflow.openhands_runner.subprocess.run")
+    def test_finalize_phase_delivery_fails_when_no_git_changes_exist(
+        self,
+        subprocess_run_mock,
+        prepare_phase_execution_context_mock,
+    ) -> None:
+        target_path = Path("/tmp/particle-life-3d")
+        prepare_phase_execution_context_mock.return_value = OpenHandsTargetContext(
+            local_path=target_path,
+            branch="issue/21",
+        )
+        subprocess_run_mock.return_value = subprocess.CompletedProcess(
+            args=["git", "status"], returncode=0, stdout="", stderr=""
+        )
+
+        with self.assertRaises(SystemExit) as exc:
+            finalize_phase_delivery(repo="fedevela/particle-life-3d", issue=21, phase="5")
+
+        self.assertIn("without repository changes", str(exc.exception))
+
     @patch("trigger_workflow.openhands_runner.extract_conversation_id", return_value="")
     @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
     @patch("trigger_workflow.openhands_runner.subprocess.run")
@@ -429,7 +535,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
             "Initial task",
             repo="fedevela/particle-life-3d",
             issue=21,
-            phase="5",
+            phase="8",
         )
 
         run_openhands_mock.assert_called_once()
@@ -437,7 +543,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
     @patch("trigger_workflow.openhands_runner.run_phase_tests")
     @patch("trigger_workflow.openhands_runner.run_openhands")
-    def test_run_openhands_implementation_phase_retries_with_failure_output(
+    def test_run_openhands_implementation_phase_retries_once_when_validation_fails_then_passes(
         self,
         run_openhands_mock,
         run_phase_tests_mock,
@@ -460,17 +566,18 @@ class OpenHandsRunnerTests(unittest.TestCase):
             "Initial task",
             repo="fedevela/particle-life-3d",
             issue=21,
-            phase="5",
+            phase="8",
         )
 
         self.assertEqual(run_openhands_mock.call_count, 2)
+        self.assertEqual(run_phase_tests_mock.call_count, 2)
         retry_task = run_openhands_mock.call_args_list[1].args[0]
-        self.assertIn("npm run test", retry_task)
+        self.assertIn("only retry attempt", retry_task)
         self.assertIn("FAIL: expected 1 got 0", retry_task)
 
     @patch("trigger_workflow.openhands_runner.run_phase_tests")
     @patch("trigger_workflow.openhands_runner.run_openhands")
-    def test_run_openhands_implementation_phase_errors_after_max_failed_attempts(
+    def test_run_openhands_implementation_phase_fails_after_single_retry(
         self,
         run_openhands_mock,
         run_phase_tests_mock,
@@ -478,12 +585,10 @@ class OpenHandsRunnerTests(unittest.TestCase):
         run_openhands_mock.side_effect = [
             subprocess.CompletedProcess(args=["openhands"], returncode=0, stdout="run1", stderr=""),
             subprocess.CompletedProcess(args=["openhands"], returncode=0, stdout="run2", stderr=""),
-            subprocess.CompletedProcess(args=["openhands"], returncode=0, stdout="run3", stderr=""),
         ]
         run_phase_tests_mock.side_effect = [
             subprocess.CompletedProcess(args=["npm", "run", "test"], returncode=1, stdout="fail-1", stderr=""),
             subprocess.CompletedProcess(args=["npm", "run", "test"], returncode=1, stdout="fail-2", stderr=""),
-            subprocess.CompletedProcess(args=["npm", "run", "test"], returncode=1, stdout="fail-3", stderr=""),
         ]
 
         with self.assertRaises(SystemExit) as exc:
@@ -491,11 +596,36 @@ class OpenHandsRunnerTests(unittest.TestCase):
                 "Initial task",
                 repo="fedevela/particle-life-3d",
                 issue=21,
-                phase="5",
+                phase="8",
             )
 
         self.assertIn("npm run test", str(exc.exception))
-        self.assertEqual(run_openhands_mock.call_count, 3)
+        self.assertEqual(run_openhands_mock.call_count, 2)
+        self.assertEqual(run_phase_tests_mock.call_count, 2)
+
+    @patch("trigger_workflow.openhands_runner.run_phase_tests")
+    @patch("trigger_workflow.openhands_runner.run_openhands")
+    def test_run_openhands_implementation_phase_skips_validation_for_phase_5(
+        self,
+        run_openhands_mock,
+        run_phase_tests_mock,
+    ) -> None:
+        run_openhands_mock.return_value = subprocess.CompletedProcess(
+            args=["openhands"],
+            returncode=0,
+            stdout="ok",
+            stderr="",
+        )
+
+        run_openhands_implementation_phase(
+            "Initial task",
+            repo="fedevela/particle-life-3d",
+            issue=21,
+            phase="5",
+        )
+
+        run_openhands_mock.assert_called_once()
+        run_phase_tests_mock.assert_not_called()
 
 
 if __name__ == "__main__":

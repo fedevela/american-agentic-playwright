@@ -30,6 +30,7 @@ from .github_ops import (
 from .logging_utils import log_error, log_info, log_multiline, log_section, log_step
 from .openhands_runner import (
     create_issue_branches_for_child_issues,
+    finalize_phase_delivery,
     resolve_openhands_model_connection,
     run_openhands_comment_phase,
     run_openhands_json_phase,
@@ -313,6 +314,17 @@ def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
         session_scope=session_scope,
     )
     log_info("Agent execution complete")
+    log_info("Finalizing git delivery (commit + push)...")
+    delivery_summary = finalize_phase_delivery(
+        repo=request.repo,
+        issue=request.issue,
+        phase=request.phase,
+        issue_title=str(request.issue_data.get("title") or ""),
+    )
+    log_multiline("Delivery summary", delivery_summary)
+    log_info("Posting delivery summary comment...")
+    post_phase_machine_comment(request, delivery_summary)
+    log_info("Delivery summary comment posted")
     log_info("Advancing to next phase label...")
     advance_issue_label(request.repo, request.issue, request.label)
     log_info("Label advanced")

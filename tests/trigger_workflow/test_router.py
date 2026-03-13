@@ -124,10 +124,14 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         remove_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:tiferet")
 
     @patch("trigger_workflow.router.advance_issue_label")
+    @patch("trigger_workflow.router.post_issue_comment")
+    @patch("trigger_workflow.router.finalize_phase_delivery", return_value="Delivery summary")
     @patch("trigger_workflow.router.run_openhands_implementation_phase")
     def test_execute_agent_phase_uses_shared_issue_session_scope(
         self,
         run_openhands_task_mock,
+        finalize_phase_delivery_mock,
+        post_issue_comment_mock,
         advance_issue_label_mock,
     ) -> None:
         execute_implementation_phase_task(
@@ -142,6 +146,13 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         )
 
         self.assertEqual(run_openhands_task_mock.call_args.kwargs["session_scope"], "")
+        finalize_phase_delivery_mock.assert_called_once_with(
+            repo="owner/repo",
+            issue=55,
+            phase="5",
+            issue_title="Issue",
+        )
+        post_issue_comment_mock.assert_called_once()
         advance_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:netzach")
 
     @patch("trigger_workflow.router.execute_implementation_phase_task")

@@ -202,6 +202,25 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("## Issue Comments", prompt)
         self.assertIn("Implementation context comment.", prompt)
 
+    def test_phase_5_microagent_enforces_traceability_only_contract_stubs(self) -> None:
+        content = read_microagent_for_label("phase:netzach", "5")
+        self.assertIn("contract traceability only", content)
+        self.assertIn("passing placeholders", content)
+        self.assertIn("assert True", content)
+        self.assertIn("SPARC ALIGNMENT", content)
+        self.assertIn("BOUNDARY CONTRACT", content)
+
+    def test_sparc_sister_microagents_include_explicit_alignment_and_boundary_contracts(self) -> None:
+        for label, phase in (
+            ("phase:hod", "6"),
+            ("phase:yesod-orchestration", "7"),
+            ("phase:yesod-embodiment", "8"),
+            ("phase:malkhut", "9"),
+        ):
+            content = read_microagent_for_label(label, phase)
+            self.assertIn("SPARC ALIGNMENT", content)
+            self.assertIn("BOUNDARY CONTRACT", content)
+
     def test_build_agent_prompt_preserves_canonical_requirements_in_child_issue_body_for_downstream_phases(self) -> None:
         # This fixture models a real Tiferet child issue body. Downstream
         # implementation phases must receive the verbatim Canonical Requirements

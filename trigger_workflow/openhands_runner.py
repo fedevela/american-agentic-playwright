@@ -12,14 +12,16 @@ from .config import (
     IMPLEMENTATION_PHASES,
     PRE_IMPLEMENTATION_PHASES,
     SESSION_STATE_PATH,
+    TIFERET_AUTO_ISSUE_PREFIX,
     TARGET_REPO_CONFIG_MAP,
     WORKSPACE,
     TargetRepoConfig,
 )
 from .logging_utils import log_error, log_info, log_multiline
 
-TEST_FIX_MAX_ATTEMPTS = 3
+MAX_VALIDATION_ATTEMPTS = 2
 TEST_OUTPUT_MAX_CHARS = 12000
+VALIDATION_PHASES = {"8", "9"}
 
 
 @dataclass(frozen=True)
@@ -380,6 +382,7 @@ def run_phase_tests(
         if branch_override is None
         else prepare_openhands_branch_context(repo, branch_override)
     )
+    ensure_playwright_test_prerequisites(context.local_path)
     log_info("Running validation command: npm run test")
     return subprocess.run(
         ["npm", "run", "test"],
@@ -387,6 +390,218 @@ def run_phase_tests(
         text=True,
         capture_output=True,
         timeout=1200,
+    )
+
+def finalize_phase_delivery(
+    *,
+    repo: str,
+    issue: int,
+    phase: str,
+    issue_title: str = "",
+    branch_override: str | None = None,
+) -> str:
+    """Commit and push phase changes, then return a summary suitable for a GitHub issue comment."""
+    context = (
+        prepare_phase_execution_context(repo, phase, issue)
+        if branch_override is None
+        else prepare_openhands_branch_context(repo, branch_override)
+    )
+    branch = context.branch
+    local_path = context.local_path
+
+    status_result = subprocess.run(
+        ["git", "status", "--short"],
+        cwd=local_path,
+        text=True,
+        capture_output=True,
+        timeout=120,
+    )
+    if status_result.returncode != 0:
+        raise SystemExit(f"Failed to inspect git status before delivery finalization in {local_path}.")
+    status_lines = [line.rstrip() for line in (status_result.stdout or "").splitlines() if line.strip()]
+    if not status_lines:
+        raise SystemExit(
+            f"Phase {phase.upper()} finished without repository changes. "
+            "Refusing to advance phase without a commit."
+        )
+
+    add_result = subprocess.run(
+        ["git", "add", "-A"],
+        cwd=local_path,
+        text=True,
+        capture_output=True,
+        timeout=120,
+    )
+    if add_result.returncode != 0:
+        raise SystemExit(f"Failed to stage changes for phase {phase.upper()} delivery in {local_path}.")
+
+    normalized_title = " ".join(issue_title.split()).strip()
+    if normalized_title.startswith(TIFERET_AUTO_ISSUE_PREFIX):
+        normalized_title = normalized_title[len(TIFERET_AUTO_ISSUE_PREFIX) :].strip()
+    pr_title_tail = normalized_title[:120] if normalized_title else f"Phase {phase} delivery"
+    if normalized_title:
+        commit_title_tail = normalized_title[:72]
+        commit_message = f"phase:{phase} issue #{issue}: {commit_title_tail}"
+    else:
+        commit_message = f"phase:{phase} issue #{issue} - apply OpenHands changes"
+    commit_result = subprocess.run(
+        ["git", "commit", "-m", commit_message],
+        cwd=local_path,
+        text=True,
+        capture_output=True,
+        timeout=120,
+    )
+    if commit_result.returncode != 0:
+        raise SystemExit(
+            f"Failed to commit changes for phase {phase.upper()} delivery in {local_path}.\n"
+            f"stdout:\n{commit_result.stdout}\n"
+            f"stderr:\n{commit_result.stderr}"
+        )
+
+    push_result = subprocess.run(
+        ["git", "push", "origin", branch],
+        cwd=local_path,
+        text=True,
+        capture_output=True,
+        timeout=180,
+    )
+    if push_result.returncode != 0:
+        raise SystemExit(
+            f"Failed to push branch '{branch}' for phase {phase.upper()} delivery.\n"
+            f"stdout:\n{push_result.stdout}\n"
+            f"stderr:\n{push_result.stderr}"
+        )
+    if (push_result.stdout or "").strip():
+        log_info(f"Push output: {(push_result.stdout or '').strip()}")
+    if (push_result.stderr or "").strip():
+        log_info(f"Push diagnostics: {(push_result.stderr or '').strip()}")
+
+    head_sha_result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=local_path,
+        text=True,
+        capture_output=True,
+        timeout=60,
+    )
+    if head_sha_result.returncode != 0:
+        raise SystemExit(f"Failed to resolve HEAD sha after push for branch '{branch}'.")
+    head_sha = (head_sha_result.stdout or "").strip()
+
+    remote_sha_result = subprocess.run(
+        ["git", "ls-remote", "--heads", "origin", f"refs/heads/{branch}"],
+        cwd=local_path,
+        text=True,
+        capture_output=True,
+        timeout=120,
+    )
+    if remote_sha_result.returncode != 0:
+        raise SystemExit(
+            f"Failed to verify remote head for branch '{branch}' after push.\n"
+            f"stdout:\n{remote_sha_result.stdout}\n"
+            f"stderr:\n{remote_sha_result.stderr}"
+        )
+    remote_line = (remote_sha_result.stdout or "").strip().splitlines()
+    remote_sha = remote_line[0].split()[0].strip() if remote_line else ""
+    if not remote_sha:
+        raise SystemExit(f"Remote branch '{branch}' was not found after push.")
+    if remote_sha != head_sha:
+        raise SystemExit(
+            f"Push verification failed for branch '{branch}': local HEAD {head_sha} "
+            f"does not match origin/{branch} {remote_sha}."
+        )
+
+    config = resolve_target_repo_config(repo)
+    pr_lookup_result = subprocess.run(
+        ["gh", "pr", "list", "--repo", repo, "--head", branch, "--state", "open", "--json", "number,title,url"],
+        cwd=local_path,
+        text=True,
+        capture_output=True,
+        timeout=120,
+    )
+    if pr_lookup_result.returncode != 0:
+        raise SystemExit(
+            f"Failed to query PRs for branch '{branch}' in {repo}.\n"
+            f"stdout:\n{pr_lookup_result.stdout}\n"
+            f"stderr:\n{pr_lookup_result.stderr}"
+        )
+    pr_payload = json.loads(pr_lookup_result.stdout or "[]")
+    pr_url = ""
+    pr_title = f"Issue #{issue}: {pr_title_tail}"
+    if isinstance(pr_payload, list) and pr_payload:
+        first = pr_payload[0]
+        if isinstance(first, dict):
+            pr_url = str(first.get("url") or "").strip()
+
+    if not pr_url:
+        pr_body = (
+            f"Automated phase delivery PR for issue #{issue}.\n\n"
+            f"Branch: `{branch}`\n"
+            f"Phase: `{phase}`\n\n"
+            f"Closes #{issue}"
+        )
+        pr_create_result = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "create",
+                "--repo",
+                repo,
+                "--base",
+                config.main_branch,
+                "--head",
+                branch,
+                "--title",
+                pr_title,
+                "--body",
+                pr_body,
+            ],
+            cwd=local_path,
+            text=True,
+            capture_output=True,
+            timeout=120,
+        )
+        if pr_create_result.returncode != 0:
+            raise SystemExit(
+                f"Failed to create PR for branch '{branch}' in {repo}.\n"
+                f"stdout:\n{pr_create_result.stdout}\n"
+                f"stderr:\n{pr_create_result.stderr}"
+            )
+        pr_url = (pr_create_result.stdout or "").strip()
+        if not pr_url:
+            raise SystemExit(f"PR creation returned no URL for branch '{branch}' in {repo}.")
+
+    sha_result = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        cwd=local_path,
+        text=True,
+        capture_output=True,
+        timeout=60,
+    )
+    if sha_result.returncode != 0:
+        raise SystemExit(f"Failed to resolve HEAD sha after delivery push for branch '{branch}'.")
+    short_sha = (sha_result.stdout or "").strip()
+
+    changed_files_result = subprocess.run(
+        ["git", "show", "--name-only", "--pretty=format:", "HEAD"],
+        cwd=local_path,
+        text=True,
+        capture_output=True,
+        timeout=60,
+    )
+    if changed_files_result.returncode != 0:
+        raise SystemExit("Failed to read committed file list for delivery summary.")
+    changed_files = [line.strip() for line in changed_files_result.stdout.splitlines() if line.strip()]
+
+    files_block = "\n".join(f"- `{path}`" for path in changed_files) if changed_files else "- `(no file list available)`"
+    return (
+        "Implementation delivery summary:\n\n"
+        f"- Phase: `{phase}`\n"
+        f"- Branch: `{branch}`\n"
+        f"- PR: {pr_url}\n"
+        f"- Commit: `{short_sha}`\n"
+        f"- Commit message: `{commit_message}`\n\n"
+        "Changed files:\n"
+        f"{files_block}"
     )
 
 
@@ -403,19 +618,55 @@ def summarize_test_output(result: subprocess.CompletedProcess[str]) -> str:
     return combined[-TEST_OUTPUT_MAX_CHARS:]
 
 
-def build_test_failure_fix_task(test_output: str, *, attempt: int, max_attempts: int) -> str:
-    """Build a follow-up task that asks OpenHands to fix failing tests based on captured output."""
+def build_single_retry_fix_task(test_output: str) -> str:
+    """Build the one-time retry task sent to OpenHands after a failed validation run."""
     return (
         "Your previous changes were applied, but required repository validation failed.\n\n"
         "Run and satisfy exactly this command contract:\n"
         "- `npm run test`\n\n"
-        f"Current fix attempt: {attempt} of {max_attempts}.\n\n"
+        "This is the only retry attempt.\n\n"
         "Failure output:\n"
         "```text\n"
         f"{test_output}\n"
         "```\n\n"
         "Apply minimal code changes to make `npm run test` pass, then finish."
     )
+
+
+def ensure_playwright_test_prerequisites(local_path: Path) -> None:
+    """Ensure the repository has local dependencies installed for Playwright test runs."""
+    local_playwright = local_path / "node_modules" / ".bin" / "playwright"
+    if local_playwright.exists():
+        return
+
+    log_info("Playwright CLI unavailable; running npm ci to install test dependencies")
+    install_result = subprocess.run(
+        ["npm", "ci"],
+        cwd=local_path,
+        text=True,
+        capture_output=True,
+        timeout=1200,
+    )
+    if install_result.returncode != 0:
+        raise SystemExit(
+            "Failed to install npm dependencies required for tests.\n"
+            f"stdout:\n{install_result.stdout}\n"
+            f"stderr:\n{install_result.stderr}"
+        )
+
+    if not local_playwright.exists():
+        playwright_version_result = subprocess.run(
+            ["npx", "playwright", "--version"],
+            cwd=local_path,
+            text=True,
+            capture_output=True,
+            timeout=120,
+        )
+        raise SystemExit(
+            "Playwright CLI is still unavailable in node_modules after `npm ci`.\n"
+            f"stdout:\n{playwright_version_result.stdout}\n"
+            f"stderr:\n{playwright_version_result.stderr}"
+        )
 
 
 def extract_message_events(output: str) -> list[dict[str, Any]]:
@@ -527,7 +778,7 @@ def run_openhands_implementation_phase(
     print("=" * 60)
 
     pending_task = task
-    for attempt in range(1, TEST_FIX_MAX_ATTEMPTS + 1):
+    for attempt in range(1, MAX_VALIDATION_ATTEMPTS + 1):
         result = run_openhands(
             pending_task,
             repo=repo,
@@ -549,6 +800,11 @@ def run_openhands_implementation_phase(
         elif result.stdout:
             log_info("OpenHands run completed with no parsed assistant message (raw output suppressed).")
 
+        if phase not in VALIDATION_PHASES:
+            log_info(f"Skipping automated validation for phase {phase}; validation is reserved for phases 8 and 9.")
+            print("\nAgent execution complete.")
+            return
+
         test_result = run_phase_tests(repo=repo, issue=issue, phase=phase, branch_override=branch_override)
         if test_result.stdout:
             print(test_result.stdout)
@@ -559,14 +815,8 @@ def run_openhands_implementation_phase(
             print("\nAgent execution complete.")
             return
 
-        if attempt >= TEST_FIX_MAX_ATTEMPTS:
-            raise SystemExit(
-                f"Validation command `npm run test` failed after {TEST_FIX_MAX_ATTEMPTS} attempts."
-            )
+        if attempt >= MAX_VALIDATION_ATTEMPTS:
+            raise SystemExit("Validation command `npm run test` failed.")
 
-        log_error("Validation command failed; requesting OpenHands to apply a targeted fix.")
-        pending_task = build_test_failure_fix_task(
-            summarize_test_output(test_result),
-            attempt=attempt + 1,
-            max_attempts=TEST_FIX_MAX_ATTEMPTS,
-        )
+        log_error("Validation failed; requesting a one-time OpenHands retry with test output context.")
+        pending_task = build_single_retry_fix_task(summarize_test_output(test_result))
