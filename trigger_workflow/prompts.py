@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any
 
 from .config import (
     BASE_PERSONA_FILE,
@@ -20,68 +21,73 @@ from .logging_utils import log_error, log_info
 COMMENT_VISIBLE_PHASES = {"3", "4", "5", "6", "7", "8", "9"}
 
 
-def determine_phase_from_label(label: str) -> Optional[str]:
+def determine_phase_from_label(label: str) -> str | None:
     """Map a canonical phase label to its canonical phase id."""
     return LABEL_PHASE_MAP.get(label)
 
 
-def read_microagent_for_label(label: str, phase: Optional[str]) -> Optional[str]:
+def read_required_text_file(path: Path, *, missing_message: str, log_message: str) -> str:
+    """Read a required prompt file with consistent logging and failure behavior."""
+    if not path.exists():
+        raise SystemExit(missing_message)
+    log_info(log_message)
+    return path.read_text().strip()
+
+
+def read_microagent_for_label(label: str, phase: str | None) -> str:
     """Build the effective phase prompt from Daneel, the phase persona, and the microagent."""
     if not phase:
-        log_error(f"Cannot load persona stack for label '{label}' without a resolved phase id.")
-        return None
+        raise SystemExit(f"Cannot load persona stack for label '{label}' without a resolved phase id.")
 
     sections: list[str] = []
 
     base_persona_path = PERSONAS_DIR / BASE_PERSONA_FILE
-    if not base_persona_path.exists():
-        log_error(f"Base persona file is missing: {base_persona_path.name}")
-        return None
-    log_info(f"Including base persona: {base_persona_path.name}")
-    sections.append(base_persona_path.read_text().strip())
+    sections.append(
+        read_required_text_file(
+            base_persona_path,
+            missing_message=f"Base persona file is missing: {base_persona_path.name}",
+            log_message=f"Including base persona: {base_persona_path.name}",
+        )
+    )
 
     persona_filename = PERSONA_FILE_MAP.get(phase)
     if not persona_filename:
-        log_error(f"No phase persona filename is configured for phase {phase.upper()}.")
-        return None
+        raise SystemExit(f"No phase persona filename is configured for phase {phase.upper()}.")
     persona_path = PERSONAS_DIR / persona_filename
     log_info(f"Looking for phase persona file {persona_filename}")
-    if not persona_path.exists():
-        log_error(f"Phase persona file is missing: {persona_filename}")
-        return None
-    log_info(f"Including phase persona: {persona_path.name}")
-    sections.append(persona_path.read_text().strip())
+    sections.append(
+        read_required_text_file(
+            persona_path,
+            missing_message=f"Phase persona file is missing: {persona_filename}",
+            log_message=f"Including phase persona: {persona_path.name}",
+        )
+    )
 
     microagent_content = read_functional_microagent(label, phase)
-    if not microagent_content:
-        log_error(f"Functional microagent is missing for label '{label}' and phase {phase.upper()}.")
-        return None
     sections.append(microagent_content.strip())
 
     return "\n\n".join(sections)
 
 
-def read_functional_microagent(label: str, phase: Optional[str]) -> Optional[str]:
-    """Read the functional `.openhands/microagents` prompt used alongside literary personas."""
+def read_functional_microagent(label: str, phase: str | None) -> str:
+    """Read the functional `microagents/` prompt used alongside literary personas."""
     del label
     if not phase:
-        return None
+        raise SystemExit("Cannot load a functional microagent without a resolved phase id.")
 
     microagent_filename = FUNCTIONAL_MICROAGENT_FILE_MAP.get(phase)
     if not microagent_filename:
-        log_error(f"No functional microagent filename is configured for phase {phase.upper()}.")
-        return None
+        raise SystemExit(f"No functional microagent filename is configured for phase {phase.upper()}.")
 
     microagent_path = MICROAGENTS_DIR / microagent_filename
-    if not microagent_path.exists():
-        log_error(f"Functional microagent file is missing: {microagent_filename}")
-        return None
+    return read_required_text_file(
+        microagent_path,
+        missing_message=f"Functional microagent file is missing: {microagent_filename}",
+        log_message=f"Including functional microagent: {microagent_path.name}",
+    )
 
-    log_info(f"Including functional microagent: {microagent_path.name}")
-    return microagent_path.read_text()
 
-
-def extract_phase_1_comment(issue_data: dict[str, Any]) -> Optional[str]:
+def extract_phase_1_comment(issue_data: dict[str, Any]) -> str | None:
     """Extract the normalized Keter comment body from machine-marked issue comments."""
     comments = issue_data.get("comments") or []
     for comment in comments:
@@ -283,7 +289,7 @@ Use this exact schema:
   "sub_issues": [
     {{
       "title": "{TIFERET_AUTO_ISSUE_PREFIX}Short actionable issue title",
-      "body": "Gherkin-oriented child issue body with Given/When/Then scenarios"
+      "body": "Child issue body beginning with a requirement-id traceability line and continuing with Gherkin-oriented Given/When/Then scenarios"
     }}
   ]
 }}
@@ -291,11 +297,15 @@ Use this exact schema:
 Requirements:
 - `comment` must summarize the specification and explain that child issues were spawned.
 - `comment` must explicitly reconcile the Gevurah input against the final child issue set.
+- `comment` must explain the grouping logic for every child issue, not only the final counts.
+- `comment` must state which requirement IDs are covered by each child issue and why those IDs belong together.
 - If multiple Gevurah requirements were merged, collapsed as duplicates, absorbed into another issue, or deferred, explain that in the `comment`.
 - If the number of child issues differs from the number of Gevurah suggestions, explain why the counts differ in the `comment`.
 - `sub_issues` must contain one or more items.
 - Order `sub_issues` from earliest required implementation step to latest dependent step.
 - Prefix every child issue title with `{TIFERET_AUTO_ISSUE_PREFIX}` so auto-created issues are visibly distinct from human-authored issues.
+- Every child issue body must begin with a `Requirement IDs:` line listing every Gevurah GUID consolidated into that child issue.
+- The requirement-id list must be complete for that child issue; do not omit any covered Gevurah requirement IDs.
 - Each child issue body must use Gherkin language with explicit `Given`, `When`, and `Then` sections.
 - Assume child issues will be created in listed order, attached as sub-issues to the parent issue, and each later child issue blocked by the immediately preceding child issue.
 - Do not mention tool limitations, environment limitations, or inability to post.

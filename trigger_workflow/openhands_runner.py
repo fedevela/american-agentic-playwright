@@ -34,9 +34,11 @@ def resolve_openhands_model_connection() -> tuple[str, str]:
     if config_path.exists():
         try:
             config_payload = json.loads(config_path.read_text())
-            configured_model = str(((config_payload.get("config") or {}).get("model")) or "").strip()
-        except json.JSONDecodeError:
-            configured_model = ""
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"Invalid OpenHands config JSON at {config_path}: {exc}") from exc
+        if not isinstance(config_payload, dict):
+            raise SystemExit(f"Invalid OpenHands config payload at {config_path}: expected a JSON object.")
+        configured_model = str(((config_payload.get("config") or {}).get("model")) or "").strip()
 
     env = openhands_env()
     model_name = env.get("LLM_MODEL") or configured_model or "(unset)"
@@ -73,10 +75,13 @@ def load_session_state() -> dict[str, str]:
     if not SESSION_STATE_PATH.exists():
         return {}
     try:
-        return json.loads(SESSION_STATE_PATH.read_text())
-    except json.JSONDecodeError:
-        log_error("Session state file is invalid JSON; starting with an empty session map")
-        return {}
+        payload = json.loads(SESSION_STATE_PATH.read_text())
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Session state file is invalid JSON at {SESSION_STATE_PATH}: {exc}") from exc
+
+    if not isinstance(payload, dict):
+        raise SystemExit(f"Session state file must contain a JSON object at {SESSION_STATE_PATH}.")
+    return payload
 
 
 def save_session_state(state: dict[str, str]) -> None:
@@ -92,6 +97,12 @@ def extract_conversation_id(output: str) -> str:
         if marker in line:
             return line.split(marker, 1)[1].strip()
     return ""
+
+
+def openhands_session_key(repo: str, issue: int, session_scope: str) -> str:
+    """Build the persisted session key for a run, including phase scoping when enabled."""
+    base_key = session_key(repo, issue)
+    return base_key if not session_scope else f"{base_key}:{session_scope}"
 
 
 def resolve_target_repo_config(repo: str) -> TargetRepoConfig:
@@ -214,7 +225,7 @@ def run_openhands(
 ) -> subprocess.CompletedProcess[str]:
     """Run OpenHands headlessly and capture output in the configured target repository."""
     state = load_session_state()
-    key = session_key(repo, issue) if not session_scope else f"{session_key(repo, issue)}:{session_scope}"
+    key = openhands_session_key(repo, issue, session_scope)
     conversation_id = state.get(key, "")
     context = (
         prepare_openhands_run_context(repo, phase, issue)

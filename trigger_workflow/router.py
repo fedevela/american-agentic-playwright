@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import sys
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from .config import (
     DEFAULT_REPO,
@@ -26,6 +25,7 @@ from .github_ops import (
 )
 from .logging_utils import log_error, log_info, log_multiline, log_section, log_step
 from .openhands_runner import (
+    resolve_openhands_model_connection,
     run_openhands_for_comment,
     run_openhands_for_json,
     run_openhands_task,
@@ -67,6 +67,16 @@ def log_prompt_and_session_policy(prompt: str, phase: str) -> str:
     return session_scope
 
 
+def build_prompt_with_session_scope(
+    phase: str,
+    builder: Callable[..., str],
+    *args: Any,
+) -> tuple[str, str]:
+    """Build a phase prompt and return it with the resolved session-scope policy."""
+    prompt = builder(*args)
+    return prompt, log_prompt_and_session_policy(prompt, phase)
+
+
 def trigger_agent(label: Optional[str] = None, issue: Optional[int] = None, repo: Optional[str] = None) -> None:
     """Route the label to the correct phase workflow."""
     repo = repo or DEFAULT_REPO
@@ -85,8 +95,7 @@ def trigger_agent(label: Optional[str] = None, issue: Optional[int] = None, repo
     log_step("Step 1b: Determining phase id")
     phase = determine_phase_from_label(label)
     if not phase:
-        log_error(f"Unknown label '{label}'. Cannot determine phase.")
-        sys.exit(1)
+        raise SystemExit(f"Unknown label '{label}'. Cannot determine phase.")
     log_info(f"Label '{label}' → Phase {phase.upper()} ({PHASE_DISPLAY_NAME_MAP.get(phase, 'Unknown')})")
 
     log_step("Step 1c: Resolving issue number")
@@ -105,23 +114,17 @@ def trigger_agent(label: Optional[str] = None, issue: Optional[int] = None, repo
 
     log_step("Step 2: Reading microagent prompt")
     microagent_content = read_microagent_for_label(label, phase)
-    if not microagent_content:
-        log_error(f"No microagent found for label '{label}'.")
-        sys.exit(1)
     log_info(f"Microagent prompt loaded ({len(microagent_content)} bytes)")
 
     log_step("Step 3: Fetching issue data from GitHub")
     issue_data = fetch_issue_data(repo, issue)
-    if not issue_data:
-        log_error(f"Could not fetch issue #{issue} from {repo}.")
-        sys.exit(1)
     log_info(f"Issue #{issue} fetched: '{issue_data.get('title', 'Unknown')}'")
     label_names = [l.get("name", "") for l in issue_data.get("labels", []) if l.get("name")]
     log_info(f"Current labels: {', '.join(label_names) if label_names else '(none)'}")
 
     if not issue_has_label(issue_data, label):
         log_error(f"Issue #{issue} in {repo} is not labeled '{label}'. Skipping phase execution.")
-        sys.exit(1)
+        raise SystemExit(1)
     log_info("Label verification: PASSED")
 
     log_step("Step 4: Executing phase workflow")
@@ -144,8 +147,16 @@ def _execute_discussion_phase(
 ) -> None:
     """Execute comment-only phases by generating and posting a phase comment."""
     log_info("Building discussion prompt...")
-    prompt = build_discussion_prompt(label, issue, repo, microagent_content, phase, issue_data)
-    session_scope = log_prompt_and_session_policy(prompt, phase)
+    prompt, session_scope = build_prompt_with_session_scope(
+        phase,
+        build_discussion_prompt,
+        label,
+        issue,
+        repo,
+        microagent_content,
+        phase,
+        issue_data,
+    )
 
     log_info(f"Running OpenHands for phase {phase.upper()}...")
     comment = run_openhands_for_comment(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
@@ -166,8 +177,16 @@ def _execute_specification_phase(
 ) -> None:
     """Execute phase 4/Tiferet by generating a parent comment and child issues."""
     log_info("Building specification prompt...")
-    prompt = build_spec_prompt(label, issue, repo, microagent_content, phase, issue_data)
-    session_scope = log_prompt_and_session_policy(prompt, phase)
+    prompt, session_scope = build_prompt_with_session_scope(
+        phase,
+        build_spec_prompt,
+        label,
+        issue,
+        repo,
+        microagent_content,
+        phase,
+        issue_data,
+    )
 
     log_info("Running OpenHands for JSON payload...")
     payload = run_openhands_for_json(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
@@ -198,8 +217,16 @@ def _execute_agent_phase(
 ) -> None:
     """Execute phases 5-9 headlessly in OpenHands."""
     log_info("Building agent prompt...")
-    prompt = build_agent_prompt(label, issue, repo, microagent_content, phase, issue_data)
-    session_scope = log_prompt_and_session_policy(prompt, phase)
+    prompt, session_scope = build_prompt_with_session_scope(
+        phase,
+        build_agent_prompt,
+        label,
+        issue,
+        repo,
+        microagent_content,
+        phase,
+        issue_data,
+    )
 
     log_info("Running OpenHands agent...")
     run_openhands_task(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
@@ -211,6 +238,9 @@ def main() -> None:
     log_section("OPENHANDS SWARM PHASE ROUTER")
     log_info(f"Working directory: {WORKSPACE}")
     log_info(f"Microagents directory: {MICROAGENTS_DIR}")
+    model_name, connection = resolve_openhands_model_connection()
+    log_info(f"OpenHands model connection: {connection}")
+    log_info(f"OpenHands model name: {model_name}")
 
     parser = argparse.ArgumentParser(description="Trigger OpenHands / GitHub phase workflow")
     parser.add_argument("--label", help="GitHub label triggering the phase")

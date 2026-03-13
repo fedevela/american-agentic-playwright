@@ -2,10 +2,38 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from typing import Any
 
 from .config import NEXT_LABEL_MAP, PHASE_LABELS, PHASE_LABEL_METADATA, TIFERET_AUTO_ISSUE_PREFIX
 from .logging_utils import log_error, log_info
+
+
+SUB_ISSUE_VERIFICATION_ATTEMPTS = 5
+SUB_ISSUE_VERIFICATION_DELAY_SECONDS = 2.0
+
+
+def gh_failure_details(result: subprocess.CompletedProcess[str]) -> str:
+    """Build a single error detail string from GitHub CLI output."""
+    return (result.stderr or result.stdout or "").strip() or "gh returned no output"
+
+
+def run_gh_json(
+    args: list[str],
+    *,
+    failure_message: str,
+    expect_type: type[list[Any]] | type[dict[str, Any]],
+) -> list[Any] | dict[str, Any]:
+    """Run a GitHub CLI command and parse the JSON response."""
+    result = run_gh(args, capture_output=True)
+    if result.returncode != 0 or not result.stdout:
+        raise SystemExit(f"{failure_message}: {gh_failure_details(result)}")
+
+    payload = json.loads(result.stdout)
+    if not isinstance(payload, expect_type):
+        expected_name = "array" if expect_type is list else "object"
+        raise SystemExit(f"{failure_message}: expected JSON {expected_name} response.")
+    return payload
 
 
 def run_gh(args: list[str], *, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
@@ -23,34 +51,22 @@ def run_gh(args: list[str], *, capture_output: bool = False) -> subprocess.Compl
 def fetch_issue_data(repo: str, issue_number: int) -> dict[str, Any]:
     """Fetch the issue payload used by prompt construction and label checks."""
     log_info(f"Fetching issue #{issue_number} with labels and comments")
-    result = run_gh(
+    return run_gh_json(
         ["issue", "view", str(issue_number), "--repo", repo, "--json", "id,title,body,number,labels,comments"],
-        capture_output=True,
+        failure_message=f"Failed to fetch issue #{issue_number} from {repo}",
+        expect_type=dict,
     )
-    if result.returncode != 0:
-        stderr = (result.stderr or "").strip()
-        stdout = (result.stdout or "").strip()
-        details = stderr or stdout or "gh returned no output"
-        raise SystemExit(f"Failed to fetch issue #{issue_number} from {repo}: {details}")
-    if not result.stdout:
-        raise SystemExit(f"Failed to fetch issue #{issue_number} from {repo}: gh returned empty output.")
-    return json.loads(result.stdout)
 
 
 def fetch_repo_labels(repo: str) -> list[dict[str, Any]]:
     """Fetch repository label metadata from GitHub."""
     log_info("Fetching repository label metadata")
-    result = run_gh(
+    payload = run_gh_json(
         ["label", "list", "--repo", repo, "--json", "name,description,color"],
-        capture_output=True,
+        failure_message=f"Could not query labels in {repo}",
+        expect_type=list,
     )
-    if result.returncode != 0 or not result.stdout:
-        raise SystemExit(f"Could not query labels in {repo}.")
-
-    labels = json.loads(result.stdout)
-    if not isinstance(labels, list):
-        raise SystemExit(f"Invalid label payload for {repo}.")
-    return labels
+    return [item for item in payload if isinstance(item, dict)]
 
 
 def ensure_phase_labels(repo: str) -> None:
@@ -119,15 +135,12 @@ def ensure_phase_labels(repo: str) -> None:
 def resolve_issue_by_label(repo: str, label: str) -> int:
     """Resolve a single open issue by label."""
     log_info(f"Looking up open issue for label '{label}'")
-    result = run_gh(
+    issues = run_gh_json(
         ["issue", "list", "--repo", repo, "--label", label, "--state", "open", "--json", "number,title"],
-        capture_output=True,
+        failure_message=f"Could not query open issues labeled '{label}' in {repo}",
+        expect_type=list,
     )
-    if result.returncode != 0 or not result.stdout:
-        raise SystemExit(f"Could not query open issues labeled '{label}' in {repo}.")
-
-    issues = json.loads(result.stdout)
-    if not isinstance(issues, list) or not issues:
+    if not issues:
         raise SystemExit(f"No open issues labeled '{label}' found in {repo}.")
     if len(issues) > 1:
         issue_refs = ", ".join(f"#{item['number']}" for item in issues if isinstance(item, dict) and "number" in item)
@@ -161,16 +174,11 @@ def issue_phase_labels(issue_data: dict[str, Any]) -> list[str]:
 def resolve_oldest_phased_issue(repo: str) -> tuple[int, str]:
     """Resolve the oldest open issue carrying exactly one known phase label."""
     log_info("Looking up the oldest open issue carrying a canonical phase label")
-    result = run_gh(
+    issues = run_gh_json(
         ["issue", "list", "--repo", repo, "--state", "open", "--json", "number,title,createdAt,labels"],
-        capture_output=True,
+        failure_message=f"Could not query open issues in {repo}",
+        expect_type=list,
     )
-    if result.returncode != 0 or not result.stdout:
-        raise SystemExit(f"Could not query open issues in {repo}.")
-
-    issues = json.loads(result.stdout)
-    if not isinstance(issues, list):
-        raise SystemExit(f"Invalid issue list payload for {repo}.")
 
     phased_issues: list[dict[str, Any]] = []
     for issue in issues:
@@ -239,13 +247,18 @@ def advance_issue_label(repo: str, issue_number: int, current_label: str) -> Non
 
 def parse_repo(repo: str) -> tuple[str, str]:
     """Split an owner/repo string into owner and repository name."""
-    return repo.split("/", 1)
+    if repo.count("/") != 1:
+        raise SystemExit(f"Invalid repository identifier '{repo}'. Expected 'owner/repo'.")
+    owner, repo_name = repo.split("/", 1)
+    if not owner or not repo_name:
+        raise SystemExit(f"Invalid repository identifier '{repo}'. Expected 'owner/repo'.")
+    return owner, repo_name
 
 
 def create_issue_via_api(repo: str, title: str, body: str) -> dict[str, Any]:
     """Create an issue through the REST API and return its full metadata."""
     owner, repo_name = parse_repo(repo)
-    result = run_gh(
+    return run_gh_json(
         [
             "api",
             f"repos/{owner}/{repo_name}/issues",
@@ -256,14 +269,9 @@ def create_issue_via_api(repo: str, title: str, body: str) -> dict[str, Any]:
             "-f",
             f"body={body}",
         ],
-        capture_output=True,
+        failure_message=f"Failed to create child issue '{title}'",
+        expect_type=dict,
     )
-    if result.returncode != 0 or not result.stdout:
-        raise SystemExit(f"Failed to create child issue '{title}'.")
-    payload = json.loads(result.stdout)
-    if not isinstance(payload, dict):
-        raise SystemExit(f"Invalid payload returned while creating child issue '{title}'.")
-    return payload
 
 
 def normalize_tiferet_child_title(title: str) -> str:
@@ -289,7 +297,10 @@ def add_sub_issue_relationship(repo: str, parent_issue_number: int, sub_issue_id
         capture_output=True,
     )
     if result.returncode != 0:
-        raise SystemExit(f"Failed to attach sub-issue id {sub_issue_id} to parent issue #{parent_issue_number}.")
+        raise SystemExit(
+            f"Failed to attach sub-issue id {sub_issue_id} to parent issue #{parent_issue_number}: "
+            f"{gh_failure_details(result)}"
+        )
     log_info(f"  → Attached as sub-issue under parent #{parent_issue_number}")
 
 
@@ -308,8 +319,59 @@ def add_blocked_by_dependency(repo: str, issue_number: int, blocking_issue_id: i
         capture_output=True,
     )
     if result.returncode != 0:
-        raise SystemExit(f"Failed to mark issue #{issue_number} as blocked by issue id {blocking_issue_id}.")
+        raise SystemExit(
+            f"Failed to mark issue #{issue_number} as blocked by issue id {blocking_issue_id}: "
+            f"{gh_failure_details(result)}"
+        )
     log_info(f"  → Added blocked-by dependency to issue #{issue_number}")
+
+
+def fetch_parent_sub_issue_ids(repo: str, parent_issue_number: int) -> set[int]:
+    """Return the child issue ids currently attached to a parent issue."""
+    owner, repo_name = parse_repo(repo)
+    payload = run_gh_json(
+        [
+            "api",
+            f"repos/{owner}/{repo_name}/issues/{parent_issue_number}/sub_issues",
+        ],
+        failure_message=f"Failed to fetch sub-issues for parent issue #{parent_issue_number}",
+        expect_type=list,
+    )
+
+    attached_ids: set[int] = set()
+    for item in payload:
+        if isinstance(item, dict) and isinstance(item.get("id"), int):
+            attached_ids.add(int(item["id"]))
+    return attached_ids
+
+
+def verify_parent_sub_issue_ids(
+    repo: str,
+    parent_issue_number: int,
+    expected_child_ids: list[int],
+    *,
+    attempts: int = SUB_ISSUE_VERIFICATION_ATTEMPTS,
+    delay_seconds: float = SUB_ISSUE_VERIFICATION_DELAY_SECONDS,
+) -> list[int]:
+    """Retry parent-child attachment verification to tolerate API consistency lag."""
+    if attempts < 1:
+        raise SystemExit("Sub-issue verification attempts must be at least 1.")
+    if delay_seconds < 0:
+        raise SystemExit("Sub-issue verification delay must be non-negative.")
+
+    missing_ids = expected_child_ids[:]
+    for attempt in range(1, attempts + 1):
+        attached_ids = fetch_parent_sub_issue_ids(repo, parent_issue_number)
+        missing_ids = [issue_id for issue_id in expected_child_ids if issue_id not in attached_ids]
+        if not missing_ids:
+            return []
+        if attempt < attempts:
+            log_info(
+                f"Parent #{parent_issue_number} is still missing {len(missing_ids)} sub-issue link(s) "
+                f"after verification attempt {attempt}/{attempts}; retrying in {delay_seconds:.1f}s"
+            )
+            time.sleep(delay_seconds)
+    return missing_ids
 
 
 def create_child_issues(
@@ -360,6 +422,19 @@ def create_child_issues(
             previous_id = int(previous_issue["id"])
             log_info(f"Linking child issue #{issue_number} as blocked by preceding issue #{previous_number}")
             add_blocked_by_dependency(repo, issue_number, previous_id)
+
+    log_info(f"Verifying that all {len(created)} child issues are attached to parent #{parent_issue}")
+    missing_ids = verify_parent_sub_issue_ids(
+        repo,
+        parent_issue,
+        [int(item["id"]) for item in created],
+    )
+    if missing_ids:
+        missing_numbers = [f"#{item['number']}" for item in created if int(item["id"]) in missing_ids]
+        raise SystemExit(
+            f"Created child issues were not all attached to parent #{parent_issue}. Missing sub-issue links: {', '.join(missing_numbers)}."
+        )
+    log_info(f"Verified parent #{parent_issue} has all {len(created)} child issues attached")
 
     log_info(f"All {len(created)} child issues created, attached, and dependency-linked successfully")
     return created

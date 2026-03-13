@@ -3,14 +3,22 @@ from __future__ import annotations
 import unittest
 import subprocess
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from trigger_workflow.config import TIFERET_AUTO_ISSUE_PREFIX
-from trigger_workflow.github_ops import create_child_issues, normalize_tiferet_child_title
+from trigger_workflow.github_ops import (
+    create_child_issues,
+    normalize_tiferet_child_title,
+    parse_repo,
+    verify_parent_sub_issue_ids,
+)
 from trigger_workflow.openhands_runner import (
     OpenHandsRunContext,
     branch_name_for_phase,
+    load_session_state,
     prepare_openhands_run_context,
+    resolve_openhands_model_connection,
     run_openhands,
 )
 from trigger_workflow.prompts import (
@@ -30,6 +38,7 @@ from trigger_workflow.router import (
     session_scope_for_phase,
     trigger_agent,
 )
+from trigger_workflow.validation import validate_phase_four_payload
 
 
 class PhaseMappingTests(unittest.TestCase):
@@ -98,6 +107,8 @@ class PromptCompositionTests(unittest.TestCase):
         self.assertIn(f'"title": "{TIFERET_AUTO_ISSUE_PREFIX}Short actionable issue title"', prompt)
         self.assertIn("must explicitly reconcile the Gevurah input against the final child issue set", prompt)
         self.assertIn("If the number of child issues differs from the number of Gevurah suggestions", prompt)
+        self.assertIn("must state which requirement IDs are covered by each child issue", prompt)
+        self.assertIn("Every child issue body must begin with a `Requirement IDs:` line", prompt)
 
     def test_read_microagent_for_label_composes_base_persona_phase_persona_and_microagent(self) -> None:
         content = read_microagent_for_label("phase:binah", "2b")
@@ -178,18 +189,24 @@ class PromptCompositionTests(unittest.TestCase):
 
     @patch("trigger_workflow.prompts.BASE_PERSONA_FILE", "missing-daneel.md")
     def test_read_microagent_for_label_errors_when_base_persona_missing(self) -> None:
-        content = read_microagent_for_label("phase:binah", "2b")
-        self.assertIsNone(content)
+        with self.assertRaises(SystemExit) as exc:
+            read_microagent_for_label("phase:binah", "2b")
+
+        self.assertIn("Base persona file is missing", str(exc.exception))
 
     @patch.dict("trigger_workflow.prompts.PERSONA_FILE_MAP", {"2b": "missing-phase-persona.md"}, clear=False)
     def test_read_microagent_for_label_errors_when_phase_persona_missing(self) -> None:
-        content = read_microagent_for_label("phase:binah", "2b")
-        self.assertIsNone(content)
+        with self.assertRaises(SystemExit) as exc:
+            read_microagent_for_label("phase:binah", "2b")
+
+        self.assertIn("Phase persona file is missing", str(exc.exception))
 
     @patch.dict("trigger_workflow.prompts.FUNCTIONAL_MICROAGENT_FILE_MAP", {"2b": "missing-functional-agent.md"}, clear=False)
     def test_read_functional_microagent_errors_when_mapped_file_missing(self) -> None:
-        content = read_functional_microagent("phase:binah", "2b")
-        self.assertIsNone(content)
+        with self.assertRaises(SystemExit) as exc:
+            read_functional_microagent("phase:binah", "2b")
+
+        self.assertIn("Functional microagent file is missing", str(exc.exception))
 
 
 class ChildIssueCreationTests(unittest.TestCase):
@@ -203,6 +220,7 @@ class ChildIssueCreationTests(unittest.TestCase):
             f"{TIFERET_AUTO_ISSUE_PREFIX}Implement Something",
         )
 
+    @patch("trigger_workflow.github_ops.fetch_parent_sub_issue_ids", return_value={1001, 1002, 1003})
     @patch("trigger_workflow.github_ops.add_blocked_by_dependency")
     @patch("trigger_workflow.github_ops.add_sub_issue_relationship")
     @patch("trigger_workflow.github_ops.create_issue_via_api")
@@ -211,6 +229,7 @@ class ChildIssueCreationTests(unittest.TestCase):
         create_issue_via_api_mock,
         add_sub_issue_relationship_mock,
         add_blocked_by_dependency_mock,
+        fetch_parent_sub_issue_ids_mock,
     ) -> None:
         create_issue_via_api_mock.side_effect = [
             {"number": 101, "id": 1001, "html_url": "https://example.test/101"},
@@ -247,6 +266,117 @@ class ChildIssueCreationTests(unittest.TestCase):
         add_blocked_by_dependency_mock.assert_any_call("owner/repo", 102, 1001)
         add_blocked_by_dependency_mock.assert_any_call("owner/repo", 103, 1002)
         self.assertEqual(add_blocked_by_dependency_mock.call_count, 2)
+        fetch_parent_sub_issue_ids_mock.assert_called_once_with("owner/repo", 77)
+
+    @patch("trigger_workflow.github_ops.time.sleep")
+    @patch("trigger_workflow.github_ops.fetch_parent_sub_issue_ids")
+    def test_verify_parent_sub_issue_ids_retries_until_links_appear(
+        self,
+        fetch_parent_sub_issue_ids_mock,
+        sleep_mock,
+    ) -> None:
+        fetch_parent_sub_issue_ids_mock.side_effect = [
+            set(),
+            {1001},
+            {1001, 1002},
+        ]
+
+        missing = verify_parent_sub_issue_ids(
+            "owner/repo",
+            77,
+            [1001, 1002],
+            attempts=3,
+            delay_seconds=0.01,
+        )
+
+        self.assertEqual(missing, [])
+        self.assertEqual(fetch_parent_sub_issue_ids_mock.call_count, 3)
+        self.assertEqual(sleep_mock.call_count, 2)
+
+    @patch("trigger_workflow.github_ops.time.sleep")
+    @patch("trigger_workflow.github_ops.fetch_parent_sub_issue_ids", return_value=set())
+    def test_verify_parent_sub_issue_ids_returns_missing_after_retry_budget_exhausted(
+        self,
+        fetch_parent_sub_issue_ids_mock,
+        sleep_mock,
+    ) -> None:
+        missing = verify_parent_sub_issue_ids(
+            "owner/repo",
+            77,
+            [1001, 1002],
+            attempts=3,
+            delay_seconds=0.01,
+        )
+
+        self.assertEqual(missing, [1001, 1002])
+        self.assertEqual(fetch_parent_sub_issue_ids_mock.call_count, 3)
+        self.assertEqual(sleep_mock.call_count, 2)
+
+    def test_parse_repo_rejects_invalid_identifier(self) -> None:
+        with self.assertRaises(SystemExit) as exc:
+            parse_repo("owner")
+
+        self.assertIn("Expected 'owner/repo'", str(exc.exception))
+
+    @patch("trigger_workflow.github_ops.fetch_parent_sub_issue_ids", return_value=set())
+    @patch("trigger_workflow.github_ops.add_blocked_by_dependency")
+    @patch("trigger_workflow.github_ops.add_sub_issue_relationship")
+    @patch("trigger_workflow.github_ops.create_issue_via_api")
+    def test_create_child_issues_errors_when_parent_sub_issue_attachment_is_missing(
+        self,
+        create_issue_via_api_mock,
+        add_sub_issue_relationship_mock,
+        add_blocked_by_dependency_mock,
+        fetch_parent_sub_issue_ids_mock,
+    ) -> None:
+        del add_sub_issue_relationship_mock
+        del add_blocked_by_dependency_mock
+        del fetch_parent_sub_issue_ids_mock
+        create_issue_via_api_mock.return_value = {
+            "number": 101,
+            "id": 1001,
+            "html_url": "https://example.test/101",
+        }
+
+        with self.assertRaises(SystemExit) as exc:
+            create_child_issues(
+                "owner/repo",
+                77,
+                [{"title": "First", "body": "Body one"}],
+            )
+
+        self.assertIn("Missing sub-issue links: #101", str(exc.exception))
+
+
+class PhaseFourValidationTests(unittest.TestCase):
+    def test_validate_phase_four_payload_accepts_requirement_id_traceability(self) -> None:
+        payload = {
+            "comment": "Decomposition rationale.",
+            "sub_issues": [
+                {
+                    "title": f"{TIFERET_AUTO_ISSUE_PREFIX}Example",
+                    "body": "Requirement IDs: CH-001, CH-003\n\nGiven x, when y, then z.",
+                }
+            ],
+        }
+
+        validate_phase_four_payload(payload)
+
+    def test_validate_phase_four_payload_rejects_missing_requirement_ids_line(self) -> None:
+        payload = {
+            "comment": "Decomposition rationale.",
+            "sub_issues": [
+                {
+                    "title": f"{TIFERET_AUTO_ISSUE_PREFIX}Example",
+                    "body": "Given x, when y, then z.",
+                }
+            ],
+        }
+
+        with self.assertRaises(SystemExit) as exc:
+            validate_phase_four_payload(payload)
+
+        self.assertIn("must begin with a `Requirement IDs:` line", str(exc.exception))
 
 
 class RouterExecutionTests(unittest.TestCase):
@@ -379,6 +509,49 @@ class RouterExecutionTests(unittest.TestCase):
 
 
 class OpenHandsRunnerTests(unittest.TestCase):
+    @patch("trigger_workflow.openhands_runner.openhands_env", return_value={"LLM_MODEL": "env-model", "LLM_BASE_URL": "https://llm.example"})
+    def test_resolve_openhands_model_connection_prefers_effective_env_values(self, openhands_env_mock) -> None:
+        del openhands_env_mock
+        model_name, connection = resolve_openhands_model_connection()
+
+        self.assertEqual(model_name, "env-model")
+        self.assertEqual(connection, "https://llm.example")
+
+    def test_resolve_openhands_model_connection_errors_on_invalid_config_json(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            config_dir = workspace / ".openhands"
+            config_dir.mkdir(parents=True, exist_ok=True)
+            (config_dir / "config.json").write_text("{invalid json")
+
+            with patch("trigger_workflow.openhands_runner.WORKSPACE", workspace):
+                with self.assertRaises(SystemExit) as exc:
+                    resolve_openhands_model_connection()
+
+        self.assertIn("Invalid OpenHands config JSON", str(exc.exception))
+
+    def test_load_session_state_errors_on_invalid_json(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            session_state_path = Path(temp_dir) / ".session-state.json"
+            session_state_path.write_text("{invalid json")
+
+            with patch("trigger_workflow.openhands_runner.SESSION_STATE_PATH", session_state_path):
+                with self.assertRaises(SystemExit) as exc:
+                    load_session_state()
+
+        self.assertIn("Session state file is invalid JSON", str(exc.exception))
+
+    def test_load_session_state_errors_on_non_mapping_payload(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            session_state_path = Path(temp_dir) / ".session-state.json"
+            session_state_path.write_text('["conv-123"]')
+
+            with patch("trigger_workflow.openhands_runner.SESSION_STATE_PATH", session_state_path):
+                with self.assertRaises(SystemExit) as exc:
+                    load_session_state()
+
+        self.assertIn("must contain a JSON object", str(exc.exception))
+
     def test_branch_name_for_phase_errors_for_unknown_repo_config(self) -> None:
         with self.assertRaises(SystemExit) as exc:
             branch_name_for_phase("owner/unknown", "5", 12)

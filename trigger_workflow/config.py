@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 WORKSPACE = Path(__file__).resolve().parent.parent
-MICROAGENTS_DIR = WORKSPACE / ".openhands" / "microagents"
+MICROAGENTS_DIR = WORKSPACE / "microagents"
 PERSONAS_DIR = WORKSPACE / "personas"
 DEFAULT_REPO = "fedevela/particle-life-3d"
 SESSION_STATE_PATH = WORKSPACE / "workspace" / ".session-state.json"
@@ -18,6 +18,10 @@ class TargetRepoConfig:
     main_branch: str
     issue_branch_prefix: str = "issue/"
 
+# Canonical 9-phase workflow order:
+# 1 -> 2a -> 2b -> 2c -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
+# Numeric Tree-of-Life positions:
+# 1=1, 2a=2, 2b=3, 2c=4, 3=5, 4=6, 5=7, 6=8, 7=9, 8=10, 9=11
 PHASE_DISPLAY_NAME_MAP = {
     "1": "Keter",
     "2a": "Chokhmah",
@@ -79,6 +83,7 @@ PHASE_LABEL_METADATA = {
     },
 }
 
+# Single-successor handoff chain. Each phase advances to exactly one next label.
 NEXT_LABEL_MAP = {
     "phase:keter": "phase:chokhmah",
     "phase:chokhmah": "phase:binah",
@@ -125,6 +130,7 @@ FUNCTIONAL_MICROAGENT_FILE_MAP = {
 
 BASE_PERSONA_FILE = "daneel.md"
 
+# Canonical label -> phase-id mapping used throughout routing and prompt selection.
 LABEL_PHASE_MAP = {
     "phase:keter": "1",
     "phase:chokhmah": "2a",

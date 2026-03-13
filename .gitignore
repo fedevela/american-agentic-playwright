@@ -1,3 +1,5 @@
 conversations
 __pycache__
 workspace/
+.openhands/
+**/workspace/
