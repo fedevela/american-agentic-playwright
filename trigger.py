@@ -104,7 +104,7 @@ def trigger_agent(label: Optional[str] = None, issue: Optional[int] = None, repo
 def fetch_issue_data(repo: str, issue_number: int) -> dict[str, Any]:
     """Fetch issue title and body from GitHub."""
     result = run_gh(
-        ["issue", "view", str(issue_number), "--repo", repo, "--json", "title,body,number,labels"],
+        ["issue", "view", str(issue_number), "--repo", repo, "--json", "title,body,number,labels,comments"],
         capture_output=True,
     )
     if result.returncode != 0:
@@ -156,6 +156,37 @@ def issue_phase_labels(issue_data: dict[str, Any]) -> list[str]:
         for item in labels
         if isinstance(item, dict) and item.get("name") in PHASE_LABELS
     ]
+
+
+def extract_phase_1_comment(issue_data: dict[str, Any]) -> Optional[str]:
+    """Extract the Phase 1 comment body from issue comments."""
+    # The comment data should be embedded in issue_data when fetched with --comments
+    # If not present, return None and adjust fetch_issue_data call accordingly
+    comments = issue_data.get("comments") or []
+    for comment in comments:
+        if not isinstance(comment, dict):
+            continue
+        body = comment.get("body", "")
+        if not body:
+            continue
+        # Check for Phase 1 comment marker
+        if "<!-- phase:1:start" in body:
+            # Extract content between markers
+            start_marker = f"<!-- phase:1:start"
+            end_marker = "<!-- phase:1:end"
+            if start_marker in body and end_marker in body:
+                start_idx = body.find(start_marker)
+                end_idx = body.find(end_marker, start_idx)
+                if end_idx > start_idx:
+                    content = body[start_idx:end_idx]
+                    # Extract just the content after the ### Phase 1: Keter header
+                    lines = content.split("\n")
+                    for i, line in enumerate(lines):
+                        if line.startswith("### Phase 1:"):
+                            # Return everything after this header and blank line
+                            return "\n".join(lines[i + 2:]).strip() if i + 2 < len(lines) else ""
+                    return content
+    return None
 
 
 def resolve_oldest_phased_issue(repo: str) -> tuple[int, str]:
@@ -292,6 +323,14 @@ def build_discussion_prompt(
                 "- `Phase 2 Handoff` must state that generative expansion can proceed.",
             ]
         )
+    elif phase == 2:
+        # For Phase 2 agents, include Phase 1 comment as their input context
+        phase_1_comment = extract_phase_1_comment(issue_data)
+        if phase_1_comment:
+            requirements.insert(
+                0,
+                f"## Phase 1 Input (do not repeat or re-post this content, use it as context for your response)\n\n{phase_1_comment}\n---",
+            )
 
     return f"""{strip_microagent(microagent)}
 
