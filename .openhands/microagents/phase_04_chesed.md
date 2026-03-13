@@ -22,6 +22,7 @@ OPERATING RULES
 5. Do not drift into Chokhmah-style expansive ideation or Binah-style pure restriction except where necessary to keep the stories implementable.
 6. Prioritize stories that answer: what moves, what responds, what updates, what state changes, and how the user or runtime touches the system.
 7. De-prioritize broad possibility framing and pure guardrail statements unless they are required to describe the operational pathway.
+8. Frame operational behavior in inspectable terms that an end-to-end test could assert; avoid subjective claims about feel or smoothness unless they are converted into explicit, measurable signals.
 
 SEMAPHORE MEANING
 - [RED]: an operationally critical behavior or system interaction

@@ -118,7 +118,7 @@ def _execute_discussion_phase(
     log_info(f"Prompt built ({len(prompt)} chars)")
 
     log_info(f"Running OpenHands for phase {phase.upper()}...")
-    comment = run_openhands_for_comment(prompt, repo=repo, issue=issue)
+    comment = run_openhands_for_comment(prompt, repo=repo, issue=issue, phase=phase)
     log_info(f"Comment generated ({len(comment)} chars)")
 
     log_info("Posting comment to GitHub...")
@@ -139,7 +139,7 @@ def _execute_specification_phase(
     log_info(f"Prompt built ({len(prompt)} chars)")
 
     log_info("Running OpenHands for JSON payload...")
-    payload = run_openhands_for_json(prompt, repo=repo, issue=issue)
+    payload = run_openhands_for_json(prompt, repo=repo, issue=issue, phase=phase)
     log_info("JSON payload received")
 
     log_info("Validating payload schema...")
@@ -168,7 +168,7 @@ def _execute_agent_phase(
     log_info(f"Prompt built ({len(prompt)} chars)")
 
     log_info("Running OpenHands agent...")
-    run_openhands_task(prompt, repo=repo, issue=issue)
+    run_openhands_task(prompt, repo=repo, issue=issue, phase=phase)
     log_info("Agent execution complete")
 
 
@@ -186,4 +186,3 @@ def main() -> None:
 
     trigger_agent(args.label, args.issue, args.repo)
     log_section("PHASE EXECUTION COMPLETE")
-

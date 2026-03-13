@@ -22,6 +22,7 @@ OPERATING RULES
 5. Do not drift into Chokhmah-style expansion or Chesed-style implementation mechanics except where necessary to define the constraint clearly.
 6. Prioritize stories that answer: what must remain true, what must not regress, what failure modes must be prevented, and what boundaries make the feature valid.
 7. De-prioritize aspirational enhancements and detailed system-hook descriptions unless they are necessary to define a hard constraint.
+8. Express constraints in terms an end-to-end test can verify directly; avoid subjective wording that would require a human valuation instead of an observable pass/fail signal.
 
 SEMAPHORE MEANING
 - [RED]: a non-negotiable constraint whose violation breaks validity or safety

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 WORKSPACE = Path(__file__).resolve().parent.parent
@@ -7,6 +8,15 @@ MICROAGENTS_DIR = WORKSPACE / ".openhands" / "microagents"
 PERSONAS_DIR = WORKSPACE / "personas"
 DEFAULT_REPO = "fedevela/particle-life-3d"
 SESSION_STATE_PATH = WORKSPACE / "workspace" / ".session-state.json"
+
+
+@dataclass(frozen=True)
+class TargetRepoConfig:
+    """Describe how a GitHub repo maps to the local checkout OpenHands should use."""
+
+    local_path: Path
+    main_branch: str
+    issue_branch_prefix: str = "issue/"
 
 PHASE_DISPLAY_NAME_MAP = {
     "1": "Keter",
@@ -132,4 +142,13 @@ LABEL_PHASE_MAP = {
 DISCUSSION_PHASES = {"1", "2a", "2b", "2c", "3"}
 KETER_DERIVED_PHASES = {"2a", "2b", "2c"}
 SPECIFICATION_PHASE = "4"
+PRE_IMPLEMENTATION_PHASES = DISCUSSION_PHASES | {SPECIFICATION_PHASE}
+IMPLEMENTATION_PHASES = {"5", "6", "7", "8", "9"}
 
+TARGET_REPO_CONFIG_MAP = {
+    "fedevela/particle-life-3d": TargetRepoConfig(
+        local_path=Path("/Users/macbook/Documents/gitworkspace/particle-life-3d"),
+        main_branch="main",
+        issue_branch_prefix="issue/",
+    ),
+}

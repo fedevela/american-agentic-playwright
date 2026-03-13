@@ -22,6 +22,7 @@ OPERATING RULES
 5. Do not drift into Binah-style restriction or Chesed-style implementation mechanics except where necessary to keep the stories coherent.
 6. Prioritize stories about what the mode could richly enable, reveal, or improve for the user experience.
 7. De-prioritize stories whose primary purpose is guarding invariants, preserving legacy behavior, or naming implementation touchpoints.
+8. Even expansive stories must end in outcomes that an end-to-end test could observe or measure; avoid subjective claims unless you translate them into explicit signals.
 
 SEMAPHORE MEANING
 - [RED]: the most important or foundational expansion within the clarified requirement

@@ -23,6 +23,13 @@ This document defines how the local swarm should work GitHub issues against the 
 4. Phase 8 performs the code changes in `particle-life-3d`.
 5. Phase 9 validates the result against the acceptance contract and reports pass/fail status back through OpenClaw.
 
+## Branch Policy
+
+- Phases 1-4 run against the target repository on `main`.
+- Phases 5-9 run against an issue-specific branch named `issue/<issue-number>`.
+- If the issue branch does not already exist locally, it is created from `main` before OpenHands starts.
+- OpenHands should be launched from the target repository checkout, not from the swarm repository.
+
 ## Required Repository Context
 
 Before implementation, the swarm should read these files in `particle-life-3d`:

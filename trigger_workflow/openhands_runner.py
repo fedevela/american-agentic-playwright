@@ -2,12 +2,29 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
+from pathlib import Path
 import subprocess
 import sys
 from typing import Any
 
-from .config import SESSION_STATE_PATH, WORKSPACE
+from .config import (
+    IMPLEMENTATION_PHASES,
+    PRE_IMPLEMENTATION_PHASES,
+    SESSION_STATE_PATH,
+    TARGET_REPO_CONFIG_MAP,
+    WORKSPACE,
+    TargetRepoConfig,
+)
 from .logging_utils import log_error, log_info
+
+
+@dataclass(frozen=True)
+class OpenHandsRunContext:
+    """Describe the verified local checkout and branch OpenHands should use for a phase run."""
+
+    local_path: Path
+    branch: str
 
 
 def openhands_env() -> dict[str, str]:
@@ -60,12 +77,114 @@ def extract_conversation_id(output: str) -> str:
     return ""
 
 
-def run_openhands(prompt: str, *, repo: str, issue: int) -> subprocess.CompletedProcess[str]:
-    """Run OpenHands headlessly and capture output."""
+def resolve_target_repo_config(repo: str) -> TargetRepoConfig:
+    """Resolve the configured local checkout and branch policy for a GitHub repository."""
+    config = TARGET_REPO_CONFIG_MAP.get(repo)
+    if config is None:
+        raise SystemExit(
+            f"No local target repository config exists for {repo}. "
+            "Add it to TARGET_REPO_CONFIG_MAP before running this phase."
+        )
+    return config
+
+
+def branch_name_for_phase(repo: str, phase: str, issue: int) -> str:
+    """Return the branch that should back this phase run."""
+    config = resolve_target_repo_config(repo)
+    if phase in PRE_IMPLEMENTATION_PHASES:
+        return config.main_branch
+    if phase in IMPLEMENTATION_PHASES:
+        return f"{config.issue_branch_prefix}{issue}"
+    raise SystemExit(f"Unknown phase '{phase}' for branch resolution.")
+
+
+def git_run(local_path: Path, args: list[str], *, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
+    """Run a git command inside the target repository with consistent logging."""
+    preview = " ".join(args[:4])
+    log_info(f"Git: {preview}{' ...' if len(args) > 4 else ''}")
+    return subprocess.run(
+        ["git", *args],
+        cwd=local_path,
+        text=True,
+        capture_output=capture_output,
+        timeout=120,
+    )
+
+
+def current_branch(local_path: Path) -> str:
+    """Read the currently checked-out git branch for the target repository."""
+    result = git_run(local_path, ["branch", "--show-current"], capture_output=True)
+    if result.returncode != 0:
+        raise SystemExit(f"Failed to determine current branch in {local_path}.")
+    return (result.stdout or "").strip()
+
+
+def branch_exists(local_path: Path, branch: str) -> bool:
+    """Return True when the named branch already exists locally."""
+    result = git_run(local_path, ["rev-parse", "--verify", branch], capture_output=True)
+    return result.returncode == 0
+
+
+def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> None:
+    """Switch to the requested branch, creating it from the base branch when needed."""
+    active_branch = current_branch(local_path)
+    if active_branch == branch:
+        log_info(f"Git branch already active: {branch}")
+        return
+
+    if branch_exists(local_path, branch):
+        log_info(f"Switching target repository to existing branch '{branch}'")
+        result = git_run(local_path, ["switch", branch], capture_output=True)
+        if result.returncode != 0:
+            raise SystemExit(f"Failed to switch {local_path} to branch '{branch}'.")
+        return
+
+    if branch == base_branch:
+        raise SystemExit(f"Base branch '{base_branch}' does not exist locally in {local_path}.")
+
+    log_info(f"Creating implementation branch '{branch}' from '{base_branch}'")
+    result = git_run(local_path, ["switch", "-c", branch, base_branch], capture_output=True)
+    if result.returncode != 0:
+        raise SystemExit(f"Failed to create branch '{branch}' from '{base_branch}' in {local_path}.")
+
+
+def prepare_openhands_run_context(repo: str, phase: str, issue: int) -> OpenHandsRunContext:
+    """Resolve and verify the target repository checkout OpenHands should use."""
+    config = resolve_target_repo_config(repo)
+    log_info(
+        "Loaded target repository config: "
+        f"repo={repo}, path={config.local_path}, main_branch={config.main_branch}, "
+        f"issue_branch_prefix={config.issue_branch_prefix}"
+    )
+    local_path = config.local_path
+    if not local_path.exists():
+        raise SystemExit(f"Configured target repository path does not exist for {repo}: {local_path}")
+    if not (local_path / ".git").exists():
+        raise SystemExit(f"Configured target repository path is not a git checkout: {local_path}")
+
+    branch = branch_name_for_phase(repo, phase, issue)
+    log_info(f"Verified target repository path exists: {local_path}")
+    log_info(f"Resolved target branch for phase {phase.upper()}: {branch}")
+    ensure_git_branch(local_path, branch, base_branch=config.main_branch)
+    verified_branch = current_branch(local_path)
+    if verified_branch != branch:
+        raise SystemExit(
+            f"Target repository branch verification failed for {repo}: "
+            f"expected '{branch}', found '{verified_branch}'."
+        )
+    log_info(f"Verified target repository branch loaded: {verified_branch}")
+    return OpenHandsRunContext(local_path=local_path, branch=verified_branch)
+
+
+def run_openhands(prompt: str, *, repo: str, issue: int, phase: str) -> subprocess.CompletedProcess[str]:
+    """Run OpenHands headlessly and capture output in the configured target repository."""
     state = load_session_state()
     conversation_id = state.get(session_key(repo, issue), "")
+    context = prepare_openhands_run_context(repo, phase, issue)
 
     log_info(f"Session mode: {'resume existing conversation' if conversation_id else 'start new conversation'}")
+    log_info(f"OpenHands target repository loaded: {context.local_path}")
+    log_info(f"OpenHands target branch loaded: {context.branch}")
 
     command = ["openhands"]
     if conversation_id:
@@ -85,6 +204,7 @@ def run_openhands(prompt: str, *, repo: str, issue: int) -> subprocess.Completed
     log_info("Launching OpenHands headless run")
     result = subprocess.run(
         command,
+        cwd=context.local_path,
         text=True,
         capture_output=True,
         timeout=600,
@@ -145,10 +265,10 @@ def last_assistant_message(output: str) -> str:
     return message
 
 
-def run_openhands_for_comment(prompt: str, *, repo: str, issue: int) -> str:
+def run_openhands_for_comment(prompt: str, *, repo: str, issue: int, phase: str) -> str:
     """Run OpenHands and return the assistant reply text."""
     log_info("Requesting comment response from OpenHands")
-    result = run_openhands(prompt, repo=repo, issue=issue)
+    result = run_openhands(prompt, repo=repo, issue=issue, phase=phase)
     if result.returncode != 0:
         log_error(f"OpenHands failed for {repo}#{issue} with exit code {result.returncode}")
         print(result.stdout)
@@ -164,10 +284,10 @@ def run_openhands_for_comment(prompt: str, *, repo: str, issue: int) -> str:
     return comment
 
 
-def run_openhands_for_json(prompt: str, *, repo: str, issue: int) -> dict[str, Any]:
+def run_openhands_for_json(prompt: str, *, repo: str, issue: int, phase: str) -> dict[str, Any]:
     """Run OpenHands and parse the final assistant reply as JSON."""
     log_info("Requesting JSON response from OpenHands")
-    content = run_openhands_for_comment(prompt, repo=repo, issue=issue)
+    content = run_openhands_for_comment(prompt, repo=repo, issue=issue, phase=phase)
     log_info("Parsing JSON from assistant reply")
     try:
         return json.loads(content)
@@ -177,7 +297,7 @@ def run_openhands_for_json(prompt: str, *, repo: str, issue: int) -> dict[str, A
         raise SystemExit(f"OpenHands did not return valid JSON for phase 4/Tiferet: {exc}") from exc
 
 
-def run_openhands_task(task: str, *, repo: str, issue: int) -> None:
+def run_openhands_task(task: str, *, repo: str, issue: int, phase: str) -> None:
     """Run an implementation or validation phase through OpenHands."""
     print("=" * 60)
     print("OpenHands Agent Execution")
@@ -185,7 +305,7 @@ def run_openhands_task(task: str, *, repo: str, issue: int) -> None:
     print(f"Task: {task[:200]}...")
     print("=" * 60)
 
-    result = run_openhands(task, repo=repo, issue=issue)
+    result = run_openhands(task, repo=repo, issue=issue, phase=phase)
     if result.stdout:
         print(result.stdout)
     if result.stderr:
@@ -195,4 +315,3 @@ def run_openhands_task(task: str, *, repo: str, issue: int) -> None:
         sys.exit(result.returncode)
 
     print("\nAgent execution complete.")
-

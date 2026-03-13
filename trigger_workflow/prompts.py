@@ -23,57 +23,58 @@ def determine_phase_from_label(label: str) -> Optional[str]:
 
 def read_microagent_for_label(label: str, phase: Optional[str]) -> Optional[str]:
     """Build the effective phase prompt from Daneel, the phase persona, and the microagent."""
+    if not phase:
+        log_error(f"Cannot load persona stack for label '{label}' without a resolved phase id.")
+        return None
+
     sections: list[str] = []
 
     base_persona_path = PERSONAS_DIR / BASE_PERSONA_FILE
-    if base_persona_path.exists():
-        log_info(f"Including base persona: {base_persona_path.name}")
-        sections.append(base_persona_path.read_text().strip())
-    else:
-        log_info("Base persona file not found; continuing without it")
+    if not base_persona_path.exists():
+        log_error(f"Base persona file is missing: {base_persona_path.name}")
+        return None
+    log_info(f"Including base persona: {base_persona_path.name}")
+    sections.append(base_persona_path.read_text().strip())
 
-    if phase:
-        persona_filename = PERSONA_FILE_MAP.get(phase)
-        if persona_filename:
-            persona_path = PERSONAS_DIR / persona_filename
-            log_info(f"Looking for phase persona file {persona_filename}")
-            if persona_path.exists():
-                log_info(f"Including phase persona: {persona_path.name}")
-                sections.append(persona_path.read_text().strip())
-            else:
-                log_info(f"Phase persona file not found: {persona_filename}")
+    persona_filename = PERSONA_FILE_MAP.get(phase)
+    if not persona_filename:
+        log_error(f"No phase persona filename is configured for phase {phase.upper()}.")
+        return None
+    persona_path = PERSONAS_DIR / persona_filename
+    log_info(f"Looking for phase persona file {persona_filename}")
+    if not persona_path.exists():
+        log_error(f"Phase persona file is missing: {persona_filename}")
+        return None
+    log_info(f"Including phase persona: {persona_path.name}")
+    sections.append(persona_path.read_text().strip())
 
     microagent_content = read_legacy_microagent(label, phase)
-    if microagent_content:
-        sections.append(microagent_content.strip())
-
-    if not sections:
-        log_info("No persona or microagent content found for this phase")
+    if not microagent_content:
+        log_error(f"Functional microagent is missing for label '{label}' and phase {phase.upper()}.")
         return None
+    sections.append(microagent_content.strip())
 
     return "\n\n".join(sections)
 
 
 def read_legacy_microagent(label: str, phase: Optional[str]) -> Optional[str]:
     """Read the functional `.openhands/microagents` prompt used alongside literary personas."""
-    if phase:
-        microagent_filename = LEGACY_MICROAGENT_FILE_MAP.get(phase)
-        if microagent_filename:
-            microagent_path = MICROAGENTS_DIR / microagent_filename
-            if microagent_path.exists():
-                log_info(f"Including functional microagent: {microagent_path.name}")
-                return microagent_path.read_text()
+    del label
+    if not phase:
+        return None
 
-    log_info("No filename match in .openhands/microagents; searching contents for the label name")
-    label_name = label.replace("phase:", "")
-    for md_file in MICROAGENTS_DIR.glob("*.md"):
-        content = md_file.read_text()
-        if label_name in content.lower():
-            log_info(f"Including functional microagent by content: {md_file.name}")
-            return content
+    microagent_filename = LEGACY_MICROAGENT_FILE_MAP.get(phase)
+    if not microagent_filename:
+        log_error(f"No functional microagent filename is configured for phase {phase.upper()}.")
+        return None
 
-    log_info("No functional microagent found")
-    return None
+    microagent_path = MICROAGENTS_DIR / microagent_filename
+    if not microagent_path.exists():
+        log_error(f"Functional microagent file is missing: {microagent_filename}")
+        return None
+
+    log_info(f"Including functional microagent: {microagent_path.name}")
+    return microagent_path.read_text()
 
 
 def extract_phase_1_comment(issue_data: dict[str, Any]) -> Optional[str]:
@@ -181,6 +182,9 @@ def build_phase_2_story_requirements() -> list[str]:
         "- Use only these semaphore tags: `[RED]`, `[ORANGE]`, and `[GREEN]`.",
         "- Keep the output shape consistent across all phase 2 variants: a flat list of semaphored user stories.",
         "- Derive every story exclusively from the Keter clarification provided in the prompt.",
+        "- Favor behaviors that are observable, automatable, and verifiable through end-to-end tests.",
+        "- Write `then` clauses in measurable terms: concrete state changes, DOM/UI changes, emitted values, preserved controls, deterministic outputs, or other inspectable outcomes.",
+        "- Do not rely on subjective human judgments such as 'feels natural', 'looks better', 'visibly improved', or 'responsive' unless those claims are tied to explicit, testable signals.",
         "- Do not mention other phases, personas, or handoff language.",
     ]
 
@@ -311,4 +315,3 @@ def build_phase_four_summary(created: list[dict[str, Any]]) -> str:
     for item in created:
         lines.append(f"- {item['title']}: {item['url']}")
     return "\n".join(lines)
-
