@@ -5,15 +5,19 @@ from typing import Any, Optional
 from .config import (
     BASE_PERSONA_FILE,
     DISCUSSION_PHASES,
+    FUNCTIONAL_MICROAGENT_FILE_MAP,
     KETER_DERIVED_PHASES,
-    LEGACY_MICROAGENT_FILE_MAP,
     LABEL_PHASE_MAP,
     MICROAGENTS_DIR,
     PERSONAS_DIR,
     PERSONA_FILE_MAP,
     PHASE_DISPLAY_NAME_MAP,
+    TIFERET_AUTO_ISSUE_PREFIX,
 )
 from .logging_utils import log_error, log_info
+
+
+COMMENT_VISIBLE_PHASES = {"3", "4", "5", "6", "7", "8", "9"}
 
 
 def determine_phase_from_label(label: str) -> Optional[str]:
@@ -48,7 +52,7 @@ def read_microagent_for_label(label: str, phase: Optional[str]) -> Optional[str]
     log_info(f"Including phase persona: {persona_path.name}")
     sections.append(persona_path.read_text().strip())
 
-    microagent_content = read_legacy_microagent(label, phase)
+    microagent_content = read_functional_microagent(label, phase)
     if not microagent_content:
         log_error(f"Functional microagent is missing for label '{label}' and phase {phase.upper()}.")
         return None
@@ -57,13 +61,13 @@ def read_microagent_for_label(label: str, phase: Optional[str]) -> Optional[str]
     return "\n\n".join(sections)
 
 
-def read_legacy_microagent(label: str, phase: Optional[str]) -> Optional[str]:
+def read_functional_microagent(label: str, phase: Optional[str]) -> Optional[str]:
     """Read the functional `.openhands/microagents` prompt used alongside literary personas."""
     del label
     if not phase:
         return None
 
-    microagent_filename = LEGACY_MICROAGENT_FILE_MAP.get(phase)
+    microagent_filename = FUNCTIONAL_MICROAGENT_FILE_MAP.get(phase)
     if not microagent_filename:
         log_error(f"No functional microagent filename is configured for phase {phase.upper()}.")
         return None
@@ -108,11 +112,13 @@ def build_runtime_context(
     repo: str,
     phase: str,
     issue_data: dict[str, Any],
+    *,
+    include_comments: bool = False,
 ) -> str:
     """Build prompt context from the live issue payload."""
     title = issue_data.get("title", "Untitled")
     body = issue_data.get("body", "").strip()
-    return f"""## Runtime Context
+    context = f"""## Runtime Context
 - Repository: {repo}
 - Trigger label: {label}
 - Issue number: #{issue}
@@ -125,6 +131,26 @@ def build_runtime_context(
 **Body:**
 {body}
 """
+    if not include_comments:
+        return context
+
+    comments = issue_data.get("comments") or []
+    rendered_comments: list[str] = []
+    for i, comment in enumerate(comments, 1):
+        if not isinstance(comment, dict):
+            continue
+        body_text = str(comment.get("body") or "").strip()
+        if not body_text:
+            continue
+        rendered_comments.append(f"### Comment {i}\n{body_text}")
+
+    comments_block = "\n\n".join(rendered_comments) if rendered_comments else "(none)"
+    return f"""{context}
+
+## Issue Comments
+
+{comments_block}
+"""
 
 
 def build_phase_input_context(
@@ -134,10 +160,12 @@ def build_phase_input_context(
     phase: str,
     issue_data: dict[str, Any],
 ) -> str:
-    """Build prompt context, restricting phases 2A-2C to the extracted Keter clarification."""
+    """Build prompt context, restricting phases 2A-2C to Keter and giving phases 3+ access to issue comments."""
     if phase not in KETER_DERIVED_PHASES:
-        log_info(f"Prompt input source: original issue body for phase {phase.upper()}")
-        return build_runtime_context(label, issue, repo, phase, issue_data)
+        include_comments = phase in COMMENT_VISIBLE_PHASES
+        source = "original issue body and all issue comments" if include_comments else "original issue body"
+        log_info(f"Prompt input source: {source} for phase {phase.upper()}")
+        return build_runtime_context(label, issue, repo, phase, issue_data, include_comments=include_comments)
 
     phase_1_comment = extract_phase_1_comment(issue_data)
     if not phase_1_comment:
@@ -215,6 +243,8 @@ def build_discussion_prompt(
                 "- `Clarified Requirement` must describe the feature behavior in one coherent paragraph.",
                 "- `Constraints and Invariants` must be a flat bullet list covering preserved behavior, determinism/seed expectations, UI placement, and boundary behavior when applicable.",
                 "- `Acceptance Signals` must be a flat bullet list of observable outcomes a reviewer can verify.",
+                "- Favor acceptance signals that are observable, automatable, and verifiable through end-to-end tests or other inspectable checks.",
+                "- Do not rely on subjective human judgments such as 'feels natural', 'looks better', 'visibly improved', or 'responsive' unless they are translated into explicit, measurable signals.",
                 "- `Phase 2 Handoff` must state that generative expansion can proceed.",
             ]
         )
@@ -249,10 +279,10 @@ Return valid JSON only. No markdown fences. No explanation outside JSON.
 
 Use this exact schema:
 {{
-  "comment": "GitHub comment body for the parent issue",
+  "comment": "GitHub comment body for the parent issue explaining the decomposition rationale",
   "sub_issues": [
     {{
-      "title": "Short actionable issue title",
+      "title": "{TIFERET_AUTO_ISSUE_PREFIX}Short actionable issue title",
       "body": "Gherkin-oriented child issue body with Given/When/Then scenarios"
     }}
   ]
@@ -260,8 +290,12 @@ Use this exact schema:
 
 Requirements:
 - `comment` must summarize the specification and explain that child issues were spawned.
+- `comment` must explicitly reconcile the Gevurah input against the final child issue set.
+- If multiple Gevurah requirements were merged, collapsed as duplicates, absorbed into another issue, or deferred, explain that in the `comment`.
+- If the number of child issues differs from the number of Gevurah suggestions, explain why the counts differ in the `comment`.
 - `sub_issues` must contain one or more items.
 - Order `sub_issues` from earliest required implementation step to latest dependent step.
+- Prefix every child issue title with `{TIFERET_AUTO_ISSUE_PREFIX}` so auto-created issues are visibly distinct from human-authored issues.
 - Each child issue body must use Gherkin language with explicit `Given`, `When`, and `Then` sections.
 - Assume child issues will be created in listed order, attached as sub-issues to the parent issue, and each later child issue blocked by the immediately preceding child issue.
 - Do not mention tool limitations, environment limitations, or inability to post.
@@ -279,7 +313,7 @@ def build_agent_prompt(
     """Build the prompt for phases 5-9 implementation and validation work."""
     return f"""{strip_microagent(microagent)}
 
-{build_runtime_context(label, issue, repo, phase, issue_data)}
+{build_runtime_context(label, issue, repo, phase, issue_data, include_comments=phase in COMMENT_VISIBLE_PHASES)}
 
 Execute your phase logic now.
 """
@@ -311,7 +345,7 @@ def format_phase_comment(phase: str, label: str, body: str) -> str:
 def build_phase_four_summary(created: list[dict[str, Any]]) -> str:
     """Build the parent summary comment listing created child issues."""
     log_info("Building child-issue summary comment")
-    lines = ["Spawned child issues:"]
+    lines = [f"Spawned {len(created)} auto-created child issues in implementation order:"]
     for item in created:
         lines.append(f"- {item['title']}: {item['url']}")
     return "\n".join(lines)

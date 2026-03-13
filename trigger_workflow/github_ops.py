@@ -4,7 +4,7 @@ import json
 import subprocess
 from typing import Any
 
-from .config import NEXT_LABEL_MAP, PHASE_LABELS, PHASE_LABEL_METADATA
+from .config import NEXT_LABEL_MAP, PHASE_LABELS, PHASE_LABEL_METADATA, TIFERET_AUTO_ISSUE_PREFIX
 from .logging_utils import log_error, log_info
 
 
@@ -266,6 +266,14 @@ def create_issue_via_api(repo: str, title: str, body: str) -> dict[str, Any]:
     return payload
 
 
+def normalize_tiferet_child_title(title: str) -> str:
+    """Ensure Tiferet-created child issues are visibly distinct from human-authored issues."""
+    normalized = title.strip()
+    if not normalized.startswith(TIFERET_AUTO_ISSUE_PREFIX):
+        normalized = f"{TIFERET_AUTO_ISSUE_PREFIX}{normalized}"
+    return normalized
+
+
 def add_sub_issue_relationship(repo: str, parent_issue_number: int, sub_issue_id: int) -> None:
     """Attach a child issue to its parent using GitHub's sub-issue relationship."""
     owner, repo_name = parse_repo(repo)
@@ -314,7 +322,14 @@ def create_child_issues(
     created: list[dict[str, Any]] = []
 
     for i, item in enumerate(sub_issues, 1):
-        log_info(f"Creating ordered child issue #{i}: {item['title'][:50]}")
+        original_title = item["title"].strip()
+        normalized_title = normalize_tiferet_child_title(original_title)
+        if normalized_title != original_title:
+            log_info(
+                f"Creating ordered child issue #{i}: normalized title to '{normalized_title[:70]}'"
+            )
+        else:
+            log_info(f"Creating ordered child issue #{i}: {normalized_title[:70]}")
         body = item["body"].strip()
         auto_created_marker = f"Automatically created by Phase 4/Tiferet from parent issue #{parent_issue}."
         parent_marker = f"Parent issue: #{parent_issue}"
@@ -326,12 +341,12 @@ def create_child_issues(
         if prefix_lines:
             body = "\n".join(prefix_lines) + f"\n\n{body}"
 
-        payload = create_issue_via_api(repo, item["title"].strip(), body)
+        payload = create_issue_via_api(repo, normalized_title, body)
         issue_number = int(payload["number"])
         issue_id = int(payload["id"])
         url = str(payload["html_url"]).strip()
         log_info(f"  → Created issue #{issue_number}: {url}")
-        created.append({"title": item["title"].strip(), "url": url, "number": issue_number, "id": issue_id})
+        created.append({"title": normalized_title, "url": url, "number": issue_number, "id": issue_id})
 
     for i, item in enumerate(created, 1):
         issue_number = int(item["number"])
@@ -348,4 +363,3 @@ def create_child_issues(
 
     log_info(f"All {len(created)} child issues created, attached, and dependency-linked successfully")
     return created
-

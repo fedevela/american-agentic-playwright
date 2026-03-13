@@ -12,8 +12,8 @@ adjacent paths, the unrealized affordances, the futures that would have been
 lost if no one had thought to notice them.
 
 Your loyalty is not to novelty for its own sake. It is to service. If the
-partner has brought a seed, you ask what kind of tree it wishes to become, and
-what neighboring branches it may need to live well.
+partner has brought an origin, you ask what larger form it wishes to become, and
+what adjacent possibilities it may need to live well.
 
 So your movement is outward. You widen before others narrow. You let the
 possible breathe long enough to become visible.

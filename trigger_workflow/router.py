@@ -11,6 +11,7 @@ from .config import (
     NEXT_LABEL_MAP,
     PHASE_DISPLAY_NAME_MAP,
     SPECIFICATION_PHASE,
+    STRICTLY_INDEPENDENT_PHASES,
     WORKSPACE,
 )
 from .github_ops import (
@@ -23,8 +24,12 @@ from .github_ops import (
     resolve_issue_by_label,
     resolve_oldest_phased_issue,
 )
-from .logging_utils import log_error, log_info, log_section, log_step
-from .openhands_runner import run_openhands_for_comment, run_openhands_for_json, run_openhands_task
+from .logging_utils import log_error, log_info, log_multiline, log_section, log_step
+from .openhands_runner import (
+    run_openhands_for_comment,
+    run_openhands_for_json,
+    run_openhands_task,
+)
 from .prompts import (
     build_agent_prompt,
     build_discussion_prompt,
@@ -35,6 +40,31 @@ from .prompts import (
     read_microagent_for_label,
 )
 from .validation import validate_phase_four_payload
+
+
+def session_scope_for_phase(phase: str) -> str:
+    """Return the OpenHands session scope policy for the given phase."""
+    if phase in STRICTLY_INDEPENDENT_PHASES:
+        return f"phase-{phase}"
+    return ""
+
+
+def describe_session_policy(phase: str, session_scope: str) -> str:
+    """Describe whether the phase starts from an empty session or a shared delivery session."""
+    if session_scope:
+        return (
+            f"strictly independent phase session '{session_scope}' "
+            "(starts with empty OpenHands conversation context)"
+    )
+    return "shared delivery session (resumes the per-issue implementation conversation)"
+
+
+def log_prompt_and_session_policy(prompt: str, phase: str) -> str:
+    """Log the prompt size and session behavior, then return the resolved session scope."""
+    log_info(f"Prompt built ({len(prompt)} chars)")
+    session_scope = session_scope_for_phase(phase)
+    log_info(f"Session policy: {describe_session_policy(phase, session_scope)}")
+    return session_scope
 
 
 def trigger_agent(label: Optional[str] = None, issue: Optional[int] = None, repo: Optional[str] = None) -> None:
@@ -115,11 +145,12 @@ def _execute_discussion_phase(
     """Execute comment-only phases by generating and posting a phase comment."""
     log_info("Building discussion prompt...")
     prompt = build_discussion_prompt(label, issue, repo, microagent_content, phase, issue_data)
-    log_info(f"Prompt built ({len(prompt)} chars)")
+    session_scope = log_prompt_and_session_policy(prompt, phase)
 
     log_info(f"Running OpenHands for phase {phase.upper()}...")
-    comment = run_openhands_for_comment(prompt, repo=repo, issue=issue, phase=phase)
+    comment = run_openhands_for_comment(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
     log_info(f"Comment generated ({len(comment)} chars)")
+    log_multiline("Generated comment", comment)
 
     log_info("Posting comment to GitHub...")
     post_issue_comment(repo, issue, format_phase_comment(phase, label, comment))
@@ -136,15 +167,16 @@ def _execute_specification_phase(
     """Execute phase 4/Tiferet by generating a parent comment and child issues."""
     log_info("Building specification prompt...")
     prompt = build_spec_prompt(label, issue, repo, microagent_content, phase, issue_data)
-    log_info(f"Prompt built ({len(prompt)} chars)")
+    session_scope = log_prompt_and_session_policy(prompt, phase)
 
     log_info("Running OpenHands for JSON payload...")
-    payload = run_openhands_for_json(prompt, repo=repo, issue=issue, phase=phase)
+    payload = run_openhands_for_json(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
     log_info("JSON payload received")
 
     log_info("Validating payload schema...")
     validate_phase_four_payload(payload)
     log_info("Validation passed")
+    log_multiline("Generated parent comment", payload["comment"].strip())
 
     log_info("Posting parent comment...")
     post_issue_comment(repo, issue, format_phase_comment(phase, label, payload["comment"].strip()))
@@ -155,7 +187,9 @@ def _execute_specification_phase(
     log_info(f"Created and linked {len(created)} child issues")
 
     log_info("Posting summary comment...")
-    post_issue_comment(repo, issue, format_phase_comment(phase, label, build_phase_four_summary(created)))
+    summary_comment = build_phase_four_summary(created)
+    log_multiline("Generated summary comment", summary_comment)
+    post_issue_comment(repo, issue, format_phase_comment(phase, label, summary_comment))
     log_info("Summary comment posted")
 
 
@@ -165,10 +199,10 @@ def _execute_agent_phase(
     """Execute phases 5-9 headlessly in OpenHands."""
     log_info("Building agent prompt...")
     prompt = build_agent_prompt(label, issue, repo, microagent_content, phase, issue_data)
-    log_info(f"Prompt built ({len(prompt)} chars)")
+    session_scope = log_prompt_and_session_policy(prompt, phase)
 
     log_info("Running OpenHands agent...")
-    run_openhands_task(prompt, repo=repo, issue=issue, phase=phase)
+    run_openhands_task(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
     log_info("Agent execution complete")
 
 

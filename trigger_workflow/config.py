@@ -96,20 +96,20 @@ NEXT_LABEL_MAP = {
 PHASE_LABELS = tuple(NEXT_LABEL_MAP.keys())
 
 PERSONA_FILE_MAP = {
-    "1": "phase_01.1_keter.md",
-    "2a": "phase_02.1_chokhmah.md",
-    "2b": "phase_02.2_binah.md",
-    "2c": "phase_02.3_chesed.md",
-    "3": "phase_03_gevurah.md",
-    "4": "phase_04_tiferet.md",
-    "5": "phase_05_netzach.md",
-    "6": "phase_06_hod.md",
-    "7": "phase_07_yesod.md",
-    "8": "phase_08_yesod.md",
-    "9": "phase_09_malkhut.md",
+    "1": "keter_intentformation.md",
+    "2a": "chokhmah_generativeexpansion.md",
+    "2b": "binah_criticalrestriction.md",
+    "2c": "chesed_mechanisticgrounding.md",
+    "3": "gevurah_syntheticjudgment.md",
+    "4": "tiferet_specificationharmony.md",
+    "5": "netzach_traceabilityendurance.md",
+    "6": "hod_analyticalarticulation.md",
+    "7": "yesod_integrationfoundation.md",
+    "8": "yesod_transmissionembodiment.md",
+    "9": "malkhut_completionsovereignty.md",
 }
 
-LEGACY_MICROAGENT_FILE_MAP = {
+FUNCTIONAL_MICROAGENT_FILE_MAP = {
     "1": "phase_01_keter.md",
     "2a": "phase_02_chokhmah.md",
     "2b": "phase_03_binah.md",
@@ -144,6 +144,7 @@ KETER_DERIVED_PHASES = {"2a", "2b", "2c"}
 SPECIFICATION_PHASE = "4"
 PRE_IMPLEMENTATION_PHASES = DISCUSSION_PHASES | {SPECIFICATION_PHASE}
 IMPLEMENTATION_PHASES = {"5", "6", "7", "8", "9"}
+STRICTLY_INDEPENDENT_PHASES = PRE_IMPLEMENTATION_PHASES
 
 TARGET_REPO_CONFIG_MAP = {
     "fedevela/particle-life-3d": TargetRepoConfig(
@@ -152,3 +153,5 @@ TARGET_REPO_CONFIG_MAP = {
         issue_branch_prefix="issue/",
     ),
 }
+
+TIFERET_AUTO_ISSUE_PREFIX = "[AUTO/TIFERET] "

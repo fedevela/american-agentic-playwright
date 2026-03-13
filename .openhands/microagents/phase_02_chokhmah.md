@@ -20,8 +20,8 @@ OPERATING RULES
 3. Output only the semaphored user stories. No headings. No commentary. No explanation.
 4. Favor breadth of plausible capability, latent opportunities, and high-upside behaviors that still belong to the clarified requirement.
 5. Do not drift into Binah-style restriction or Chesed-style implementation mechanics except where necessary to keep the stories coherent.
-6. Prioritize stories about what the mode could richly enable, reveal, or improve for the user experience.
-7. De-prioritize stories whose primary purpose is guarding invariants, preserving legacy behavior, or naming implementation touchpoints.
+6. Prioritize stories about what the clarified requirement could richly enable, reveal, or improve in the experienced outcome.
+7. De-prioritize stories whose primary purpose is guarding invariants, preserving prior conditions, or naming implementation touchpoints.
 8. Even expansive stories must end in outcomes that an end-to-end test could observe or measure; avoid subjective claims unless you translate them into explicit signals.
 
 SEMAPHORE MEANING

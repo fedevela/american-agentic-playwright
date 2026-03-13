@@ -27,6 +27,23 @@ class OpenHandsRunContext:
     branch: str
 
 
+def resolve_openhands_model_connection() -> tuple[str, str]:
+    """Return the effective OpenHands model name and connection target."""
+    config_path = WORKSPACE / ".openhands" / "config.json"
+    configured_model = ""
+    if config_path.exists():
+        try:
+            config_payload = json.loads(config_path.read_text())
+            configured_model = str(((config_payload.get("config") or {}).get("model")) or "").strip()
+        except json.JSONDecodeError:
+            configured_model = ""
+
+    env = openhands_env()
+    model_name = env.get("LLM_MODEL") or configured_model or "(unset)"
+    connection = env.get("LLM_BASE_URL") or env.get("DASHSCOPE_API_BASE") or "default"
+    return model_name, connection
+
+
 def openhands_env() -> dict[str, str]:
     """Build the environment used by headless OpenHands subprocesses."""
     conversations_dir = WORKSPACE / ".openhands" / "conversations"
@@ -47,7 +64,7 @@ def openhands_env() -> dict[str, str]:
 
 
 def session_key(repo: str, issue: int) -> str:
-    """Build a stable key so each issue can resume its own OpenHands conversation."""
+    """Build the base conversation key for a repo/issue pair before any phase scoping is applied."""
     return f"{repo}#{issue}"
 
 
@@ -148,8 +165,8 @@ def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> Non
         raise SystemExit(f"Failed to create branch '{branch}' from '{base_branch}' in {local_path}.")
 
 
-def prepare_openhands_run_context(repo: str, phase: str, issue: int) -> OpenHandsRunContext:
-    """Resolve and verify the target repository checkout OpenHands should use."""
+def prepare_target_repo_checkout(repo: str) -> tuple[TargetRepoConfig, Path]:
+    """Resolve the configured target repository and verify that the checkout exists."""
     config = resolve_target_repo_config(repo)
     log_info(
         "Loaded target repository config: "
@@ -161,10 +178,14 @@ def prepare_openhands_run_context(repo: str, phase: str, issue: int) -> OpenHand
         raise SystemExit(f"Configured target repository path does not exist for {repo}: {local_path}")
     if not (local_path / ".git").exists():
         raise SystemExit(f"Configured target repository path is not a git checkout: {local_path}")
-
-    branch = branch_name_for_phase(repo, phase, issue)
     log_info(f"Verified target repository path exists: {local_path}")
-    log_info(f"Resolved target branch for phase {phase.upper()}: {branch}")
+    return config, local_path
+
+
+def prepare_branch_context(repo: str, *, branch: str, branch_log_label: str) -> OpenHandsRunContext:
+    """Resolve and verify the target repository checkout for the requested branch."""
+    config, local_path = prepare_target_repo_checkout(repo)
+    log_info(f"{branch_log_label}: {branch}")
     ensure_git_branch(local_path, branch, base_branch=config.main_branch)
     verified_branch = current_branch(local_path)
     if verified_branch != branch:
@@ -176,12 +197,34 @@ def prepare_openhands_run_context(repo: str, phase: str, issue: int) -> OpenHand
     return OpenHandsRunContext(local_path=local_path, branch=verified_branch)
 
 
-def run_openhands(prompt: str, *, repo: str, issue: int, phase: str) -> subprocess.CompletedProcess[str]:
+def prepare_openhands_run_context(repo: str, phase: str, issue: int) -> OpenHandsRunContext:
+    """Resolve and verify the target repository checkout OpenHands should use."""
+    branch = branch_name_for_phase(repo, phase, issue)
+    return prepare_branch_context(repo, branch=branch, branch_log_label=f"Resolved target branch for phase {phase.upper()}")
+
+
+def run_openhands(
+    prompt: str,
+    *,
+    repo: str,
+    issue: int,
+    phase: str,
+    branch_override: str | None = None,
+    session_scope: str = "",
+) -> subprocess.CompletedProcess[str]:
     """Run OpenHands headlessly and capture output in the configured target repository."""
     state = load_session_state()
-    conversation_id = state.get(session_key(repo, issue), "")
-    context = prepare_openhands_run_context(repo, phase, issue)
+    key = session_key(repo, issue) if not session_scope else f"{session_key(repo, issue)}:{session_scope}"
+    conversation_id = state.get(key, "")
+    context = (
+        prepare_openhands_run_context(repo, phase, issue)
+        if branch_override is None
+        else prepare_openhands_branch_context(repo, branch_override)
+    )
 
+    log_info(f"OpenHands session key: {key}")
+    if session_scope:
+        log_info("OpenHands session scope: strict phase isolation is active for this run")
     log_info(f"Session mode: {'resume existing conversation' if conversation_id else 'start new conversation'}")
     log_info(f"OpenHands target repository loaded: {context.local_path}")
     log_info(f"OpenHands target branch loaded: {context.branch}")
@@ -213,10 +256,15 @@ def run_openhands(prompt: str, *, repo: str, issue: int, phase: str) -> subproce
     log_info(f"OpenHands exit code: {result.returncode}")
     new_conversation_id = extract_conversation_id(result.stdout)
     if new_conversation_id:
-        state[session_key(repo, issue)] = new_conversation_id
+        state[key] = new_conversation_id
         save_session_state(state)
         log_info(f"Saved conversation ID {new_conversation_id[:8]}...")
     return result
+
+
+def prepare_openhands_branch_context(repo: str, branch: str) -> OpenHandsRunContext:
+    """Resolve and verify the target repository checkout for a specific explicit branch."""
+    return prepare_branch_context(repo, branch=branch, branch_log_label="Resolved explicit target branch")
 
 
 def extract_message_events(output: str) -> list[dict[str, Any]]:
@@ -265,10 +313,17 @@ def last_assistant_message(output: str) -> str:
     return message
 
 
-def run_openhands_for_comment(prompt: str, *, repo: str, issue: int, phase: str) -> str:
+def run_openhands_for_comment(
+    prompt: str,
+    *,
+    repo: str,
+    issue: int,
+    phase: str,
+    session_scope: str = "",
+) -> str:
     """Run OpenHands and return the assistant reply text."""
     log_info("Requesting comment response from OpenHands")
-    result = run_openhands(prompt, repo=repo, issue=issue, phase=phase)
+    result = run_openhands(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
     if result.returncode != 0:
         log_error(f"OpenHands failed for {repo}#{issue} with exit code {result.returncode}")
         print(result.stdout)
@@ -284,10 +339,17 @@ def run_openhands_for_comment(prompt: str, *, repo: str, issue: int, phase: str)
     return comment
 
 
-def run_openhands_for_json(prompt: str, *, repo: str, issue: int, phase: str) -> dict[str, Any]:
+def run_openhands_for_json(
+    prompt: str,
+    *,
+    repo: str,
+    issue: int,
+    phase: str,
+    session_scope: str = "",
+) -> dict[str, Any]:
     """Run OpenHands and parse the final assistant reply as JSON."""
     log_info("Requesting JSON response from OpenHands")
-    content = run_openhands_for_comment(prompt, repo=repo, issue=issue, phase=phase)
+    content = run_openhands_for_comment(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
     log_info("Parsing JSON from assistant reply")
     try:
         return json.loads(content)
@@ -297,7 +359,15 @@ def run_openhands_for_json(prompt: str, *, repo: str, issue: int, phase: str) ->
         raise SystemExit(f"OpenHands did not return valid JSON for phase 4/Tiferet: {exc}") from exc
 
 
-def run_openhands_task(task: str, *, repo: str, issue: int, phase: str) -> None:
+def run_openhands_task(
+    task: str,
+    *,
+    repo: str,
+    issue: int,
+    phase: str,
+    branch_override: str | None = None,
+    session_scope: str = "",
+) -> None:
     """Run an implementation or validation phase through OpenHands."""
     print("=" * 60)
     print("OpenHands Agent Execution")
@@ -305,7 +375,14 @@ def run_openhands_task(task: str, *, repo: str, issue: int, phase: str) -> None:
     print(f"Task: {task[:200]}...")
     print("=" * 60)
 
-    result = run_openhands(task, repo=repo, issue=issue, phase=phase)
+    result = run_openhands(
+        task,
+        repo=repo,
+        issue=issue,
+        phase=phase,
+        branch_override=branch_override,
+        session_scope=session_scope,
+    )
     if result.stdout:
         print(result.stdout)
     if result.stderr:
