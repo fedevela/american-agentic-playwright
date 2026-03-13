@@ -14,10 +14,10 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from trigger_workflow.openhands_runner import (
-    OpenHandsRunContext,
-    branch_name_for_phase,
+    OpenHandsTargetContext,
+    resolve_phase_execution_branch,
     load_session_state,
-    prepare_openhands_run_context,
+    prepare_phase_execution_context,
     resolve_openhands_model_connection,
     run_openhands,
 )
@@ -81,14 +81,14 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
     def test_branch_name_for_phase_errors_for_unknown_repo_config(self) -> None:
         with self.assertRaises(SystemExit) as exc:
-            branch_name_for_phase("owner/unknown", "5", 12)
+            resolve_phase_execution_branch("owner/unknown", "5", 12)
 
         self.assertIn("No local target repository config exists", str(exc.exception))
 
     @patch("trigger_workflow.openhands_runner.log_info")
     @patch("trigger_workflow.openhands_runner.current_branch", return_value="issue/21")
     @patch("trigger_workflow.openhands_runner.ensure_git_branch")
-    @patch("trigger_workflow.openhands_runner.branch_name_for_phase", return_value="issue/21")
+    @patch("trigger_workflow.openhands_runner.resolve_phase_execution_branch", return_value="issue/21")
     @patch("trigger_workflow.openhands_runner.resolve_target_repo_config")
     def test_prepare_openhands_run_context_logs_loaded_repo_and_verified_branch(
         self,
@@ -115,7 +115,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
                 str(local_path),
                 str(local_path / ".git"),
             }
-            context = prepare_openhands_run_context("fedevela/particle-life-3d", "5", 21)
+            context = prepare_phase_execution_context("fedevela/particle-life-3d", "5", 21)
 
         self.assertEqual(context.local_path, local_path)
         self.assertEqual(context.branch, "issue/21")
@@ -138,7 +138,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         with patch.object(Path, "exists", autospec=True, return_value=False):
             with self.assertRaises(SystemExit) as exc:
-                prepare_openhands_run_context("fedevela/particle-life-3d", "5", 21)
+                prepare_phase_execution_context("fedevela/particle-life-3d", "5", 21)
 
         self.assertIn("Configured target repository path does not exist", str(exc.exception))
 
@@ -157,13 +157,13 @@ class OpenHandsRunnerTests(unittest.TestCase):
         with patch.object(Path, "exists", autospec=True) as exists_mock:
             exists_mock.side_effect = lambda path_obj: str(path_obj) == str(local_path)
             with self.assertRaises(SystemExit) as exc:
-                prepare_openhands_run_context("fedevela/particle-life-3d", "5", 21)
+                prepare_phase_execution_context("fedevela/particle-life-3d", "5", 21)
 
         self.assertIn("is not a git checkout", str(exc.exception))
 
     @patch("trigger_workflow.openhands_runner.current_branch", side_effect=["main", "main"])
     @patch("trigger_workflow.openhands_runner.ensure_git_branch")
-    @patch("trigger_workflow.openhands_runner.branch_name_for_phase", return_value="issue/21")
+    @patch("trigger_workflow.openhands_runner.resolve_phase_execution_branch", return_value="issue/21")
     @patch("trigger_workflow.openhands_runner.resolve_target_repo_config")
     def test_prepare_openhands_run_context_errors_when_branch_verification_fails(
         self,
@@ -188,12 +188,12 @@ class OpenHandsRunnerTests(unittest.TestCase):
                 str(local_path / ".git"),
             }
             with self.assertRaises(SystemExit) as exc:
-                prepare_openhands_run_context("fedevela/particle-life-3d", "5", 21)
+                prepare_phase_execution_context("fedevela/particle-life-3d", "5", 21)
 
         self.assertIn("branch verification failed", str(exc.exception))
 
     @patch("trigger_workflow.openhands_runner.extract_conversation_id", return_value="")
-    @patch("trigger_workflow.openhands_runner.prepare_openhands_run_context")
+    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
     @patch("trigger_workflow.openhands_runner.subprocess.run")
     def test_run_openhands_uses_target_repo_cwd(
         self,
@@ -205,7 +205,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         # here; the subprocess payload itself is otherwise unimportant.
         del extract_conversation_id_mock
         target_path = Path("/tmp/particle-life-3d")
-        prepare_openhands_run_context_mock.return_value = OpenHandsRunContext(
+        prepare_openhands_run_context_mock.return_value = OpenHandsTargetContext(
             local_path=target_path,
             branch="main",
         )
@@ -226,7 +226,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         "trigger_workflow.openhands_runner.load_session_state",
         return_value={"fedevela/particle-life-3d#21": "conv-123"},
     )
-    @patch("trigger_workflow.openhands_runner.prepare_openhands_run_context")
+    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
     @patch("trigger_workflow.openhands_runner.subprocess.run")
     def test_run_openhands_resumes_existing_conversation_for_same_repo_and_issue(
         self,
@@ -240,7 +240,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         del load_session_state_mock
         del extract_conversation_id_mock
         target_path = Path("/tmp/particle-life-3d")
-        prepare_openhands_run_context_mock.return_value = OpenHandsRunContext(
+        prepare_openhands_run_context_mock.return_value = OpenHandsTargetContext(
             local_path=target_path,
             branch="issue/21",
         )
@@ -262,7 +262,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         "trigger_workflow.openhands_runner.load_session_state",
         return_value={"fedevela/particle-life-3d#21": "shared-conv"},
     )
-    @patch("trigger_workflow.openhands_runner.prepare_openhands_run_context")
+    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
     @patch("trigger_workflow.openhands_runner.subprocess.run")
     def test_run_openhands_does_not_resume_shared_issue_session_when_phase_scope_is_set(
         self,
@@ -276,7 +276,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         del load_session_state_mock
         del extract_conversation_id_mock
         target_path = Path("/tmp/particle-life-3d")
-        prepare_openhands_run_context_mock.return_value = OpenHandsRunContext(
+        prepare_openhands_run_context_mock.return_value = OpenHandsTargetContext(
             local_path=target_path,
             branch="main",
         )
@@ -299,7 +299,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertNotIn("--resume", command)
 
     @patch("trigger_workflow.openhands_runner.save_session_state")
-    @patch("trigger_workflow.openhands_runner.prepare_openhands_run_context")
+    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
     @patch("trigger_workflow.openhands_runner.subprocess.run")
     def test_run_openhands_persists_new_conversation_id_under_repo_issue_key(
         self,
@@ -308,7 +308,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         save_session_state_mock,
     ) -> None:
         target_path = Path("/tmp/particle-life-3d")
-        prepare_openhands_run_context_mock.return_value = OpenHandsRunContext(
+        prepare_openhands_run_context_mock.return_value = OpenHandsTargetContext(
             local_path=target_path,
             branch="main",
         )
@@ -326,7 +326,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertEqual(saved_state["fedevela/particle-life-3d#21"], "conv-999")
 
     @patch("trigger_workflow.openhands_runner.save_session_state")
-    @patch("trigger_workflow.openhands_runner.prepare_openhands_run_context")
+    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
     @patch("trigger_workflow.openhands_runner.subprocess.run")
     def test_run_openhands_persists_new_conversation_id_under_phase_scoped_key(
         self,
@@ -335,7 +335,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         save_session_state_mock,
     ) -> None:
         target_path = Path("/tmp/particle-life-3d")
-        prepare_openhands_run_context_mock.return_value = OpenHandsRunContext(
+        prepare_openhands_run_context_mock.return_value = OpenHandsTargetContext(
             local_path=target_path,
             branch="main",
         )

@@ -11,9 +11,9 @@ import unittest
 
 from trigger_workflow.config import TIFERET_AUTO_ISSUE_PREFIX
 from trigger_workflow.validation import (
-    extract_gevurah_canonical_requirements,
-    validate_phase_four_payload,
-    validate_phase_four_payload_against_gevurah,
+    extract_gevurah_canonical_requirement_lines,
+    validate_tiferet_specification_payload_structure,
+    validate_tiferet_requirement_traceability,
 )
 
 
@@ -47,7 +47,7 @@ class PhaseFourPayloadValidationTests(unittest.TestCase):
             ],
         }
 
-        validate_phase_four_payload(payload)
+        validate_tiferet_specification_payload_structure(payload)
 
     def test_validate_phase_four_payload_rejects_missing_requirement_ids_line(self) -> None:
         payload = {
@@ -61,7 +61,7 @@ class PhaseFourPayloadValidationTests(unittest.TestCase):
         }
 
         with self.assertRaises(SystemExit) as exc:
-            validate_phase_four_payload(payload)
+            validate_tiferet_specification_payload_structure(payload)
 
         self.assertIn("must begin with a `Requirement IDs:` line", str(exc.exception))
 
@@ -92,7 +92,7 @@ class PhaseFourPayloadValidationTests(unittest.TestCase):
             ]
         }
 
-        canonical = extract_gevurah_canonical_requirements(issue_data)
+        canonical = extract_gevurah_canonical_requirement_lines(issue_data)
 
         self.assertEqual(
             canonical["CH-001"],
@@ -145,7 +145,7 @@ class PhaseFourPayloadValidationTests(unittest.TestCase):
             ],
         }
 
-        validate_phase_four_payload_against_gevurah(payload, issue_data)
+        validate_tiferet_requirement_traceability(payload, issue_data)
 
     def test_validate_phase_four_payload_against_gevurah_rejects_paraphrase(self) -> None:
         issue_data = {
@@ -188,7 +188,7 @@ class PhaseFourPayloadValidationTests(unittest.TestCase):
         }
 
         with self.assertRaises(SystemExit) as exc:
-            validate_phase_four_payload_against_gevurah(payload, issue_data)
+            validate_tiferet_requirement_traceability(payload, issue_data)
 
         self.assertIn("copy the full Gevurah requirement line", str(exc.exception))
 
@@ -231,7 +231,7 @@ class PhaseFourPayloadValidationTests(unittest.TestCase):
         }
 
         with self.assertRaises(SystemExit) as exc:
-            validate_phase_four_payload_against_gevurah(payload, issue_data)
+            validate_tiferet_requirement_traceability(payload, issue_data)
 
         self.assertIn("Canonical Requirements", str(exc.exception))
 
@@ -297,7 +297,7 @@ class PhaseFourPayloadValidationTests(unittest.TestCase):
             ],
         }
 
-        validate_phase_four_payload_against_gevurah(payload, issue_data)
+        validate_tiferet_requirement_traceability(payload, issue_data)
 
     def test_validate_phase_four_payload_against_gevurah_rejects_reorganized_grouping_that_drops_a_line(self) -> None:
         # This catches the subtle failure mode where a child issue lists a
@@ -345,7 +345,7 @@ class PhaseFourPayloadValidationTests(unittest.TestCase):
         }
 
         with self.assertRaises(SystemExit) as exc:
-            validate_phase_four_payload_against_gevurah(payload, issue_data)
+            validate_tiferet_requirement_traceability(payload, issue_data)
 
         self.assertIn("CH-002", str(exc.exception))
 

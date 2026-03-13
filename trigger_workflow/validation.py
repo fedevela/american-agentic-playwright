@@ -19,7 +19,7 @@ CANONICAL_REQUIREMENTS_SECTION_RE = re.compile(
 )
 
 
-def validate_phase_four_payload(payload: dict[str, Any]) -> None:
+def validate_tiferet_specification_payload_structure(payload: dict[str, Any]) -> None:
     """Validate the minimal schema for the phase 4/Tiferet child-issue payload."""
     log_info("Validating payload structure...")
     if not isinstance(payload, dict):
@@ -55,7 +55,7 @@ def validate_phase_four_payload(payload: dict[str, Any]) -> None:
     log_info("✓ All sub_issues have valid structure")
 
 
-def extract_gevurah_canonical_requirements(issue_data: dict[str, Any]) -> dict[str, str]:
+def extract_gevurah_canonical_requirement_lines(issue_data: dict[str, Any]) -> dict[str, str]:
     """Extract the canonical Gevurah requirement lines from the phase-3 comment."""
     comments = issue_data.get("comments") or []
     for comment in comments:
@@ -78,9 +78,9 @@ def extract_gevurah_canonical_requirements(issue_data: dict[str, Any]) -> dict[s
     raise SystemExit("Phase 4/Tiferet requires an existing Phase 3/Gevurah comment, but none was found.")
 
 
-def validate_phase_four_payload_against_gevurah(payload: dict[str, Any], issue_data: dict[str, Any]) -> None:
+def validate_tiferet_requirement_traceability(payload: dict[str, Any], issue_data: dict[str, Any]) -> None:
     """Ensure Tiferet child issues copy the full covered Gevurah requirement lines verbatim."""
-    canonical_requirements = extract_gevurah_canonical_requirements(issue_data)
+    canonical_requirements = extract_gevurah_canonical_requirement_lines(issue_data)
 
     for i, item in enumerate(payload["sub_issues"]):
         body = str(item["body"]).strip()

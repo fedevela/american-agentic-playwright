@@ -20,7 +20,7 @@ from .logging_utils import log_error, log_info
 
 
 @dataclass(frozen=True)
-class OpenHandsRunContext:
+class OpenHandsTargetContext:
     """Describe the verified local checkout and branch OpenHands should use for a phase run."""
 
     local_path: Path
@@ -116,7 +116,7 @@ def resolve_target_repo_config(repo: str) -> TargetRepoConfig:
     return config
 
 
-def branch_name_for_phase(repo: str, phase: str, issue: int) -> str:
+def resolve_phase_execution_branch(repo: str, phase: str, issue: int) -> str:
     """Return the branch that should back this phase run."""
     config = resolve_target_repo_config(repo)
     if phase in PRE_IMPLEMENTATION_PHASES:
@@ -193,7 +193,7 @@ def prepare_target_repo_checkout(repo: str) -> tuple[TargetRepoConfig, Path]:
     return config, local_path
 
 
-def prepare_branch_context(repo: str, *, branch: str, branch_log_label: str) -> OpenHandsRunContext:
+def prepare_branch_context(repo: str, *, branch: str, branch_log_label: str) -> OpenHandsTargetContext:
     """Resolve and verify the target repository checkout for the requested branch."""
     config, local_path = prepare_target_repo_checkout(repo)
     log_info(f"{branch_log_label}: {branch}")
@@ -205,12 +205,12 @@ def prepare_branch_context(repo: str, *, branch: str, branch_log_label: str) -> 
             f"expected '{branch}', found '{verified_branch}'."
         )
     log_info(f"Verified target repository branch loaded: {verified_branch}")
-    return OpenHandsRunContext(local_path=local_path, branch=verified_branch)
+    return OpenHandsTargetContext(local_path=local_path, branch=verified_branch)
 
 
-def prepare_openhands_run_context(repo: str, phase: str, issue: int) -> OpenHandsRunContext:
+def prepare_phase_execution_context(repo: str, phase: str, issue: int) -> OpenHandsTargetContext:
     """Resolve and verify the target repository checkout OpenHands should use."""
-    branch = branch_name_for_phase(repo, phase, issue)
+    branch = resolve_phase_execution_branch(repo, phase, issue)
     return prepare_branch_context(repo, branch=branch, branch_log_label=f"Resolved target branch for phase {phase.upper()}")
 
 
@@ -228,7 +228,7 @@ def run_openhands(
     key = openhands_session_key(repo, issue, session_scope)
     conversation_id = state.get(key, "")
     context = (
-        prepare_openhands_run_context(repo, phase, issue)
+        prepare_phase_execution_context(repo, phase, issue)
         if branch_override is None
         else prepare_openhands_branch_context(repo, branch_override)
     )
@@ -273,7 +273,7 @@ def run_openhands(
     return result
 
 
-def prepare_openhands_branch_context(repo: str, branch: str) -> OpenHandsRunContext:
+def prepare_openhands_branch_context(repo: str, branch: str) -> OpenHandsTargetContext:
     """Resolve and verify the target repository checkout for a specific explicit branch."""
     return prepare_branch_context(repo, branch=branch, branch_log_label="Resolved explicit target branch")
 
@@ -324,7 +324,7 @@ def last_assistant_message(output: str) -> str:
     return message
 
 
-def run_openhands_for_comment(
+def run_openhands_comment_phase(
     prompt: str,
     *,
     repo: str,
@@ -350,7 +350,7 @@ def run_openhands_for_comment(
     return comment
 
 
-def run_openhands_for_json(
+def run_openhands_json_phase(
     prompt: str,
     *,
     repo: str,
@@ -360,7 +360,7 @@ def run_openhands_for_json(
 ) -> dict[str, Any]:
     """Run OpenHands and parse the final assistant reply as JSON."""
     log_info("Requesting JSON response from OpenHands")
-    content = run_openhands_for_comment(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+    content = run_openhands_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
     log_info("Parsing JSON from assistant reply")
     try:
         return json.loads(content)
@@ -370,7 +370,7 @@ def run_openhands_for_json(
         raise SystemExit(f"OpenHands did not return valid JSON for phase 4/Tiferet: {exc}") from exc
 
 
-def run_openhands_task(
+def run_openhands_implementation_phase(
     task: str,
     *,
     repo: str,

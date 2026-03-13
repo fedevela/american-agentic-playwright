@@ -112,7 +112,7 @@ def extract_phase_1_comment(issue_data: dict[str, Any]) -> str | None:
     return None
 
 
-def build_runtime_context(
+def build_issue_runtime_context(
     label: str,
     issue: int,
     repo: str,
@@ -159,7 +159,7 @@ def build_runtime_context(
 """
 
 
-def build_phase_input_context(
+def build_phase_prompt_input_context(
     label: str,
     issue: int,
     repo: str,
@@ -171,7 +171,7 @@ def build_phase_input_context(
         include_comments = phase in COMMENT_VISIBLE_PHASES
         source = "original issue body and all issue comments" if include_comments else "original issue body"
         log_info(f"Prompt input source: {source} for phase {phase.upper()}")
-        return build_runtime_context(label, issue, repo, phase, issue_data, include_comments=include_comments)
+        return build_issue_runtime_context(label, issue, repo, phase, issue_data, include_comments=include_comments)
 
     phase_1_comment = extract_phase_1_comment(issue_data)
     if not phase_1_comment:
@@ -223,7 +223,7 @@ def build_phase_2_story_requirements() -> list[str]:
     ]
 
 
-def build_discussion_prompt(
+def build_comment_phase_prompt(
     label: str,
     issue: int,
     repo: str,
@@ -259,7 +259,7 @@ def build_discussion_prompt(
 
     return f"""{strip_microagent(microagent)}
 
-{build_phase_input_context(label, issue, repo, phase, issue_data)}
+{build_phase_prompt_input_context(label, issue, repo, phase, issue_data)}
 
 Return only the GitHub comment body for this phase.
 
@@ -268,7 +268,7 @@ Requirements:
 """
 
 
-def build_spec_prompt(
+def build_tiferet_specification_prompt(
     label: str,
     issue: int,
     repo: str,
@@ -279,7 +279,7 @@ def build_spec_prompt(
     """Build a prompt for phase 4/Tiferet, the child-issue specification phase."""
     return f"""{strip_microagent(microagent)}
 
-{build_phase_input_context(label, issue, repo, phase, issue_data)}
+{build_phase_prompt_input_context(label, issue, repo, phase, issue_data)}
 
 Return valid JSON only. No markdown fences. No explanation outside JSON.
 
@@ -315,7 +315,7 @@ Requirements:
 """
 
 
-def build_agent_prompt(
+def build_implementation_phase_prompt(
     label: str,
     issue: int,
     repo: str,
@@ -326,7 +326,7 @@ def build_agent_prompt(
     """Build the prompt for phases 5-9 implementation and validation work."""
     return f"""{strip_microagent(microagent)}
 
-{build_runtime_context(label, issue, repo, phase, issue_data, include_comments=phase in COMMENT_VISIBLE_PHASES)}
+{build_issue_runtime_context(label, issue, repo, phase, issue_data, include_comments=phase in COMMENT_VISIBLE_PHASES)}
 
 Execute your phase logic now.
 """

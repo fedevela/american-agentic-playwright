@@ -26,30 +26,30 @@ from .github_ops import (
 from .logging_utils import log_error, log_info, log_multiline, log_section, log_step
 from .openhands_runner import (
     resolve_openhands_model_connection,
-    run_openhands_for_comment,
-    run_openhands_for_json,
-    run_openhands_task,
+    run_openhands_comment_phase,
+    run_openhands_json_phase,
+    run_openhands_implementation_phase,
 )
 from .prompts import (
-    build_agent_prompt,
-    build_discussion_prompt,
+    build_implementation_phase_prompt,
+    build_comment_phase_prompt,
     build_phase_four_summary,
-    build_spec_prompt,
+    build_tiferet_specification_prompt,
     determine_phase_from_label,
     format_phase_comment,
     read_microagent_for_label,
 )
-from .validation import validate_phase_four_payload, validate_phase_four_payload_against_gevurah
+from .validation import validate_tiferet_specification_payload_structure, validate_tiferet_requirement_traceability
 
 
-def session_scope_for_phase(phase: str) -> str:
+def conversation_scope_for_phase(phase: str) -> str:
     """Return the OpenHands session scope policy for the given phase."""
     if phase in STRICTLY_INDEPENDENT_PHASES:
         return f"phase-{phase}"
     return ""
 
 
-def describe_session_policy(phase: str, session_scope: str) -> str:
+def describe_phase_conversation_policy(phase: str, session_scope: str) -> str:
     """Describe whether the phase starts from an empty session or a shared delivery session."""
     if session_scope:
         return (
@@ -59,25 +59,25 @@ def describe_session_policy(phase: str, session_scope: str) -> str:
     return "shared delivery session (resumes the per-issue implementation conversation)"
 
 
-def log_prompt_and_session_policy(prompt: str, phase: str) -> str:
+def log_prompt_size_and_conversation_policy(prompt: str, phase: str) -> str:
     """Log the prompt size and session behavior, then return the resolved session scope."""
     log_info(f"Prompt built ({len(prompt)} chars)")
-    session_scope = session_scope_for_phase(phase)
-    log_info(f"Session policy: {describe_session_policy(phase, session_scope)}")
+    session_scope = conversation_scope_for_phase(phase)
+    log_info(f"Session policy: {describe_phase_conversation_policy(phase, session_scope)}")
     return session_scope
 
 
-def build_prompt_with_session_scope(
+def build_phase_prompt_and_conversation_scope(
     phase: str,
     builder: Callable[..., str],
     *args: Any,
 ) -> tuple[str, str]:
     """Build a phase prompt and return it with the resolved session-scope policy."""
     prompt = builder(*args)
-    return prompt, log_prompt_and_session_policy(prompt, phase)
+    return prompt, log_prompt_size_and_conversation_policy(prompt, phase)
 
 
-def trigger_agent(label: Optional[str] = None, issue: Optional[int] = None, repo: Optional[str] = None) -> None:
+def run_labeled_issue_phase(label: Optional[str] = None, issue: Optional[int] = None, repo: Optional[str] = None) -> None:
     """Route the label to the correct phase workflow."""
     repo = repo or DEFAULT_REPO
     log_section("STARTING PHASE EXECUTION")
@@ -130,26 +130,26 @@ def trigger_agent(label: Optional[str] = None, issue: Optional[int] = None, repo
     log_step("Step 4: Executing phase workflow")
     if phase in DISCUSSION_PHASES:
         log_info(f"Running discussion workflow for phase {phase.upper()}")
-        _execute_discussion_phase(label, issue, repo, microagent_content, phase, issue_data)
+        execute_comment_phase_handoff(label, issue, repo, microagent_content, phase, issue_data)
         return
 
     if phase == SPECIFICATION_PHASE:
         log_info("Running specification workflow for phase 4")
-        _execute_specification_phase(label, issue, repo, microagent_content, phase, issue_data)
+        execute_tiferet_specification_phase(label, issue, repo, microagent_content, phase, issue_data)
         return
 
     log_info(f"Running implementation workflow for phase {phase.upper()}")
-    _execute_agent_phase(label, issue, repo, microagent_content, phase, issue_data)
+    execute_implementation_phase_task(label, issue, repo, microagent_content, phase, issue_data)
 
 
-def _execute_discussion_phase(
+def execute_comment_phase_handoff(
     label: str, issue: int, repo: str, microagent_content: str, phase: str, issue_data: dict[str, Any]
 ) -> None:
     """Execute comment-only phases by generating and posting a phase comment."""
     log_info("Building discussion prompt...")
-    prompt, session_scope = build_prompt_with_session_scope(
+    prompt, session_scope = build_phase_prompt_and_conversation_scope(
         phase,
-        build_discussion_prompt,
+        build_comment_phase_prompt,
         label,
         issue,
         repo,
@@ -159,7 +159,7 @@ def _execute_discussion_phase(
     )
 
     log_info(f"Running OpenHands for phase {phase.upper()}...")
-    comment = run_openhands_for_comment(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+    comment = run_openhands_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
     log_info(f"Comment generated ({len(comment)} chars)")
     log_multiline("Generated comment", comment)
 
@@ -172,14 +172,14 @@ def _execute_discussion_phase(
     log_info("Label advanced")
 
 
-def _execute_specification_phase(
+def execute_tiferet_specification_phase(
     label: str, issue: int, repo: str, microagent_content: str, phase: str, issue_data: dict[str, Any]
 ) -> None:
     """Execute phase 4/Tiferet by generating a parent comment and child issues."""
     log_info("Building specification prompt...")
-    prompt, session_scope = build_prompt_with_session_scope(
+    prompt, session_scope = build_phase_prompt_and_conversation_scope(
         phase,
-        build_spec_prompt,
+        build_tiferet_specification_prompt,
         label,
         issue,
         repo,
@@ -189,12 +189,12 @@ def _execute_specification_phase(
     )
 
     log_info("Running OpenHands for JSON payload...")
-    payload = run_openhands_for_json(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+    payload = run_openhands_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
     log_info("JSON payload received")
 
     log_info("Validating payload schema...")
-    validate_phase_four_payload(payload)
-    validate_phase_four_payload_against_gevurah(payload, issue_data)
+    validate_tiferet_specification_payload_structure(payload)
+    validate_tiferet_requirement_traceability(payload, issue_data)
     log_info("Validation passed")
     log_multiline("Generated parent comment", payload["comment"].strip())
 
@@ -213,14 +213,14 @@ def _execute_specification_phase(
     log_info("Summary comment posted")
 
 
-def _execute_agent_phase(
+def execute_implementation_phase_task(
     label: str, issue: int, repo: str, microagent_content: str, phase: str, issue_data: dict[str, Any]
 ) -> None:
     """Execute phases 5-9 headlessly in OpenHands."""
     log_info("Building agent prompt...")
-    prompt, session_scope = build_prompt_with_session_scope(
+    prompt, session_scope = build_phase_prompt_and_conversation_scope(
         phase,
-        build_agent_prompt,
+        build_implementation_phase_prompt,
         label,
         issue,
         repo,
@@ -230,11 +230,11 @@ def _execute_agent_phase(
     )
 
     log_info("Running OpenHands agent...")
-    run_openhands_task(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+    run_openhands_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
     log_info("Agent execution complete")
 
 
-def main() -> None:
+def run_trigger_cli() -> None:
     """Main entry point."""
     log_section("OPENHANDS SWARM PHASE ROUTER")
     log_info(f"Working directory: {WORKSPACE}")
@@ -249,5 +249,5 @@ def main() -> None:
     parser.add_argument("--repo", help="Repository owner/repo")
     args = parser.parse_args()
 
-    trigger_agent(args.label, args.issue, args.repo)
+    run_labeled_issue_phase(args.label, args.issue, args.repo)
     log_section("PHASE EXECUTION COMPLETE")

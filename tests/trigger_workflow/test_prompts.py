@@ -12,18 +12,18 @@ import unittest
 from unittest.mock import patch
 
 from trigger_workflow.config import TIFERET_AUTO_ISSUE_PREFIX
-from trigger_workflow.openhands_runner import branch_name_for_phase
+from trigger_workflow.openhands_runner import resolve_phase_execution_branch
 from trigger_workflow.prompts import (
-    build_agent_prompt,
-    build_discussion_prompt,
+    build_implementation_phase_prompt,
+    build_comment_phase_prompt,
     build_phase_2_story_requirements,
-    build_phase_input_context,
-    build_spec_prompt,
+    build_phase_prompt_input_context,
+    build_tiferet_specification_prompt,
     determine_phase_from_label,
     read_functional_microagent,
     read_microagent_for_label,
 )
-from trigger_workflow.router import session_scope_for_phase
+from trigger_workflow.router import conversation_scope_for_phase
 
 
 class PhaseWorkflowNamingTests(unittest.TestCase):
@@ -45,17 +45,17 @@ class PhaseWorkflowNamingTests(unittest.TestCase):
         self.assertEqual(determine_phase_from_label("phase:malkhut"), "9")
 
     def test_branch_name_for_phase_uses_main_before_implementation_and_issue_branch_after(self) -> None:
-        self.assertEqual(branch_name_for_phase("fedevela/particle-life-3d", "2b", 12), "main")
-        self.assertEqual(branch_name_for_phase("fedevela/particle-life-3d", "4", 12), "main")
-        self.assertEqual(branch_name_for_phase("fedevela/particle-life-3d", "5", 12), "issue/12")
-        self.assertEqual(branch_name_for_phase("fedevela/particle-life-3d", "9", 12), "issue/12")
+        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "2b", 12), "main")
+        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "4", 12), "main")
+        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "5", 12), "issue/12")
+        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "9", 12), "issue/12")
 
     def test_session_scope_for_phase_isolated_for_early_phases_and_shared_for_delivery(self) -> None:
-        self.assertEqual(session_scope_for_phase("1"), "phase-1")
-        self.assertEqual(session_scope_for_phase("2b"), "phase-2b")
-        self.assertEqual(session_scope_for_phase("4"), "phase-4")
-        self.assertEqual(session_scope_for_phase("5"), "")
-        self.assertEqual(session_scope_for_phase("9"), "")
+        self.assertEqual(conversation_scope_for_phase("1"), "phase-1")
+        self.assertEqual(conversation_scope_for_phase("2b"), "phase-2b")
+        self.assertEqual(conversation_scope_for_phase("4"), "phase-4")
+        self.assertEqual(conversation_scope_for_phase("5"), "")
+        self.assertEqual(conversation_scope_for_phase("9"), "")
 
 
 class PromptBuilderTests(unittest.TestCase):
@@ -68,7 +68,7 @@ class PromptBuilderTests(unittest.TestCase):
     """
 
     def test_phase_1_prompt_enforces_observable_acceptance_signals(self) -> None:
-        prompt = build_discussion_prompt(
+        prompt = build_comment_phase_prompt(
             "phase:keter",
             12,
             "owner/repo",
@@ -106,7 +106,7 @@ class PromptBuilderTests(unittest.TestCase):
         )
 
     def test_build_spec_prompt_requires_tiferet_title_prefix_and_consolidation_explanation(self) -> None:
-        prompt = build_spec_prompt(
+        prompt = build_tiferet_specification_prompt(
             "phase:tiferet",
             12,
             "owner/repo",
@@ -160,7 +160,7 @@ class PromptBuilderTests(unittest.TestCase):
                 }
             ],
         }
-        context = build_phase_input_context("phase:binah", 12, "owner/repo", "2b", issue_data)
+        context = build_phase_prompt_input_context("phase:binah", 12, "owner/repo", "2b", issue_data)
         self.assertIn("Clarified requirement from Keter.", context)
         self.assertNotIn("Original issue body should not be used", context)
 
@@ -176,7 +176,7 @@ class PromptBuilderTests(unittest.TestCase):
             ],
         }
 
-        context = build_phase_input_context("phase:gevurah", 12, "owner/repo", "3", issue_data)
+        context = build_phase_prompt_input_context("phase:gevurah", 12, "owner/repo", "3", issue_data)
 
         self.assertIn("Original body", context)
         self.assertIn("## Issue Comments", context)
@@ -184,7 +184,7 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("Second prior comment.", context)
 
     def test_build_agent_prompt_includes_all_comments_for_phase_5_and_later(self) -> None:
-        prompt = build_agent_prompt(
+        prompt = build_implementation_phase_prompt(
             "phase:netzach",
             12,
             "owner/repo",
@@ -204,7 +204,7 @@ class PromptBuilderTests(unittest.TestCase):
         # This fixture models a real Tiferet child issue body. Downstream
         # implementation phases must receive the verbatim Canonical Requirements
         # block, not a stripped-down or normalized variant.
-        prompt = build_agent_prompt(
+        prompt = build_implementation_phase_prompt(
             "phase:netzach",
             12,
             "owner/repo",
@@ -241,7 +241,7 @@ class PromptBuilderTests(unittest.TestCase):
         }
 
         with self.assertRaises(SystemExit) as exc:
-            build_phase_input_context("phase:binah", 12, "owner/repo", "2b", issue_data)
+            build_phase_prompt_input_context("phase:binah", 12, "owner/repo", "2b", issue_data)
 
         self.assertIn("Phase 2B requires a Phase 1 clarification comment", str(exc.exception))
 

@@ -10,10 +10,10 @@ import unittest
 from unittest.mock import patch
 
 from trigger_workflow.router import (
-    _execute_agent_phase,
-    _execute_discussion_phase,
-    _execute_specification_phase,
-    trigger_agent,
+    execute_implementation_phase_task,
+    execute_comment_phase_handoff,
+    execute_tiferet_specification_phase,
+    run_labeled_issue_phase,
 )
 
 
@@ -28,7 +28,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
     @patch("trigger_workflow.router.advance_issue_label")
     @patch("trigger_workflow.router.post_issue_comment")
     @patch("trigger_workflow.router.log_multiline")
-    @patch("trigger_workflow.router.run_openhands_for_comment", return_value="Line one\nLine two")
+    @patch("trigger_workflow.router.run_openhands_comment_phase", return_value="Line one\nLine two")
     def test_execute_discussion_phase_logs_generated_comment_body(
         self,
         run_openhands_for_comment_mock,
@@ -38,7 +38,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
     ) -> None:
         del post_issue_comment_mock
         del advance_issue_label_mock
-        _execute_discussion_phase(
+        execute_comment_phase_handoff(
             "phase:keter",
             55,
             "owner/repo",
@@ -54,9 +54,9 @@ class RouterPhaseExecutionTests(unittest.TestCase):
     @patch("trigger_workflow.router.log_multiline")
     @patch("trigger_workflow.router.build_phase_four_summary", return_value="Summary body")
     @patch("trigger_workflow.router.create_child_issues", return_value=[])
-    @patch("trigger_workflow.router.validate_phase_four_payload")
+    @patch("trigger_workflow.router.validate_tiferet_specification_payload_structure")
     @patch(
-        "trigger_workflow.router.run_openhands_for_json",
+        "trigger_workflow.router.run_openhands_json_phase",
         return_value={"comment": "Parent body", "sub_issues": []},
     )
     def test_execute_specification_phase_uses_strict_phase_session_scope(
@@ -98,7 +98,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
                 }
             ],
         }
-        _execute_specification_phase(
+        execute_tiferet_specification_phase(
             "phase:tiferet",
             55,
             "owner/repo",
@@ -109,9 +109,9 @@ class RouterPhaseExecutionTests(unittest.TestCase):
 
         self.assertEqual(run_openhands_for_json_mock.call_args.kwargs["session_scope"], "phase-4")
 
-    @patch("trigger_workflow.router.run_openhands_task")
+    @patch("trigger_workflow.router.run_openhands_implementation_phase")
     def test_execute_agent_phase_uses_shared_issue_session_scope(self, run_openhands_task_mock) -> None:
-        _execute_agent_phase(
+        execute_implementation_phase_task(
             "phase:netzach",
             55,
             "owner/repo",
@@ -122,9 +122,9 @@ class RouterPhaseExecutionTests(unittest.TestCase):
 
         self.assertEqual(run_openhands_task_mock.call_args.kwargs["session_scope"], "")
 
-    @patch("trigger_workflow.router._execute_agent_phase")
-    @patch("trigger_workflow.router._execute_specification_phase")
-    @patch("trigger_workflow.router._execute_discussion_phase")
+    @patch("trigger_workflow.router.execute_implementation_phase_task")
+    @patch("trigger_workflow.router.execute_tiferet_specification_phase")
+    @patch("trigger_workflow.router.execute_comment_phase_handoff")
     @patch("trigger_workflow.router.fetch_issue_data")
     @patch("trigger_workflow.router.read_microagent_for_label")
     @patch("trigger_workflow.router.ensure_phase_labels")
@@ -148,7 +148,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             "comments": [],
         }
 
-        trigger_agent(label="phase:chesed", issue=55, repo="owner/repo")
+        run_labeled_issue_phase(label="phase:chesed", issue=55, repo="owner/repo")
 
         execute_discussion_mock.assert_called_once()
         execute_specification_mock.assert_not_called()
@@ -174,7 +174,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         }
 
         with self.assertRaises(SystemExit) as exc:
-            trigger_agent(label="phase:chesed", issue=55, repo="owner/repo")
+            run_labeled_issue_phase(label="phase:chesed", issue=55, repo="owner/repo")
 
         self.assertEqual(exc.exception.code, 1)
         log_error_mock.assert_called_once()
