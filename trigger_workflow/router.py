@@ -21,6 +21,7 @@ from .github_ops import (
     fetch_issue_data,
     issue_has_label,
     post_issue_comment,
+    remove_issue_label,
     resolve_issue_by_label,
     resolve_oldest_phased_issue,
 )
@@ -234,7 +235,7 @@ def execute_comment_phase_handoff(request: PhaseExecutionRequest) -> None:
 
 
 def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
-    """Execute phase 4/Tiferet by generating a parent comment and child issues."""
+    """Execute phase 4/Tiferet by generating parent/child issues and clearing the parent phase label."""
     log_info("Building specification prompt...")
     prompt, session_scope = build_phase_execution_prompt(request, build_tiferet_specification_prompt)
 
@@ -267,6 +268,10 @@ def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
     log_multiline("Generated summary comment", summary_comment)
     post_phase_machine_comment(request, summary_comment)
     log_info("Summary comment posted")
+
+    log_info("Completing Tiferet handoff by removing parent phase label...")
+    remove_issue_label(request.repo, request.issue, request.label)
+    log_info("Parent Tiferet label removed")
 
 
 def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:

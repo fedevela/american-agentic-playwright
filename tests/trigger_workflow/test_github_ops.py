@@ -16,8 +16,11 @@ from trigger_workflow.github_ops import (
     add_blocked_by_dependency,
     add_sub_issue_relationship,
     create_child_issues,
+    edit_issue_labels,
     normalize_tiferet_child_title,
     parse_repo,
+    remove_issue_label,
+    advance_issue_label,
     verify_parent_sub_issue_ids,
 )
 
@@ -80,6 +83,10 @@ class GitHubOpsTests(unittest.TestCase):
         self.assertIn("Automatically created by Phase 4/Tiferet from parent issue #77.", first_body)
         self.assertIn("Parent issue: #77", first_body)
         self.assertEqual(created[0]["title"], f"{TIFERET_AUTO_ISSUE_PREFIX}First")
+        self.assertEqual(
+            create_issue_via_api_mock.call_args_list[0].kwargs["labels"],
+            ["phase:netzach"],
+        )
 
         add_sub_issue_relationship_mock.assert_any_call("owner/repo", 77, 1001)
         add_sub_issue_relationship_mock.assert_any_call("owner/repo", 77, 1002)
@@ -179,6 +186,43 @@ class GitHubOpsTests(unittest.TestCase):
                 "issue_id=1001",
             ],
         )
+
+    @patch("trigger_workflow.github_ops.run_gh")
+    def test_edit_issue_labels_builds_combined_add_remove_command(self, run_gh_mock) -> None:
+        run_gh_mock.return_value = subprocess.CompletedProcess(args=["gh"], returncode=0, stdout="", stderr="")
+
+        edit_issue_labels("owner/repo", 77, add=["phase:netzach"], remove=["phase:tiferet"])
+
+        self.assertEqual(
+            run_gh_mock.call_args.args[0],
+            [
+                "issue",
+                "edit",
+                "77",
+                "--repo",
+                "owner/repo",
+                "--remove-label",
+                "phase:tiferet",
+                "--add-label",
+                "phase:netzach",
+            ],
+        )
+
+    @patch("trigger_workflow.github_ops.edit_issue_labels")
+    def test_advance_issue_label_uses_shared_label_editor(self, edit_issue_labels_mock) -> None:
+        advance_issue_label("owner/repo", 77, "phase:tiferet")
+
+        edit_issue_labels_mock.assert_called_once_with(
+            "owner/repo",
+            77,
+            add=["phase:netzach"],
+            remove=["phase:tiferet"],
+        )
+
+    @patch("trigger_workflow.github_ops.edit_issue_labels")
+    def test_remove_issue_label_uses_shared_label_editor(self, edit_issue_labels_mock) -> None:
+        remove_issue_label("owner/repo", 77, "phase:tiferet")
+        edit_issue_labels_mock.assert_called_once_with("owner/repo", 77, remove=["phase:tiferet"])
 
     @patch("trigger_workflow.github_ops.fetch_parent_sub_issue_ids", return_value=set())
     @patch("trigger_workflow.github_ops.add_blocked_by_dependency")

@@ -215,6 +215,41 @@ def post_issue_comment(repo: str, issue_number: int, body: str) -> None:
         raise SystemExit(f"Failed to post comment to {repo}#{issue_number}.")
 
 
+def edit_issue_labels(
+    repo: str,
+    issue_number: int,
+    *,
+    add: list[str] | None = None,
+    remove: list[str] | None = None,
+) -> None:
+    """Apply add/remove label edits to an issue in one GitHub API call."""
+    add_labels = [item for item in (add or []) if item]
+    remove_labels = [item for item in (remove or []) if item]
+    if not add_labels and not remove_labels:
+        return
+
+    args = [
+        "issue",
+        "edit",
+        str(issue_number),
+        "--repo",
+        repo,
+    ]
+    for label in remove_labels:
+        args.extend(["--remove-label", label])
+    for label in add_labels:
+        args.extend(["--add-label", label])
+
+    additions = ", ".join(f"'{label}'" for label in add_labels) or "(none)"
+    removals = ", ".join(f"'{label}'" for label in remove_labels) or "(none)"
+    log_info(f"Editing labels on issue #{issue_number}: add {additions}; remove {removals}")
+    result = run_gh(args)
+    if result.returncode != 0:
+        raise SystemExit(
+            f"Failed to edit labels on {repo}#{issue_number} (add: {additions}; remove: {removals})."
+        )
+
+
 def advance_issue_label(repo: str, issue_number: int, current_label: str) -> None:
     """Advance the issue from its current phase label to the configured next label."""
     next_label = NEXT_LABEL_MAP.get(current_label)
@@ -222,27 +257,16 @@ def advance_issue_label(repo: str, issue_number: int, current_label: str) -> Non
         log_info("No next label defined (final phase)")
         return
 
-    log_info(f"Removing label '{current_label}'")
-    log_info(f"Adding label '{next_label}'")
-    result = run_gh(
-        [
-            "issue",
-            "edit",
-            str(issue_number),
-            "--repo",
-            repo,
-            "--remove-label",
-            current_label,
-            "--add-label",
-            next_label,
-        ]
-    )
-    if result.returncode != 0:
-        raise SystemExit(
-            f"Posted the phase comment to {repo}#{issue_number}, but failed to hand off label "
-            f"from '{current_label}' to '{next_label}'."
-        )
+    log_info(f"Advancing label: '{current_label}' -> '{next_label}'")
+    edit_issue_labels(repo, issue_number, add=[next_label], remove=[current_label])
     log_info("Label handoff complete")
+
+
+def remove_issue_label(repo: str, issue_number: int, label: str) -> None:
+    """Remove a specific label from an issue."""
+    log_info(f"Removing label '{label}' from issue #{issue_number}")
+    edit_issue_labels(repo, issue_number, remove=[label])
+    log_info("Label removed")
 
 
 def parse_repo(repo: str) -> tuple[str, str]:
@@ -255,20 +279,23 @@ def parse_repo(repo: str) -> tuple[str, str]:
     return owner, repo_name
 
 
-def create_issue_via_api(repo: str, title: str, body: str) -> dict[str, Any]:
+def create_issue_via_api(repo: str, title: str, body: str, *, labels: list[str] | None = None) -> dict[str, Any]:
     """Create an issue through the REST API and return its full metadata."""
     owner, repo_name = parse_repo(repo)
+    args = [
+        "api",
+        f"repos/{owner}/{repo_name}/issues",
+        "--method",
+        "POST",
+        "-f",
+        f"title={title}",
+        "-f",
+        f"body={body}",
+    ]
+    for label in labels or []:
+        args.extend(["-f", f"labels[]={label}"])
     return run_gh_json(
-        [
-            "api",
-            f"repos/{owner}/{repo_name}/issues",
-            "--method",
-            "POST",
-            "-f",
-            f"title={title}",
-            "-f",
-            f"body={body}",
-        ],
+        args,
         failure_message=f"Failed to create child issue '{title}'",
         expect_type=dict,
     )
@@ -403,7 +430,7 @@ def create_child_issues(
         if prefix_lines:
             body = "\n".join(prefix_lines) + f"\n\n{body}"
 
-        payload = create_issue_via_api(repo, normalized_title, body)
+        payload = create_issue_via_api(repo, normalized_title, body, labels=["phase:netzach"])
         issue_number = int(payload["number"])
         issue_id = int(payload["id"])
         url = str(payload["html_url"]).strip()

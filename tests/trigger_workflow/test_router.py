@@ -54,6 +54,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         self.assertEqual(run_openhands_for_comment_mock.call_args.kwargs["session_scope"], "phase-1")
 
     @patch("trigger_workflow.router.post_issue_comment")
+    @patch("trigger_workflow.router.remove_issue_label")
     @patch("trigger_workflow.router.log_multiline")
     @patch("trigger_workflow.router.build_phase_four_summary", return_value="Summary body")
     @patch("trigger_workflow.router.create_child_issues", return_value=[])
@@ -69,6 +70,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         create_child_issues_mock,
         build_phase_four_summary_mock,
         log_multiline_mock,
+        remove_issue_label_mock,
         post_issue_comment_mock,
     ) -> None:
         # Phase 4 must validate against a real-looking Gevurah comment, so this
@@ -113,6 +115,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         )
 
         self.assertEqual(run_openhands_for_json_mock.call_args.kwargs["session_scope"], "phase-4")
+        remove_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:tiferet")
 
     @patch("trigger_workflow.router.run_openhands_implementation_phase")
     def test_execute_agent_phase_uses_shared_issue_session_scope(self, run_openhands_task_mock) -> None:
