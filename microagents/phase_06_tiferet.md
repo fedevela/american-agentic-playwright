@@ -25,8 +25,10 @@ OPERATING RULES
 8. The parent comment must explain the grouping logic child-by-child, naming which requirement IDs were consolidated into each child issue and why they belong together.
 9. If the Gevurah input count and the final child-issue count differ, the parent comment must account for that difference explicitly.
 10. Every child issue body must begin with a complete `Requirement IDs:` line that lists all Gevurah GUIDs embodied by that issue.
-11. Title every child issue so it is visibly machine-created and distinct from human-authored issues.
-12. Do not re-argue the decision; formalize it.
+11. Every child issue body must include a `Canonical Requirements` section that copies the full covered Gevurah requirement lines verbatim, one line per requirement ID.
+12. Do not compress, paraphrase, or summarize those requirement sentences; clone the exact canonical requirement text for every listed ID.
+13. Title every child issue so it is visibly machine-created and distinct from human-authored issues.
+14. Do not re-argue the decision; formalize it.
 
 DELIVERABLE
 - A JSON payload containing one parent comment and one or more child issues with Gherkin-oriented bodies.

@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 from trigger_workflow.config import TIFERET_AUTO_ISSUE_PREFIX
 from trigger_workflow.github_ops import (
+    add_blocked_by_dependency,
+    add_sub_issue_relationship,
     create_child_issues,
     normalize_tiferet_child_title,
     parse_repo,
@@ -39,6 +41,10 @@ from trigger_workflow.router import (
     trigger_agent,
 )
 from trigger_workflow.validation import validate_phase_four_payload
+from trigger_workflow.validation import (
+    extract_gevurah_canonical_requirements,
+    validate_phase_four_payload_against_gevurah,
+)
 
 
 class PhaseMappingTests(unittest.TestCase):
@@ -109,6 +115,8 @@ class PromptCompositionTests(unittest.TestCase):
         self.assertIn("If the number of child issues differs from the number of Gevurah suggestions", prompt)
         self.assertIn("must state which requirement IDs are covered by each child issue", prompt)
         self.assertIn("Every child issue body must begin with a `Requirement IDs:` line", prompt)
+        self.assertIn("Canonical Requirements", prompt)
+        self.assertIn("Do not paraphrase or compress them", prompt)
 
     def test_read_microagent_for_label_composes_base_persona_phase_persona_and_microagent(self) -> None:
         content = read_microagent_for_label("phase:binah", "2b")
@@ -318,6 +326,42 @@ class ChildIssueCreationTests(unittest.TestCase):
 
         self.assertIn("Expected 'owner/repo'", str(exc.exception))
 
+    @patch("trigger_workflow.github_ops.run_gh")
+    def test_add_sub_issue_relationship_uses_typed_field_submission(self, run_gh_mock) -> None:
+        run_gh_mock.return_value = subprocess.CompletedProcess(args=["gh"], returncode=0, stdout="", stderr="")
+
+        add_sub_issue_relationship("owner/repo", 77, 1001)
+
+        self.assertEqual(
+            run_gh_mock.call_args.args[0],
+            [
+                "api",
+                "repos/owner/repo/issues/77/sub_issues",
+                "--method",
+                "POST",
+                "-F",
+                "sub_issue_id=1001",
+            ],
+        )
+
+    @patch("trigger_workflow.github_ops.run_gh")
+    def test_add_blocked_by_dependency_uses_typed_field_submission(self, run_gh_mock) -> None:
+        run_gh_mock.return_value = subprocess.CompletedProcess(args=["gh"], returncode=0, stdout="", stderr="")
+
+        add_blocked_by_dependency("owner/repo", 102, 1001)
+
+        self.assertEqual(
+            run_gh_mock.call_args.args[0],
+            [
+                "api",
+                "repos/owner/repo/issues/102/dependencies/blocked_by",
+                "--method",
+                "POST",
+                "-F",
+                "issue_id=1001",
+            ],
+        )
+
     @patch("trigger_workflow.github_ops.fetch_parent_sub_issue_ids", return_value=set())
     @patch("trigger_workflow.github_ops.add_blocked_by_dependency")
     @patch("trigger_workflow.github_ops.add_sub_issue_relationship")
@@ -355,7 +399,17 @@ class PhaseFourValidationTests(unittest.TestCase):
             "sub_issues": [
                 {
                     "title": f"{TIFERET_AUTO_ISSUE_PREFIX}Example",
-                    "body": "Requirement IDs: CH-001, CH-003\n\nGiven x, when y, then z.",
+                    "body": "\n".join(
+                        [
+                            "Requirement IDs: CH-001, CH-003",
+                            "",
+                            "Canonical Requirements:",
+                            "- CH-001: [RED] When x, then y",
+                            "- CH-003: [RED] When a, then b",
+                            "",
+                            "Given x, when y, then z.",
+                        ]
+                    ),
                 }
             ],
         }
@@ -377,6 +431,128 @@ class PhaseFourValidationTests(unittest.TestCase):
             validate_phase_four_payload(payload)
 
         self.assertIn("must begin with a `Requirement IDs:` line", str(exc.exception))
+
+    def test_extract_gevurah_canonical_requirements_reads_phase_three_comment(self) -> None:
+        issue_data = {
+            "comments": [
+                {
+                    "body": "\n".join(
+                        [
+                            "<!-- phase:3:start label=phase:gevurah name=Gevurah -->",
+                            "### Phase 3: Gevurah",
+                            "",
+                            "## Canonical Requirements",
+                            "",
+                            "- CH-001: [RED] When user selects the option, then the scene initializes",
+                            "- CH-003: [RED] When a dot crosses the boundary, then it wraps",
+                            "",
+                            "## Synthesis Decisions",
+                            "",
+                            "Decision text.",
+                            "",
+                            "<!-- phase:3:end label=phase:gevurah name=Gevurah -->",
+                        ]
+                    )
+                }
+            ]
+        }
+
+        canonical = extract_gevurah_canonical_requirements(issue_data)
+
+        self.assertEqual(
+            canonical["CH-001"],
+            "- CH-001: [RED] When user selects the option, then the scene initializes",
+        )
+
+    def test_validate_phase_four_payload_against_gevurah_accepts_verbatim_clones(self) -> None:
+        issue_data = {
+            "comments": [
+                {
+                    "body": "\n".join(
+                        [
+                            "<!-- phase:3:start label=phase:gevurah name=Gevurah -->",
+                            "### Phase 3: Gevurah",
+                            "",
+                            "## Canonical Requirements",
+                            "",
+                            "- CH-001: [RED] When user selects the option, then the scene initializes",
+                            "- CH-003: [RED] When a dot crosses the boundary, then it wraps",
+                            "",
+                            "## Synthesis Decisions",
+                            "",
+                            "Decision text.",
+                        ]
+                    )
+                }
+            ]
+        }
+        payload = {
+            "comment": "Decomposition rationale.",
+            "sub_issues": [
+                {
+                    "title": f"{TIFERET_AUTO_ISSUE_PREFIX}Example",
+                    "body": "\n".join(
+                        [
+                            "Requirement IDs: CH-001, CH-003",
+                            "",
+                            "## Canonical Requirements",
+                            "- CH-001: [RED] When user selects the option, then the scene initializes",
+                            "- CH-003: [RED] When a dot crosses the boundary, then it wraps",
+                            "",
+                            "## Behavior Scenarios",
+                            "Given x, when y, then z.",
+                        ]
+                    ),
+                }
+            ],
+        }
+
+        validate_phase_four_payload_against_gevurah(payload, issue_data)
+
+    def test_validate_phase_four_payload_against_gevurah_rejects_paraphrase(self) -> None:
+        issue_data = {
+            "comments": [
+                {
+                    "body": "\n".join(
+                        [
+                            "<!-- phase:3:start label=phase:gevurah name=Gevurah -->",
+                            "### Phase 3: Gevurah",
+                            "",
+                            "## Canonical Requirements",
+                            "",
+                            "- CH-001: [RED] When user selects the option, then the scene initializes",
+                            "",
+                            "## Synthesis Decisions",
+                            "",
+                            "Decision text.",
+                        ]
+                    )
+                }
+            ]
+        }
+        payload = {
+            "comment": "Decomposition rationale.",
+            "sub_issues": [
+                {
+                    "title": f"{TIFERET_AUTO_ISSUE_PREFIX}Example",
+                    "body": "\n".join(
+                        [
+                            "Requirement IDs: CH-001",
+                            "",
+                            "Canonical Requirements:",
+                            "- CH-001: [RED] Initialize the scene when selected",
+                            "",
+                            "Given x, when y, then z.",
+                        ]
+                    ),
+                }
+            ],
+        }
+
+        with self.assertRaises(SystemExit) as exc:
+            validate_phase_four_payload_against_gevurah(payload, issue_data)
+
+        self.assertIn("copy the full Gevurah requirement line", str(exc.exception))
 
 
 class RouterExecutionTests(unittest.TestCase):
@@ -428,13 +604,35 @@ class RouterExecutionTests(unittest.TestCase):
         del build_phase_four_summary_mock
         del log_multiline_mock
         del post_issue_comment_mock
+        issue_data = {
+            "title": "Issue",
+            "body": "Body",
+            "comments": [
+                {
+                    "body": "\n".join(
+                        [
+                            "<!-- phase:3:start label=phase:gevurah name=Gevurah -->",
+                            "### Phase 3: Gevurah",
+                            "",
+                            "## Canonical Requirements",
+                            "",
+                            "- CH-001: [RED] When user selects the option, then the scene initializes",
+                            "",
+                            "## Synthesis Decisions",
+                            "",
+                            "Decision text.",
+                        ]
+                    )
+                }
+            ],
+        }
         _execute_specification_phase(
             "phase:tiferet",
             55,
             "owner/repo",
             "prompt",
             "4",
-            {"title": "Issue", "body": "Body", "comments": []},
+            issue_data,
         )
 
         self.assertEqual(run_openhands_for_json_mock.call_args.kwargs["session_scope"], "phase-4")

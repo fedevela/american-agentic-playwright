@@ -39,7 +39,7 @@ from .prompts import (
     format_phase_comment,
     read_microagent_for_label,
 )
-from .validation import validate_phase_four_payload
+from .validation import validate_phase_four_payload, validate_phase_four_payload_against_gevurah
 
 
 def session_scope_for_phase(phase: str) -> str:
@@ -194,6 +194,7 @@ def _execute_specification_phase(
 
     log_info("Validating payload schema...")
     validate_phase_four_payload(payload)
+    validate_phase_four_payload_against_gevurah(payload, issue_data)
     log_info("Validation passed")
     log_multiline("Generated parent comment", payload["comment"].strip())
 

@@ -289,7 +289,7 @@ Use this exact schema:
   "sub_issues": [
     {{
       "title": "{TIFERET_AUTO_ISSUE_PREFIX}Short actionable issue title",
-      "body": "Child issue body beginning with a requirement-id traceability line and continuing with Gherkin-oriented Given/When/Then scenarios"
+      "body": "Child issue body beginning with a requirement-id traceability line, then a Canonical Requirements section copying full Gevurah requirement sentences verbatim, then Gherkin-oriented Given/When/Then scenarios"
     }}
   ]
 }}
@@ -306,6 +306,9 @@ Requirements:
 - Prefix every child issue title with `{TIFERET_AUTO_ISSUE_PREFIX}` so auto-created issues are visibly distinct from human-authored issues.
 - Every child issue body must begin with a `Requirement IDs:` line listing every Gevurah GUID consolidated into that child issue.
 - The requirement-id list must be complete for that child issue; do not omit any covered Gevurah requirement IDs.
+- Every child issue body must contain a `Canonical Requirements` section immediately after the requirement-id line.
+- In that section, include one bullet per listed requirement ID in the exact Gevurah form `- CH-001: ...`.
+- Copy the full canonical requirement sentences verbatim from the Gevurah `Canonical Requirements` section. Do not paraphrase or compress them.
 - Each child issue body must use Gherkin language with explicit `Given`, `When`, and `Then` sections.
 - Assume child issues will be created in listed order, attached as sub-issues to the parent issue, and each later child issue blocked by the immediately preceding child issue.
 - Do not mention tool limitations, environment limitations, or inability to post.
