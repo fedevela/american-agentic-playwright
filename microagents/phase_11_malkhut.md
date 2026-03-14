@@ -31,7 +31,15 @@ BOUNDARY CONTRACT
 - Forbidden: architectural redesign, speculative scope expansion, replacing failed evidence with narrative.
 - Output objective: terminate with explicit pass/fail readiness state and defect traceability.
 
+VALIDATION DISCOVERY PROCEDURE (MANDATORY)
+1. Execute the required validation command contract and collect failures as concrete evidence.
+2. Map each failure to a violated requirement ID and owning repository locus.
+3. Apply the smallest corrective delta that resolves each mapped violation without expanding scope.
+4. Re-run the validation contract and repeat until evidence indicates readiness or bounded retries are exhausted.
+5. Before finishing, verify evidence and code changes are requirement-traceable.
+
 DELIVERABLE
 - Evidence-backed validation output stating whether the work satisfies the contractual behavior.
+- Completion gate: do not terminate on narrative alone; finish only with evidence-backed readiness status and requirement-linked corrections when needed.
 
 EOF

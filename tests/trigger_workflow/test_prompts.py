@@ -50,14 +50,14 @@ class PhaseWorkflowNamingTests(unittest.TestCase):
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "5", 12), "issue/12")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "9", 12), "issue/12")
 
-    def test_session_scope_for_phase_isolated_for_phase_2_variants_and_shared_otherwise(self) -> None:
-        self.assertEqual(conversation_scope_for_phase("1"), "")
+    def test_session_scope_for_phase_isolated_for_all_phases(self) -> None:
+        self.assertEqual(conversation_scope_for_phase("1"), "phase-1")
         self.assertEqual(conversation_scope_for_phase("2a"), "phase-2a")
         self.assertEqual(conversation_scope_for_phase("2b"), "phase-2b")
         self.assertEqual(conversation_scope_for_phase("2c"), "phase-2c")
-        self.assertEqual(conversation_scope_for_phase("4"), "")
-        self.assertEqual(conversation_scope_for_phase("5"), "")
-        self.assertEqual(conversation_scope_for_phase("9"), "")
+        self.assertEqual(conversation_scope_for_phase("4"), "phase-4")
+        self.assertEqual(conversation_scope_for_phase("5"), "phase-5")
+        self.assertEqual(conversation_scope_for_phase("9"), "phase-9")
 
 
 class PromptBuilderTests(unittest.TestCase):
@@ -207,6 +207,8 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("contract traceability only", content)
         self.assertIn("passing placeholders", content)
         self.assertIn("assert True", content)
+        self.assertIn("DISCOVERY PROCEDURE (MANDATORY)", content)
+        self.assertIn("Completion gate:", content)
         self.assertIn("SPARC ALIGNMENT", content)
         self.assertIn("BOUNDARY CONTRACT", content)
 
@@ -220,6 +222,72 @@ class PromptBuilderTests(unittest.TestCase):
             content = read_microagent_for_label(label, phase)
             self.assertIn("SPARC ALIGNMENT", content)
             self.assertIn("BOUNDARY CONTRACT", content)
+
+    def test_phase_6_to_9_microagents_include_discovery_procedure_and_completion_gate(self) -> None:
+        for label, phase in (
+            ("phase:hod", "6"),
+            ("phase:yesod-orchestration", "7"),
+            ("phase:yesod-embodiment", "8"),
+            ("phase:malkhut", "9"),
+        ):
+            content = read_microagent_for_label(label, phase)
+            self.assertIn("DISCOVERY PROCEDURE (MANDATORY)", content)
+            self.assertIn("Completion gate:", content)
+
+    def test_phase_7_microagent_requires_architecture_artifacts_and_non_empty_diff(self) -> None:
+        content = read_microagent_for_label("phase:yesod-orchestration", "7")
+        self.assertIn("Determine the smallest coherent set of code-level architecture artifacts", content)
+        self.assertIn("according to full canonical requirement coverage", content)
+        self.assertIn("Leave the repository with concrete file changes (non-empty git diff)", content)
+        self.assertIn("ARTIFACT DISCOVERY PROCEDURE (MANDATORY)", content)
+        self.assertIn("Completion gate: do not stop after analysis", content)
+
+    def test_phase_7_prompt_enforces_code_level_artifacts_not_analysis_only(self) -> None:
+        prompt = build_implementation_phase_prompt(
+            "phase:yesod-orchestration",
+            12,
+            "owner/repo",
+            "Yesod microagent",
+            "7",
+            {
+                "title": "Example",
+                "body": "Original body",
+                "comments": [{"body": "Architecture context comment."}],
+            },
+        )
+        self.assertIn("Phase-specific requirements:", prompt)
+        self.assertIn("Deliver architecture artifacts as code changes, not analysis-only notes", prompt)
+        self.assertIn("deterministic artifact-discovery pass", prompt)
+        self.assertIn("smallest coherent architecture artifact set that fully covers canonical requirement IDs", prompt)
+        self.assertIn("leave a non-empty git diff with concrete architectural edits", prompt)
+        self.assertIn("explicit completion gate before finishing", prompt)
+
+    def test_phase_8_prompt_enforces_deterministic_implementation_discovery_and_completion_gate(self) -> None:
+        prompt = build_implementation_phase_prompt(
+            "phase:yesod-embodiment",
+            12,
+            "owner/repo",
+            "Yesod embodiment microagent",
+            "8",
+            {"title": "Example", "body": "Original body", "comments": []},
+        )
+        self.assertIn("This is Phase 8 (Yesod Refinement)", prompt)
+        self.assertIn("deterministic implementation-discovery pass", prompt)
+        self.assertIn("explicit completion gate before finishing", prompt)
+        self.assertIn("implementation diff is empty", prompt)
+
+    def test_phase_9_prompt_enforces_deterministic_validation_discovery_and_evidence_gate(self) -> None:
+        prompt = build_implementation_phase_prompt(
+            "phase:malkhut",
+            12,
+            "owner/repo",
+            "Malkhut microagent",
+            "9",
+            {"title": "Example", "body": "Original body", "comments": []},
+        )
+        self.assertIn("This is Phase 9 (Malkhut Completion)", prompt)
+        self.assertIn("deterministic validation-discovery pass", prompt)
+        self.assertIn("evidence-backed readiness status", prompt)
 
     def test_build_agent_prompt_preserves_canonical_requirements_in_child_issue_body_for_downstream_phases(self) -> None:
         # This fixture models a real Tiferet child issue body. Downstream

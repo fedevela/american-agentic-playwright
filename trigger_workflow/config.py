@@ -155,9 +155,9 @@ KETER_DERIVED_PHASES = {"2a", "2b", "2c"}
 SPECIFICATION_PHASE = "4"
 PRE_IMPLEMENTATION_PHASES = DISCUSSION_PHASES | {SPECIFICATION_PHASE}
 IMPLEMENTATION_PHASES = {"5", "6", "7", "8", "9"}
-# Session policy: only the phase-2 expansion variants are isolated; phase 1 and
-# all later phases share the same per-issue OpenHands session.
-STRICTLY_INDEPENDENT_PHASES = KETER_DERIVED_PHASES
+# Session policy: every phase run is conversation-isolated so no phase inherits
+# latent context from a previous phase execution.
+STRICTLY_INDEPENDENT_PHASES = set(PHASE_DISPLAY_NAME_MAP.keys())
 
 TARGET_REPO_CONFIG_MAP = {
     "fedevela/particle-life-3d": TargetRepoConfig(

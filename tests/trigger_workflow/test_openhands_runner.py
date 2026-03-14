@@ -15,8 +15,10 @@ from unittest.mock import patch
 
 from trigger_workflow.openhands_runner import (
     OpenHandsTargetContext,
+    action_observation_event_lines,
     create_issue_branches_for_child_issues,
     ensure_git_branch,
+    extract_message_events,
     finalize_phase_delivery,
     run_openhands_implementation_phase,
     resolve_phase_execution_branch,
@@ -82,6 +84,30 @@ class OpenHandsRunnerTests(unittest.TestCase):
                     load_session_state()
 
         self.assertIn("must contain a JSON object", str(exc.exception))
+
+    def test_extract_message_events_supports_marker_payloads_and_jsonl_lines(self) -> None:
+        marker_payload = (
+            "--JSON Event--\n"
+            '{"kind":"MessageEvent","llm_message":{"role":"assistant","content":[{"text":"hi"}]}}\n'
+        )
+        jsonl_payload = '{"type":"action","action":"write","path":"app.py"}\n'
+        events = extract_message_events(f"{marker_payload}{jsonl_payload}")
+
+        self.assertTrue(any(event.get("kind") == "MessageEvent" for event in events))
+        self.assertTrue(any(event.get("type") == "action" for event in events))
+
+    def test_action_observation_event_lines_renders_jsonl_action_and_observation_events(self) -> None:
+        output = "\n".join(
+            [
+                '{"type":"action","action":"write","path":"app.py"}',
+                '{"type":"observation","content":"File created successfully"}',
+            ]
+        )
+
+        lines = action_observation_event_lines(output)
+
+        self.assertTrue(any("type=action" in line and "app.py" in line for line in lines))
+        self.assertTrue(any("type=observation" in line and "File created successfully" in line for line in lines))
 
     def test_branch_name_for_phase_errors_for_unknown_repo_config(self) -> None:
         with self.assertRaises(SystemExit) as exc:
@@ -513,6 +539,36 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
     @patch("trigger_workflow.openhands_runner.run_phase_tests")
     @patch("trigger_workflow.openhands_runner.run_openhands")
+    def test_run_openhands_implementation_phase_validates_for_phase_6(
+        self,
+        run_openhands_mock,
+        run_phase_tests_mock,
+    ) -> None:
+        run_openhands_mock.return_value = subprocess.CompletedProcess(
+            args=["openhands"],
+            returncode=0,
+            stdout="ok",
+            stderr="",
+        )
+        run_phase_tests_mock.return_value = subprocess.CompletedProcess(
+            args=["npm", "run", "test"],
+            returncode=0,
+            stdout="tests ok",
+            stderr="",
+        )
+
+        run_openhands_implementation_phase(
+            "Initial task",
+            repo="fedevela/particle-life-3d",
+            issue=21,
+            phase="6",
+        )
+
+        run_openhands_mock.assert_called_once()
+        run_phase_tests_mock.assert_called_once()
+
+    @patch("trigger_workflow.openhands_runner.run_phase_tests")
+    @patch("trigger_workflow.openhands_runner.run_openhands")
     def test_run_openhands_implementation_phase_stops_when_tests_pass(
         self,
         run_openhands_mock,
@@ -543,7 +599,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
     @patch("trigger_workflow.openhands_runner.run_phase_tests")
     @patch("trigger_workflow.openhands_runner.run_openhands")
-    def test_run_openhands_implementation_phase_retries_once_when_validation_fails_then_passes(
+    def test_run_openhands_implementation_phase_retries_with_scoped_feedback_when_validation_fails_then_passes(
         self,
         run_openhands_mock,
         run_phase_tests_mock,
@@ -572,12 +628,13 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertEqual(run_openhands_mock.call_count, 2)
         self.assertEqual(run_phase_tests_mock.call_count, 2)
         retry_task = run_openhands_mock.call_args_list[1].args[0]
-        self.assertIn("only retry attempt", retry_task)
+        self.assertIn("retry attempt 1 of 3", retry_task)
+        self.assertIn("Do not expand scope beyond fixing these validation failures.", retry_task)
         self.assertIn("FAIL: expected 1 got 0", retry_task)
 
     @patch("trigger_workflow.openhands_runner.run_phase_tests")
     @patch("trigger_workflow.openhands_runner.run_openhands")
-    def test_run_openhands_implementation_phase_fails_after_single_retry(
+    def test_run_openhands_implementation_phase_fails_after_three_retries(
         self,
         run_openhands_mock,
         run_phase_tests_mock,
@@ -585,10 +642,14 @@ class OpenHandsRunnerTests(unittest.TestCase):
         run_openhands_mock.side_effect = [
             subprocess.CompletedProcess(args=["openhands"], returncode=0, stdout="run1", stderr=""),
             subprocess.CompletedProcess(args=["openhands"], returncode=0, stdout="run2", stderr=""),
+            subprocess.CompletedProcess(args=["openhands"], returncode=0, stdout="run3", stderr=""),
+            subprocess.CompletedProcess(args=["openhands"], returncode=0, stdout="run4", stderr=""),
         ]
         run_phase_tests_mock.side_effect = [
             subprocess.CompletedProcess(args=["npm", "run", "test"], returncode=1, stdout="fail-1", stderr=""),
             subprocess.CompletedProcess(args=["npm", "run", "test"], returncode=1, stdout="fail-2", stderr=""),
+            subprocess.CompletedProcess(args=["npm", "run", "test"], returncode=1, stdout="fail-3", stderr=""),
+            subprocess.CompletedProcess(args=["npm", "run", "test"], returncode=1, stdout="fail-4", stderr=""),
         ]
 
         with self.assertRaises(SystemExit) as exc:
@@ -599,9 +660,9 @@ class OpenHandsRunnerTests(unittest.TestCase):
                 phase="8",
             )
 
-        self.assertIn("npm run test", str(exc.exception))
-        self.assertEqual(run_openhands_mock.call_count, 2)
-        self.assertEqual(run_phase_tests_mock.call_count, 2)
+        self.assertIn("Validation command contract failed", str(exc.exception))
+        self.assertEqual(run_openhands_mock.call_count, 4)
+        self.assertEqual(run_phase_tests_mock.call_count, 4)
 
     @patch("trigger_workflow.openhands_runner.run_phase_tests")
     @patch("trigger_workflow.openhands_runner.run_openhands")

@@ -324,11 +324,48 @@ def build_implementation_phase_prompt(
     issue_data: dict[str, Any],
 ) -> str:
     """Build the prompt for phases 5-9 implementation and validation work."""
+    phase_requirements: list[str] = []
+    if phase == "7":
+        phase_requirements = [
+            "- This is Phase 7 (Yesod Architecture). Deliver architecture artifacts as code changes, not analysis-only notes.",
+            "- First run a deterministic artifact-discovery pass: derive requirement pressures, map ownership loci, then select artifact classes per locus.",
+            "- Then implement the smallest coherent architecture artifact set that fully covers canonical requirement IDs:",
+            "  1) contract/type artifacts,",
+            "  2) structural placement artifacts,",
+            "  3) ownership-boundary artifacts,",
+            "  4) dependency-direction artifacts,",
+            "  5) integration-seam artifacts.",
+            "- Keep artifacts requirement-traceable: each artifact must map to one or more canonical requirement IDs in the issue.",
+            "- Do not stop at read-only analysis; leave a non-empty git diff with concrete architectural edits suitable for commit.",
+            "- Apply an explicit completion gate before finishing: if canonical requirement coverage or non-empty diff conditions are not met, continue implementing artifacts.",
+            "- Do not fully implement end-user behavior; focus on placement, boundaries, contracts, and dependency direction.",
+        ]
+    elif phase == "8":
+        phase_requirements = [
+            "- This is Phase 8 (Yesod Refinement). Deliver implementation artifacts as code changes, not analysis-only notes.",
+            "- First run a deterministic implementation-discovery pass: derive implementation obligations from canonical requirements and map ownership loci.",
+            "- Implement the smallest coherent set of contract-faithful deltas that covers all mapped obligations.",
+            "- Keep changes requirement-traceable: changed files and deltas must map to canonical requirement IDs.",
+            "- Apply an explicit completion gate before finishing: if obligations are not covered or the implementation diff is empty, continue implementing.",
+            "- Preserve prior contracts and boundaries; do not expand scope beyond required implementation obligations.",
+        ]
+    elif phase == "9":
+        phase_requirements = [
+            "- This is Phase 9 (Malkhut Completion). Execute validation with evidence-first discipline.",
+            "- Run a deterministic validation-discovery pass: collect failing evidence, map each failure to violated requirement IDs and ownership loci, then apply minimal corrective deltas.",
+            "- Keep corrections requirement-traceable and scope-bounded to observed violations.",
+            "- Apply an explicit completion gate before finishing: do not terminate on narrative; finish only with evidence-backed readiness status.",
+        ]
+
+    requirements_block = ""
+    if phase_requirements:
+        requirements_block = f"\n\nPhase-specific requirements:\n{chr(10).join(phase_requirements)}"
+
     return f"""{strip_microagent(microagent)}
 
 {build_issue_runtime_context(label, issue, repo, phase, issue_data, include_comments=phase in COMMENT_VISIBLE_PHASES)}
 
-Execute your phase logic now.
+Execute your phase logic now.{requirements_block}
 """
 
 

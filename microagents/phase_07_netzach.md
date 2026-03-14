@@ -37,7 +37,15 @@ BOUNDARY CONTRACT
 - Forbidden: runtime feature implementation, routing/UI integration, production component behavior, algorithmic embodiment.
 - Output objective: leave unambiguous requirement-to-verification names with deterministic traceability.
 
+TRACEABILITY DISCOVERY PROCEDURE (MANDATORY)
+1. Read canonical requirement IDs and restate each as a verification obligation.
+2. Map each obligation to an owning verification locus.
+3. For each mapped locus, define the smallest verification artifact delta that preserves requirement traceability.
+4. Execute the smallest coherent verification artifact set that covers all mapped obligations.
+5. Before finishing, verify there is a non-empty verification diff and that changed files remain requirement-traceable.
+
 DELIVERABLE
 - Traceable verification artifacts whose names encode the downstream behavioral contract.
+- Completion gate: do not stop at narrative or analysis; if verification obligation coverage or non-empty diff requirements are not met, continue producing verification artifacts until they are.
 
 EOF

@@ -19,9 +19,16 @@ from .config import (
 )
 from .logging_utils import log_error, log_info, log_multiline
 
-MAX_VALIDATION_ATTEMPTS = 2
+MAX_VALIDATION_RETRIES = 3
+MAX_VALIDATION_ATTEMPTS = 1 + MAX_VALIDATION_RETRIES
 TEST_OUTPUT_MAX_CHARS = 12000
-VALIDATION_PHASES = {"8", "9"}
+VALIDATION_PHASES = {"6", "7", "8", "9"}
+VALIDATION_COMMANDS = (
+    ["npm", "run", "typecheck"],
+    ["npm", "run", "build"],
+    ["npm", "run", "test"],
+)
+VALIDATION_COMMAND_CONTRACT = "`npm run typecheck` -> `npm run build` -> `npm run test`"
 
 
 @dataclass(frozen=True)
@@ -376,21 +383,45 @@ def run_phase_tests(
     phase: str,
     branch_override: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run repository validation command for a phase using the same checkout/branch context as OpenHands."""
+    """Run repository validation commands for a phase using the same checkout/branch context as OpenHands."""
     context = (
         prepare_phase_execution_context(repo, phase, issue)
         if branch_override is None
         else prepare_openhands_branch_context(repo, branch_override)
     )
     ensure_playwright_test_prerequisites(context.local_path)
-    log_info("Running validation command: npm run test")
-    return subprocess.run(
-        ["npm", "run", "test"],
-        cwd=context.local_path,
-        text=True,
-        capture_output=True,
-        timeout=1200,
+    combined_stdout: list[str] = []
+    combined_stderr: list[str] = []
+
+    for command in VALIDATION_COMMANDS:
+        command_preview = " ".join(command)
+        log_info(f"Running validation command: {command_preview}")
+        result = subprocess.run(
+            command,
+            cwd=context.local_path,
+            text=True,
+            capture_output=True,
+            timeout=1200,
+        )
+        if result.stdout:
+            combined_stdout.append(f"$ {command_preview}\n{result.stdout}")
+        if result.stderr:
+            combined_stderr.append(f"$ {command_preview}\n{result.stderr}")
+        if result.returncode != 0:
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=result.returncode,
+                stdout="\n".join(combined_stdout),
+                stderr="\n".join(combined_stderr),
+            )
+
+    return subprocess.CompletedProcess(
+        args=["validation"],
+        returncode=0,
+        stdout="\n".join(combined_stdout),
+        stderr="\n".join(combined_stderr),
     )
+
 
 def finalize_phase_delivery(
     *,
@@ -618,18 +649,19 @@ def summarize_test_output(result: subprocess.CompletedProcess[str]) -> str:
     return combined[-TEST_OUTPUT_MAX_CHARS:]
 
 
-def build_single_retry_fix_task(test_output: str) -> str:
-    """Build the one-time retry task sent to OpenHands after a failed validation run."""
+def build_single_retry_fix_task(test_output: str, *, retry_number: int) -> str:
+    """Build a scoped retry task sent to OpenHands after a failed validation run."""
     return (
         "Your previous changes were applied, but required repository validation failed.\n\n"
         "Run and satisfy exactly this command contract:\n"
-        "- `npm run test`\n\n"
-        "This is the only retry attempt.\n\n"
+        f"- {VALIDATION_COMMAND_CONTRACT}\n\n"
+        f"This is retry attempt {retry_number} of {MAX_VALIDATION_RETRIES}.\n\n"
         "Failure output:\n"
         "```text\n"
         f"{test_output}\n"
         "```\n\n"
-        "Apply minimal code changes to make `npm run test` pass, then finish."
+        "Do not expand scope beyond fixing these validation failures.\n"
+        f"Apply minimal code changes to make {VALIDATION_COMMAND_CONTRACT} pass, then finish."
     )
 
 
@@ -670,8 +702,9 @@ def ensure_playwright_test_prerequisites(local_path: Path) -> None:
 
 
 def extract_message_events(output: str) -> list[dict[str, Any]]:
-    """Extract JSON event payloads from OpenHands stdout."""
+    """Extract JSON event payloads from OpenHands stdout (marker-based and JSONL)."""
     events: list[dict[str, Any]] = []
+    seen: set[str] = set()
     marker = "--JSON Event--"
     decoder = json.JSONDecoder()
     cursor = 0
@@ -693,8 +726,27 @@ def extract_message_events(output: str) -> list[dict[str, Any]]:
             continue
 
         if isinstance(event, dict):
-            events.append(event)
+            key = json.dumps(event, sort_keys=True, default=str)
+            if key not in seen:
+                seen.add(key)
+                events.append(event)
         cursor = brace_index + consumed
+
+    # Also consume plain JSONL event lines from `--json` output mode.
+    for line in output.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("{") or not stripped.endswith("}"):
+            continue
+        try:
+            event = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        key = json.dumps(event, sort_keys=True, default=str)
+        if key not in seen:
+            seen.add(key)
+            events.append(event)
 
     return events
 
@@ -713,6 +765,74 @@ def last_assistant_message(output: str) -> str:
         if chunks:
             message = "".join(chunks).strip()
     return message
+
+
+def _truncate_for_log(value: str, limit: int = 140) -> str:
+    """Trim long event text for concise trigger logs."""
+    text = " ".join(value.split())
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 3]}..."
+
+
+def action_observation_event_lines(output: str, *, max_events: int = 40) -> list[str]:
+    """Render action/observation events from OpenHands JSON output for trigger logs."""
+    lines: list[str] = []
+
+    for event in extract_message_events(output):
+        event_type = str(event.get("type") or "")
+        event_kind = str(event.get("kind") or "")
+
+        if event_type in {"action", "observation"}:
+            if event_type == "action":
+                action = event.get("action")
+                if isinstance(action, dict):
+                    action_name = str(action.get("command") or action.get("type") or "action")
+                    path = str(action.get("path") or event.get("path") or "")
+                    suffix = f" path={path}" if path else ""
+                    lines.append(f"type=action action={_truncate_for_log(action_name)}{suffix}")
+                else:
+                    path = str(event.get("path") or "")
+                    suffix = f" path={path}" if path else ""
+                    lines.append(f"type=action action={_truncate_for_log(str(action))}{suffix}")
+            else:
+                content = _truncate_for_log(str(event.get("content") or ""))
+                lines.append(f"type=observation content={content}")
+            continue
+
+        if event_kind == "ActionEvent":
+            tool_name = str(event.get("tool_name") or "")
+            summary = str(event.get("summary") or "")
+            action = event.get("action") or {}
+            command = str(action.get("command") or "")
+            path = str(action.get("path") or "")
+            details = " ".join(part for part in [f"command={command}" if command else "", f"path={path}" if path else ""] if part)
+            details_suffix = f" {details}" if details else ""
+            lines.append(
+                f"kind=ActionEvent tool={tool_name or '(unknown)'} "
+                f"summary={_truncate_for_log(summary)}{details_suffix}"
+            )
+            continue
+
+        if event_kind == "ObservationEvent":
+            tool_name = str(event.get("tool_name") or "")
+            observation = event.get("observation") or {}
+            content = ""
+            if isinstance(observation, dict):
+                content_items = observation.get("content")
+                if isinstance(content_items, list) and content_items:
+                    first_item = content_items[0]
+                    if isinstance(first_item, dict):
+                        content = str(first_item.get("text") or "")
+            lines.append(
+                f"kind=ObservationEvent tool={tool_name or '(unknown)'} "
+                f"content={_truncate_for_log(content)}"
+            )
+
+    if len(lines) <= max_events:
+        return lines
+    overflow = len(lines) - max_events
+    return [*lines[:max_events], f"... truncated {overflow} additional action/observation events"]
 
 
 def run_openhands_comment_phase(
@@ -795,13 +915,16 @@ def run_openhands_implementation_phase(
             sys.exit(result.returncode)
 
         assistant_message = last_assistant_message(result.stdout)
+        event_lines = action_observation_event_lines(result.stdout or "")
+        if event_lines:
+            log_multiline("OpenHands action/observation events", "\n".join(event_lines))
         if assistant_message:
             log_multiline("Assistant message", assistant_message)
         elif result.stdout:
             log_info("OpenHands run completed with no parsed assistant message (raw output suppressed).")
 
         if phase not in VALIDATION_PHASES:
-            log_info(f"Skipping automated validation for phase {phase}; validation is reserved for phases 8 and 9.")
+            log_info(f"Skipping automated validation for phase {phase}; validation is reserved for phases 6 through 9.")
             print("\nAgent execution complete.")
             return
 
@@ -816,7 +939,11 @@ def run_openhands_implementation_phase(
             return
 
         if attempt >= MAX_VALIDATION_ATTEMPTS:
-            raise SystemExit("Validation command `npm run test` failed.")
+            raise SystemExit(f"Validation command contract failed ({VALIDATION_COMMAND_CONTRACT}).")
 
-        log_error("Validation failed; requesting a one-time OpenHands retry with test output context.")
-        pending_task = build_single_retry_fix_task(summarize_test_output(test_result))
+        retry_number = attempt
+        log_error(
+            "Validation failed; requesting a scoped OpenHands retry with test output context "
+            f"(retry {retry_number}/{MAX_VALIDATION_RETRIES})."
+        )
+        pending_task = build_single_retry_fix_task(summarize_test_output(test_result), retry_number=retry_number)

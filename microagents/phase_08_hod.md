@@ -31,7 +31,15 @@ BOUNDARY CONTRACT
 - Forbidden: full syntax-level implementation, architectural placement decisions, production runtime behavior.
 - Output objective: provide deterministic logic structure as pseudocode-ready artifacts.
 
+PSEUDOCODE DISCOVERY PROCEDURE (MANDATORY)
+1. Read canonical requirement IDs and restate each as a logic obligation.
+2. Map each obligation to an owning pseudocode locus.
+3. For each mapped locus, define the smallest pseudocode artifact delta that preserves requirement traceability.
+4. Execute the smallest coherent pseudocode artifact set that covers all mapped obligations.
+5. Before finishing, verify there is a non-empty pseudocode diff and that changed files remain requirement-traceable.
+
 DELIVERABLE
 - Bodyless or procedure-ready implementation artifacts that preserve exact behavioral traceability.
+- Completion gate: do not stop at narrative or analysis; if logic obligation coverage or non-empty diff requirements are not met, continue producing pseudocode artifacts until they are.
 
 EOF
