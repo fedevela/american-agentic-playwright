@@ -37,30 +37,30 @@ class PhaseWorkflowNamingTests(unittest.TestCase):
 
     def test_determine_phase_from_label_uses_canonical_string_ids(self) -> None:
         self.assertEqual(determine_phase_from_label("phase:keter"), "1")
-        self.assertEqual(determine_phase_from_label("phase:chokhmah"), "2a")
-        self.assertEqual(determine_phase_from_label("phase:binah"), "2b")
-        self.assertEqual(determine_phase_from_label("phase:chesed"), "2c")
+        self.assertEqual(determine_phase_from_label("phase:chokhmah"), "2A")
+        self.assertEqual(determine_phase_from_label("phase:binah"), "2B")
+        self.assertEqual(determine_phase_from_label("phase:chesed"), "2C")
         self.assertEqual(determine_phase_from_label("phase:gevurah"), "3")
         self.assertEqual(determine_phase_from_label("phase:tiferet"), "4")
         self.assertEqual(determine_phase_from_label("phase:malkhut"), "9")
-        self.assertEqual(determine_phase_from_label("phase:hod-refactoring"), "12")
+        self.assertEqual(determine_phase_from_label("phase:hod-refactoring"), "10")
 
     def test_branch_name_for_phase_uses_main_before_implementation_and_issue_branch_after(self) -> None:
-        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "2b", 12), "main")
+        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "2B", 12), "main")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "4", 12), "main")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "5", 12), "issue/12")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "9", 12), "issue/12")
-        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "12", 12), "issue/12")
+        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "10", 12), "issue/12")
 
     def test_session_scope_for_phase_isolated_for_all_phases(self) -> None:
         self.assertEqual(conversation_scope_for_phase("1"), "phase-1")
-        self.assertEqual(conversation_scope_for_phase("2a"), "phase-2a")
-        self.assertEqual(conversation_scope_for_phase("2b"), "phase-2b")
-        self.assertEqual(conversation_scope_for_phase("2c"), "phase-2c")
+        self.assertEqual(conversation_scope_for_phase("2A"), "phase-2A")
+        self.assertEqual(conversation_scope_for_phase("2B"), "phase-2B")
+        self.assertEqual(conversation_scope_for_phase("2C"), "phase-2C")
         self.assertEqual(conversation_scope_for_phase("4"), "phase-4")
         self.assertEqual(conversation_scope_for_phase("5"), "phase-5")
         self.assertEqual(conversation_scope_for_phase("9"), "phase-9")
-        self.assertEqual(conversation_scope_for_phase("12"), "phase-12")
+        self.assertEqual(conversation_scope_for_phase("10"), "phase-10")
 
 
 class PromptBuilderTests(unittest.TestCase):
@@ -137,7 +137,7 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("clone the exact canonical requirement text", content)
 
     def test_read_microagent_for_label_composes_base_persona_phase_persona_and_microagent(self) -> None:
-        content = read_microagent_for_label("phase:binah", "2b")
+        content = read_microagent_for_label("phase:binah", "2B")
         self.assertIsNotNone(content)
         assert content is not None
         self.assertIn("The user is your partner.", content)
@@ -165,7 +165,7 @@ class PromptBuilderTests(unittest.TestCase):
                 }
             ],
         }
-        context = build_phase_prompt_input_context("phase:binah", 12, "owner/repo", "2b", issue_data)
+        context = build_phase_prompt_input_context("phase:binah", 12, "owner/repo", "2B", issue_data)
         self.assertIn("Clarified requirement from Keter.", context)
         self.assertNotIn("Original issue body should not be used", context)
 
@@ -262,8 +262,8 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("Deliver architecture artifacts as code changes, not analysis-only notes", prompt)
         self.assertIn("deterministic artifact-discovery pass", prompt)
 
-    def test_phase_12_refactorer_persona_stack_is_resolvable(self) -> None:
-        content = read_microagent_for_label("phase:hod-refactoring", "12")
+    def test_phase_10_refactorer_persona_stack_is_resolvable(self) -> None:
+        content = read_microagent_for_label("phase:hod-refactoring", "10")
         self.assertIn("expanded through Hod", content)
         self.assertIn("ROLE: Refactoring agent", content)
         self.assertIn("HOD REFACTORER", content)
@@ -339,32 +339,32 @@ class PromptBuilderTests(unittest.TestCase):
         }
 
         with self.assertRaises(SystemExit) as exc:
-            build_phase_prompt_input_context("phase:binah", 12, "owner/repo", "2b", issue_data)
+            build_phase_prompt_input_context("phase:binah", 12, "owner/repo", "2B", issue_data)
 
         self.assertIn("Phase 2B requires a Phase 1 clarification comment", str(exc.exception))
 
     @patch("trigger_workflow.prompts.BASE_PERSONA_FILE", "missing-daneel.md")
     def test_read_microagent_for_label_errors_when_base_persona_missing(self) -> None:
         with self.assertRaises(SystemExit) as exc:
-            read_microagent_for_label("phase:binah", "2b")
+            read_microagent_for_label("phase:binah", "2B")
 
         self.assertIn("Base persona file is missing", str(exc.exception))
 
-    @patch.dict("trigger_workflow.prompts.PERSONA_FILE_MAP", {"2b": "missing-phase-persona.md"}, clear=False)
+    @patch.dict("trigger_workflow.prompts.PERSONA_FILE_MAP", {"2B": "missing-phase-persona.md"}, clear=False)
     def test_read_microagent_for_label_errors_when_phase_persona_missing(self) -> None:
         with self.assertRaises(SystemExit) as exc:
-            read_microagent_for_label("phase:binah", "2b")
+            read_microagent_for_label("phase:binah", "2B")
 
         self.assertIn("Phase persona file is missing", str(exc.exception))
 
     @patch.dict(
         "trigger_workflow.prompts.FUNCTIONAL_MICROAGENT_FILE_MAP",
-        {"2b": "missing-functional-agent.md"},
+        {"2B": "missing-functional-agent.md"},
         clear=False,
     )
     def test_read_functional_microagent_errors_when_mapped_file_missing(self) -> None:
         with self.assertRaises(SystemExit) as exc:
-            read_functional_microagent("phase:binah", "2b")
+            read_functional_microagent("phase:binah", "2B")
 
         self.assertIn("Functional microagent file is missing", str(exc.exception))
 

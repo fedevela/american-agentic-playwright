@@ -330,15 +330,17 @@ def render_prompt_only_output(request: PhaseExecutionRequest, prompt: str) -> st
 
 def label_for_phase_id(phase: str) -> str:
     """Resolve canonical label for a canonical phase id."""
-    phase_alias_map = {
-        "10": "12",
-    }
-    normalized_phase = phase_alias_map.get(phase.strip().lower(), phase.strip().lower())
+    raw_phase = phase.strip()
+    normalized_phase = {
+        "2a": "2A",
+        "2b": "2B",
+        "2c": "2C",
+    }.get(raw_phase.lower(), raw_phase.upper() if raw_phase.lower() in {"2a", "2b", "2c"} else raw_phase)
     for label_name, phase_id in LABEL_PHASE_MAP.items():
         if phase_id == normalized_phase:
             return label_name
     expected = ", ".join(sorted(set(LABEL_PHASE_MAP.values())))
-    raise SystemExit(f"Unknown phase '{phase}'. Expected one of: {expected}. Aliases: 10 -> 12.")
+    raise SystemExit(f"Unknown phase '{phase}'. Expected one of: {expected}.")
 
 
 def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
@@ -499,7 +501,7 @@ def run_trigger_cli() -> None:
     """Main entry point."""
     parser = argparse.ArgumentParser(description="Trigger OpenHands / GitHub phase workflow")
     parser.add_argument("--label", help="GitHub label triggering the phase")
-    parser.add_argument("--phase", help="Canonical phase id (1, 2a, 2b, 2c, 3, 4, 5, 6, 7, 8, 9, 12; alias: 10->12)")
+    parser.add_argument("--phase", help="Canonical phase id (1, 2A, 2B, 2C, 3, 4, 5, 6, 7, 8, 9, 10)")
     parser.add_argument("--issue", type=int, help="Issue number")
     parser.add_argument("--repo", help="Repository owner/repo")
     parser.add_argument(

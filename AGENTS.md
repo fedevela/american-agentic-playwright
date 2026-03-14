@@ -24,7 +24,7 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 
 ## Phase Families
 
-- Discussion phases: `1`, `2a`, `2b`, `2c`, `3`
+- Discussion phases: `1`, `2A`, `2B`, `2C`, `3`
   - OpenHands generates comment text
   - Router posts wrapped phase comment
   - Router advances label to next phase

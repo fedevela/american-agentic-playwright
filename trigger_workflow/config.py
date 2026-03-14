@@ -19,14 +19,12 @@ class TargetRepoConfig:
     issue_branch_prefix: str = "issue/"
 
 # Canonical workflow order:
-# 1 -> 2a -> 2b -> 2c -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 (+ optional 12 refactoring phase)
-# Numeric Tree-of-Life positions:
-# 1=1, 2a=2, 2b=3, 2c=4, 3=5, 4=6, 5=7, 6=8, 7=9, 8=10, 9=11
+# 1 -> 2A -> 2B -> 2C -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 (+ optional 10 refactoring phase)
 PHASE_DISPLAY_NAME_MAP = {
     "1": "Keter",
-    "2a": "Chokhmah",
-    "2b": "Binah",
-    "2c": "Chesed",
+    "2A": "Chokhmah",
+    "2B": "Binah",
+    "2C": "Chesed",
     "3": "Gevurah",
     "4": "Tiferet",
     "5": "Netzach",
@@ -34,7 +32,7 @@ PHASE_DISPLAY_NAME_MAP = {
     "7": "Yesod-Orchestration",
     "8": "Yesod-Embodiment",
     "9": "Malkhut",
-    "12": "Hod-Refactoring",
+    "10": "Hod-Refactoring",
 }
 
 PHASE_LABEL_METADATA = {
@@ -83,7 +81,7 @@ PHASE_LABEL_METADATA = {
         "color": "D1242F",
     },
     "phase:hod-refactoring": {
-        "description": "Phase 12 Hod Refactoring: Structural Clarity",
+        "description": "Phase 10 Hod Refactoring: Structural Clarity",
         "color": "1F6FEB",
     },
     "phase:needsHuman": {
@@ -113,9 +111,9 @@ NEEDS_HUMAN_LABEL = "phase:needsHuman"
 
 PERSONA_FILE_MAP = {
     "1": "keter_intentformation.md",
-    "2a": "chokhmah_generativeexpansion.md",
-    "2b": "binah_criticalrestriction.md",
-    "2c": "chesed_mechanisticgrounding.md",
+    "2A": "chokhmah_generativeexpansion.md",
+    "2B": "binah_criticalrestriction.md",
+    "2C": "chesed_mechanisticgrounding.md",
     "3": "gevurah_syntheticjudgment.md",
     "4": "tiferet_specificationharmony.md",
     "5": "netzach_traceabilityendurance.md",
@@ -123,22 +121,22 @@ PERSONA_FILE_MAP = {
     "7": "yesod_integrationfoundation.md",
     "8": "yesod_transmissionembodiment.md",
     "9": "malkhut_completionsovereignty.md",
-    "12": "hod_refactoringstructuralclarity.md",
+    "10": "hod_refactoringstructuralclarity.md",
 }
 
 FUNCTIONAL_MICROAGENT_FILE_MAP = {
-    "1": "phase_01_keter.md",
-    "2a": "phase_02_chokhmah.md",
-    "2b": "phase_03_binah.md",
-    "2c": "phase_04_chesed.md",
-    "3": "phase_05_gevurah.md",
-    "4": "phase_06_tiferet.md",
-    "5": "phase_07_netzach.md",
-    "6": "phase_08_hod.md",
-    "7": "phase_09_yesod_orchestration.md",
-    "8": "phase_10_yesod_embodiment.md",
-    "9": "phase_11_malkhut.md",
-    "12": "phase_12_hod_refactoring.md",
+    "1": "phase_1_keter.md",
+    "2A": "phase_2A_chokhmah.md",
+    "2B": "phase_2B_binah.md",
+    "2C": "phase_2C_chesed.md",
+    "3": "phase_3_gevurah.md",
+    "4": "phase_4_tiferet.md",
+    "5": "phase_5_netzach.md",
+    "6": "phase_6_hod.md",
+    "7": "phase_7_yesod_orchestration.md",
+    "8": "phase_8_yesod_embodiment.md",
+    "9": "phase_9_malkhut.md",
+    "10": "phase_10_hod_refactoring.md",
 }
 
 BASE_PERSONA_FILE = "daneel.md"
@@ -146,9 +144,9 @@ BASE_PERSONA_FILE = "daneel.md"
 # Canonical label -> phase-id mapping used throughout routing and prompt selection.
 LABEL_PHASE_MAP = {
     "phase:keter": "1",
-    "phase:chokhmah": "2a",
-    "phase:binah": "2b",
-    "phase:chesed": "2c",
+    "phase:chokhmah": "2A",
+    "phase:binah": "2B",
+    "phase:chesed": "2C",
     "phase:gevurah": "3",
     "phase:tiferet": "4",
     "phase:netzach": "5",
@@ -156,14 +154,14 @@ LABEL_PHASE_MAP = {
     "phase:yesod-orchestration": "7",
     "phase:yesod-embodiment": "8",
     "phase:malkhut": "9",
-    "phase:hod-refactoring": "12",
+    "phase:hod-refactoring": "10",
 }
 
-DISCUSSION_PHASES = {"1", "2a", "2b", "2c", "3"}
-KETER_DERIVED_PHASES = {"2a", "2b", "2c"}
+DISCUSSION_PHASES = {"1", "2A", "2B", "2C", "3"}
+KETER_DERIVED_PHASES = {"2A", "2B", "2C"}
 SPECIFICATION_PHASE = "4"
 PRE_IMPLEMENTATION_PHASES = DISCUSSION_PHASES | {SPECIFICATION_PHASE}
-IMPLEMENTATION_PHASES = {"5", "6", "7", "8", "9", "12"}
+IMPLEMENTATION_PHASES = {"5", "6", "7", "8", "9", "10"}
 # Session policy: every phase run is conversation-isolated so no phase inherits
 # latent context from a previous phase execution.
 STRICTLY_INDEPENDENT_PHASES = set(PHASE_DISPLAY_NAME_MAP.keys())

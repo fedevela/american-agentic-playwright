@@ -408,13 +408,13 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             include_base_persona=True,
         )
 
-    def test_label_for_phase_id_supports_phase_10_alias_to_phase_12(self) -> None:
+    def test_label_for_phase_id_resolves_phase_10(self) -> None:
         self.assertEqual(label_for_phase_id("10"), "phase:hod-refactoring")
 
-    def test_label_for_phase_id_unknown_phase_lists_alias_hint(self) -> None:
+    def test_label_for_phase_id_unknown_phase_lists_expected_ids(self) -> None:
         with self.assertRaises(SystemExit) as exc:
             label_for_phase_id("bogus")
-        self.assertIn("Aliases: 10 -> 12", str(exc.exception))
+        self.assertIn("Expected one of:", str(exc.exception))
 
 
 if __name__ == "__main__":

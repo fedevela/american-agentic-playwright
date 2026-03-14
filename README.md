@@ -1,8 +1,8 @@
 # OpenClaw SDLC Orchestrator
 
-A GitHub-based 11-phase SDLC system implementing the SPARC 5-methodology mapped onto the Kabbalistic Tree of Life.
+A GitHub-based 12-phase SDLC system implementing the SPARC 5-methodology mapped onto the Kabbalistic Tree of Life.
 
-Phase sequence: 1→2a→2b→2c→3→4→5→6→7→8→9
+Phase sequence: 1→2A→2B→2C→3→4→5→6→7→8→9→10
 
 ## Overview
 
@@ -61,9 +61,9 @@ GitHub Issue + Label → OpenClaw Cron → trigger.py → SDLCPhasedAgent → Op
 | Label | Phase | Description |
 |-------|-------|-------------|
 | `phase:keter` | 1 | Intent formation (GitHub comment) |
-| `phase:chokhmah` | 2a | Generative expansion (GitHub comment) |
-| `phase:binah` | 2b | Critical restriction (GitHub comment) |
-| `phase:chesed` | 2c | Mechanistic grounding (GitHub comment) |
+| `phase:chokhmah` | 2A | Generative expansion (GitHub comment) |
+| `phase:binah` | 2B | Critical restriction (GitHub comment) |
+| `phase:chesed` | 2C | Mechanistic grounding (GitHub comment) |
 | `phase:gevurah` | 3 | Synthetic judgment (GitHub comment + child issues) |
 | `phase:tiferet` | 4 | SPARC S: Specification (creates child issues with Gherkin, no PR) |
 | `phase:netzach` | 5 | Traceability (child issues, E2E test names) |

@@ -564,8 +564,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
             "Test prompt",
             repo="fedevela/particle-life-3d",
             issue=21,
-            phase="2b",
-            session_scope="phase-2b",
+            phase="2B",
+            session_scope="phase-2B",
         )
 
         command = run_openhands_command_mock.call_args.args[0]
@@ -621,8 +621,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
             "Test prompt",
             repo="fedevela/particle-life-3d",
             issue=21,
-            phase="2b",
-            session_scope="phase-2b",
+            phase="2B",
+            session_scope="phase-2B",
         )
 
         save_session_state_mock.assert_not_called()

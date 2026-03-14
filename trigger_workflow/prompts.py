@@ -255,7 +255,7 @@ def build_comment_phase_prompt(
                 "- `Phase 2 Handoff` must state that generative expansion can proceed.",
             ]
         )
-    elif phase in {"2a", "2b", "2c"}:
+    elif phase in {"2A", "2B", "2C"}:
         requirements.extend(build_phase_2_story_requirements())
 
     return f"""{strip_microagent(microagent)}
@@ -380,7 +380,7 @@ Execute your phase logic now.{requirements_block}
 
 def phase_display_name(phase: str, label: str) -> str:
     """Build a stable display name for a phase comment boundary."""
-    if phase in {"2a", "2b", "2c"}:
+    if phase in {"2A", "2B", "2C"}:
         return label.replace("phase:", "").capitalize()
     return PHASE_DISPLAY_NAME_MAP.get(phase, label.replace("phase:", "").capitalize())
 

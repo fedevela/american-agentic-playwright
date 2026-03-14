@@ -162,7 +162,7 @@ def _tools_list_result() -> dict[str, Any]:
                         "issue": {"type": "integer", "description": "GitHub issue number."},
                         "phase": {
                             "type": "string",
-                            "description": "Canonical phase id: 1, 2a, 2b, 2c, 3, 4, 5, 6, 7, 8, or 9.",
+                            "description": "Canonical phase id: 1, 2A, 2B, 2C, 3, 4, 5, 6, 7, 8, 9, or 10.",
                         },
                         "label": {"type": "string", "description": "Canonical GitHub phase label such as phase:tiferet."},
                         "repo": {"type": "string", "description": "Repository in owner/repo form."},
