@@ -3,13 +3,17 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from queue import Empty, Queue
 from pathlib import Path
 import subprocess
 import sys
+import threading
+import time
 from typing import Any
 
 from .config import (
     IMPLEMENTATION_PHASES,
+    PHASE_DISPLAY_NAME_MAP,
     PRE_IMPLEMENTATION_PHASES,
     SESSION_STATE_PATH,
     TIFERET_AUTO_ISSUE_PREFIX,
@@ -29,6 +33,8 @@ VALIDATION_COMMANDS = (
     ["npm", "run", "test"],
 )
 VALIDATION_COMMAND_CONTRACT = "`npm run typecheck` -> `npm run build` -> `npm run test`"
+OPENHANDS_HEARTBEAT_SECONDS = 15
+OPENHANDS_RUN_TIMEOUT_SECONDS = 600
 
 
 @dataclass(frozen=True)
@@ -297,6 +303,18 @@ def prepare_target_repo_checkout(repo: str) -> tuple[TargetRepoConfig, Path]:
     log_info(f"Verified source repository path exists: {local_path}")
 
     managed_path = ensure_managed_repo_checkout(repo, local_path)
+    expected_managed_path = managed_repo_path(repo)
+    if managed_path.resolve() != expected_managed_path.resolve():
+        raise SystemExit(
+            "OpenHands managed checkout path mismatch. "
+            f"Expected managed clone at {expected_managed_path}, got {managed_path}. "
+            "Refusing to run phases outside the managed checkout."
+        )
+    if managed_path.resolve() == local_path.resolve():
+        raise SystemExit(
+            "Managed checkout resolved to source repository path. "
+            "Refusing to run phases in the source checkout."
+        )
     if not managed_path.exists() or not (managed_path / ".git").exists():
         raise SystemExit(f"OpenHands managed checkout is missing or invalid after setup: {managed_path}")
     log_info(f"Verified managed repository path exists: {managed_path}")
@@ -322,6 +340,91 @@ def prepare_phase_execution_context(repo: str, phase: str, issue: int) -> OpenHa
     """Resolve and verify the target repository checkout OpenHands should use."""
     branch = resolve_phase_execution_branch(repo, phase, issue)
     return prepare_branch_context(repo, branch=branch, branch_log_label=f"Resolved target branch for phase {phase.upper()}")
+
+
+def _run_openhands_command(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    timeout_seconds: int = OPENHANDS_RUN_TIMEOUT_SECONDS,
+) -> subprocess.CompletedProcess[str]:
+    """Run OpenHands and stream stdout/stderr lines live while collecting full output."""
+    process = subprocess.Popen(  # noqa: S603 - command is static argv array, not shell-expanded
+        command,
+        cwd=cwd,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        bufsize=1,
+    )
+
+    queue: Queue[tuple[str, str | None]] = Queue()
+
+    def reader(stream_name: str, stream: Any) -> None:
+        try:
+            for line in stream:
+                queue.put((stream_name, line))
+        finally:
+            queue.put((stream_name, None))
+            stream.close()
+
+    stdout_stream = process.stdout
+    stderr_stream = process.stderr
+    if stdout_stream is None or stderr_stream is None:
+        raise SystemExit("Failed to open OpenHands process streams.")
+
+    stdout_thread = threading.Thread(target=reader, args=("stdout", stdout_stream), daemon=True)
+    stderr_thread = threading.Thread(target=reader, args=("stderr", stderr_stream), daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+
+    started_at = time.monotonic()
+    timeout_deadline = started_at + timeout_seconds
+    heartbeat_deadline = started_at + OPENHANDS_HEARTBEAT_SECONDS
+    finished_streams: set[str] = set()
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+
+    while True:
+        now = time.monotonic()
+        if now >= timeout_deadline and process.poll() is None:
+            process.kill()
+            raise subprocess.TimeoutExpired(command, timeout_seconds, output="".join(stdout_lines), stderr="".join(stderr_lines))
+
+        if len(finished_streams) == 2 and process.poll() is not None:
+            break
+
+        try:
+            stream_name, line = queue.get(timeout=1)
+        except Empty:
+            if process.poll() is None and now >= heartbeat_deadline:
+                elapsed_seconds = int(now - started_at)
+                log_info(f"OpenHands still running... {elapsed_seconds}s elapsed")
+                heartbeat_deadline = now + OPENHANDS_HEARTBEAT_SECONDS
+            continue
+
+        if line is None:
+            finished_streams.add(stream_name)
+            continue
+
+        if stream_name == "stdout":
+            stdout_lines.append(line)
+            print(line, end="")
+        else:
+            stderr_lines.append(line)
+            print(line, end="", file=sys.stderr)
+
+    stdout_thread.join(timeout=1)
+    stderr_thread.join(timeout=1)
+    returncode = process.wait(timeout=5)
+    return subprocess.CompletedProcess(
+        args=command,
+        returncode=returncode,
+        stdout="".join(stdout_lines),
+        stderr="".join(stderr_lines),
+    )
 
 
 def run_openhands(
@@ -359,12 +462,10 @@ def run_openhands(
     )
 
     log_info("Launching OpenHands headless run")
-    result = subprocess.run(
+    log_info("OpenHands execution in progress; streaming JSONL events live.")
+    result = _run_openhands_command(
         command,
         cwd=context.local_path,
-        text=True,
-        capture_output=True,
-        timeout=600,
         env=openhands_env(),
     )
     log_info(f"OpenHands exit code: {result.returncode}")
@@ -469,12 +570,15 @@ def finalize_phase_delivery(
     normalized_title = " ".join(issue_title.split()).strip()
     if normalized_title.startswith(TIFERET_AUTO_ISSUE_PREFIX):
         normalized_title = normalized_title[len(TIFERET_AUTO_ISSUE_PREFIX) :].strip()
-    pr_title_tail = normalized_title[:120] if normalized_title else f"Phase {phase} delivery"
-    if normalized_title:
-        commit_title_tail = normalized_title[:72]
-        commit_message = f"phase:{phase} issue #{issue}: {commit_title_tail}"
-    else:
-        commit_message = f"phase:{phase} issue #{issue} - apply OpenHands changes"
+    if not normalized_title:
+        raise SystemExit(
+            f"Issue title is required for phase {phase.upper()} delivery metadata. "
+            "Fallback commit/PR titles are disabled by policy."
+        )
+    phase_display = PHASE_DISPLAY_NAME_MAP.get(phase, f"Phase {phase}")
+    pr_title_tail = normalized_title[:120]
+    commit_title_tail = normalized_title[:72]
+    commit_message = f"phase:{phase} issue #{issue}: {commit_title_tail}"
     commit_result = subprocess.run(
         ["git", "commit", "-m", commit_message],
         cwd=local_path,
@@ -499,6 +603,7 @@ def finalize_phase_delivery(
     if push_result.returncode != 0:
         raise SystemExit(
             f"Failed to push branch '{branch}' for phase {phase.upper()} delivery.\n"
+            "Human intervention required; automatic rebase/retry is disabled by policy.\n"
             f"stdout:\n{push_result.stdout}\n"
             f"stderr:\n{push_result.stderr}"
         )
@@ -557,7 +662,7 @@ def finalize_phase_delivery(
         )
     pr_payload = json.loads(pr_lookup_result.stdout or "[]")
     pr_url = ""
-    pr_title = f"Issue #{issue}: {pr_title_tail}"
+    pr_title = f"Issue #{issue} [{phase_display}]: {pr_title_tail}"
     if isinstance(pr_payload, list) and pr_payload:
         first = pr_payload[0]
         if isinstance(first, dict):
@@ -567,7 +672,7 @@ def finalize_phase_delivery(
         pr_body = (
             f"Automated phase delivery PR for issue #{issue}.\n\n"
             f"Branch: `{branch}`\n"
-            f"Phase: `{phase}`\n\n"
+            f"Phase: `{phase}` ({phase_display})\n\n"
             f"Closes #{issue}"
         )
         pr_create_result = subprocess.run(
@@ -624,13 +729,16 @@ def finalize_phase_delivery(
     changed_files = [line.strip() for line in changed_files_result.stdout.splitlines() if line.strip()]
 
     files_block = "\n".join(f"- `{path}`" for path in changed_files) if changed_files else "- `(no file list available)`"
+    file_count = len(changed_files)
     return (
         "Implementation delivery summary:\n\n"
         f"- Phase: `{phase}`\n"
+        f"- Phase name: `{phase_display}`\n"
         f"- Branch: `{branch}`\n"
         f"- PR: {pr_url}\n"
         f"- Commit: `{short_sha}`\n"
-        f"- Commit message: `{commit_message}`\n\n"
+        f"- Commit message: `{commit_message}`\n"
+        f"- Changed files count: `{file_count}`\n\n"
         "Changed files:\n"
         f"{files_block}"
     )

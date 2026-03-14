@@ -100,6 +100,8 @@ python trigger.py --label <label> --issue <issue_number>
 ```bash
 cd openhands-swarm
 python trigger.py --label phase:keter --issue 123
+# preview-only mode (no OpenHands execution, no GitHub mutations)
+python trigger.py --label phase:keter --issue 123 --manual
 # or
 ./run_phase.sh 1 "issue context here"
 ```

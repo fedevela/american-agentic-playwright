@@ -15,6 +15,7 @@ from trigger_workflow.router import (
     execute_comment_phase_handoff,
     execute_tiferet_specification_phase,
     run_labeled_issue_phase,
+    run_labeled_issue_phase_with_mode,
 )
 
 
@@ -51,7 +52,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         )
 
         log_multiline_mock.assert_called_once_with("Generated comment", "Line one\nLine two")
-        self.assertEqual(run_openhands_for_comment_mock.call_args.kwargs["session_scope"], "")
+        self.assertEqual(run_openhands_for_comment_mock.call_args.kwargs["session_scope"], "phase-1")
 
     @patch("trigger_workflow.router.post_issue_comment")
     @patch("trigger_workflow.router.remove_issue_label")
@@ -119,7 +120,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(run_openhands_for_json_mock.call_args.kwargs["session_scope"], "")
+        self.assertEqual(run_openhands_for_json_mock.call_args.kwargs["session_scope"], "phase-4")
         create_issue_branches_for_child_issues_mock.assert_called_once_with("owner/repo", [101])
         remove_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:tiferet")
 
@@ -145,7 +146,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(run_openhands_task_mock.call_args.kwargs["session_scope"], "")
+        self.assertEqual(run_openhands_task_mock.call_args.kwargs["session_scope"], "phase-5")
         finalize_phase_delivery_mock.assert_called_once_with(
             repo="owner/repo",
             issue=55,
@@ -243,6 +244,89 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         self.assertEqual(exc.exception.code, 1)
         log_error_mock.assert_called_once()
         self.assertIn("is not labeled 'phase:chesed'", log_error_mock.call_args.args[0])
+
+    @patch("trigger_workflow.router.preview_phase_execution_plan")
+    @patch("trigger_workflow.router.execute_implementation_phase_task")
+    @patch("trigger_workflow.router.execute_tiferet_specification_phase")
+    @patch("trigger_workflow.router.execute_comment_phase_handoff")
+    @patch("trigger_workflow.router.fetch_issue_data")
+    @patch("trigger_workflow.router.read_microagent_for_label")
+    @patch("trigger_workflow.router.ensure_phase_labels")
+    def test_manual_mode_routes_to_preview_only_without_execution_or_label_sync(
+        self,
+        ensure_phase_labels_mock,
+        read_microagent_for_label_mock,
+        fetch_issue_data_mock,
+        execute_comment_phase_handoff_mock,
+        execute_tiferet_specification_phase_mock,
+        execute_implementation_phase_task_mock,
+        preview_phase_execution_plan_mock,
+    ) -> None:
+        read_microagent_for_label_mock.return_value = "prompt"
+        fetch_issue_data_mock.return_value = {
+            "title": "Issue",
+            "labels": [{"name": "phase:chesed"}],
+            "comments": [],
+        }
+
+        run_labeled_issue_phase_with_mode(label="phase:chesed", issue=55, repo="owner/repo", manual=True)
+
+        ensure_phase_labels_mock.assert_not_called()
+        preview_phase_execution_plan_mock.assert_called_once()
+        execute_comment_phase_handoff_mock.assert_not_called()
+        execute_tiferet_specification_phase_mock.assert_not_called()
+        execute_implementation_phase_task_mock.assert_not_called()
+
+    @patch("trigger_workflow.router.preview_phase_execution_plan")
+    @patch("trigger_workflow.router.fetch_issue_data")
+    @patch("trigger_workflow.router.read_microagent_for_label")
+    @patch("trigger_workflow.router.ensure_phase_labels")
+    def test_manual_mode_forces_requested_label_even_if_issue_labels_do_not_match(
+        self,
+        ensure_phase_labels_mock,
+        read_microagent_for_label_mock,
+        fetch_issue_data_mock,
+        preview_phase_execution_plan_mock,
+    ) -> None:
+        read_microagent_for_label_mock.return_value = "prompt"
+        fetch_issue_data_mock.return_value = {
+            "title": "Issue",
+            "labels": [{"name": "phase:hod"}],
+            "comments": [],
+        }
+
+        run_labeled_issue_phase_with_mode(label="phase:tiferet", issue=55, repo="owner/repo", manual=True)
+
+        ensure_phase_labels_mock.assert_not_called()
+        preview_phase_execution_plan_mock.assert_called_once()
+
+    @patch("trigger_workflow.router.log_multiline")
+    @patch("trigger_workflow.router.log_info")
+    @patch("trigger_workflow.router.build_phase_execution_prompt", return_value=("PROMPT-CONTENT", ""))
+    def test_manual_preview_logs_prompt_and_planned_actions_for_implementation(
+        self,
+        build_phase_execution_prompt_mock,
+        log_info_mock,
+        log_multiline_mock,
+    ) -> None:
+        del log_info_mock
+        request = PhaseExecutionRequest(
+            label="phase:netzach",
+            issue=55,
+            repo="owner/repo",
+            microagent_content="prompt",
+            phase="5",
+            issue_data={"title": "Issue", "body": "Body", "comments": []},
+        )
+
+        from trigger_workflow.router import preview_phase_execution_plan
+
+        preview_phase_execution_plan(request)
+
+        build_phase_execution_prompt_mock.assert_called_once()
+        self.assertEqual(log_multiline_mock.call_args_list[0].args[0], "Manual mode prompt for OpenHands (implementation)")
+        self.assertEqual(log_multiline_mock.call_args_list[0].args[1], "PROMPT-CONTENT")
+        self.assertEqual(log_multiline_mock.call_args_list[1].args[0], "Manual mode planned actions")
 
 
 if __name__ == "__main__":

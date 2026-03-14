@@ -180,7 +180,9 @@ class OpenHandsRunnerTests(unittest.TestCase):
         del ensure_git_branch_mock
         del current_branch_mock
         local_path = Path("/tmp/particle-life-3d")
-        managed_path = Path("/tmp/openhands-repos/fedevela__particle-life-3d")
+        managed_path = Path(
+            "/Users/macbook/Documents/gitworkspace/openhands-swarm/.openhands/repos/fedevela__particle-life-3d"
+        )
         resolve_target_repo_config_mock.return_value = type(
             "Config",
             (),
@@ -249,6 +251,34 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertIn("is not a git checkout", str(exc.exception))
 
     @patch("trigger_workflow.openhands_runner.ensure_managed_repo_checkout")
+    @patch("trigger_workflow.openhands_runner.resolve_target_repo_config")
+    def test_prepare_openhands_run_context_errors_when_managed_checkout_path_is_not_openhands_clone(
+        self,
+        resolve_target_repo_config_mock,
+        ensure_managed_repo_checkout_mock,
+    ) -> None:
+        local_path = Path("/tmp/particle-life-3d")
+        wrong_managed_path = Path("/tmp/not-openhands-managed-repo")
+        resolve_target_repo_config_mock.return_value = type(
+            "Config",
+            (),
+            {"local_path": local_path, "main_branch": "main", "issue_branch_prefix": "issue/"},
+        )()
+        ensure_managed_repo_checkout_mock.return_value = wrong_managed_path
+
+        with patch.object(Path, "exists", autospec=True) as exists_mock:
+            exists_mock.side_effect = lambda path_obj: str(path_obj) in {
+                str(local_path),
+                str(local_path / ".git"),
+                str(wrong_managed_path),
+                str(wrong_managed_path / ".git"),
+            }
+            with self.assertRaises(SystemExit) as exc:
+                prepare_phase_execution_context("fedevela/particle-life-3d", "5", 21)
+
+        self.assertIn("managed checkout path mismatch", str(exc.exception))
+
+    @patch("trigger_workflow.openhands_runner.ensure_managed_repo_checkout")
     @patch("trigger_workflow.openhands_runner.current_branch", side_effect=["main", "main"])
     @patch("trigger_workflow.openhands_runner.ensure_git_branch")
     @patch("trigger_workflow.openhands_runner.resolve_phase_execution_branch", return_value="issue/21")
@@ -265,7 +295,9 @@ class OpenHandsRunnerTests(unittest.TestCase):
         del ensure_git_branch_mock
         del current_branch_mock
         local_path = Path("/tmp/particle-life-3d")
-        managed_path = Path("/tmp/openhands-repos/fedevela__particle-life-3d")
+        managed_path = Path(
+            "/Users/macbook/Documents/gitworkspace/openhands-swarm/.openhands/repos/fedevela__particle-life-3d"
+        )
         resolve_target_repo_config_mock.return_value = type(
             "Config",
             (),
@@ -285,24 +317,21 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("branch verification failed", str(exc.exception))
 
-    @patch("trigger_workflow.openhands_runner.extract_conversation_id", return_value="")
     @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner.subprocess.run")
+    @patch("trigger_workflow.openhands_runner._run_openhands_command")
     def test_run_openhands_uses_target_repo_cwd(
         self,
-        subprocess_run_mock,
+        run_openhands_command_mock,
         prepare_openhands_run_context_mock,
-        extract_conversation_id_mock,
     ) -> None:
         # Running in the target repo checkout is the key behavioral guarantee
         # here; the subprocess payload itself is otherwise unimportant.
-        del extract_conversation_id_mock
         target_path = Path("/tmp/particle-life-3d")
         prepare_openhands_run_context_mock.return_value = OpenHandsTargetContext(
             local_path=target_path,
             branch="main",
         )
-        subprocess_run_mock.return_value = subprocess.CompletedProcess(
+        run_openhands_command_mock.return_value = subprocess.CompletedProcess(
             args=["openhands"],
             returncode=0,
             stdout="Conversation ID: abc123\n",
@@ -311,8 +340,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         run_openhands("Test prompt", repo="fedevela/particle-life-3d", issue=21, phase="3")
 
-        subprocess_run_mock.assert_called_once()
-        self.assertEqual(subprocess_run_mock.call_args.kwargs["cwd"], target_path)
+        run_openhands_command_mock.assert_called_once()
+        self.assertEqual(run_openhands_command_mock.call_args.kwargs["cwd"], target_path)
 
     @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
     @patch("trigger_workflow.openhands_runner.subprocess.run")
@@ -349,7 +378,12 @@ class OpenHandsRunnerTests(unittest.TestCase):
             subprocess.CompletedProcess(args=["git", "show"], returncode=0, stdout="src/app.ts\n", stderr=""),
         ]
 
-        summary = finalize_phase_delivery(repo="fedevela/particle-life-3d", issue=21, phase="5")
+        summary = finalize_phase_delivery(
+            repo="fedevela/particle-life-3d",
+            issue=21,
+            phase="5",
+            issue_title="Example Delivery Title",
+        )
 
         self.assertIn("Branch: `issue/21`", summary)
         self.assertIn("PR: https://github.com/owner/repo/pull/21", summary)
@@ -400,6 +434,41 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
     @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
     @patch("trigger_workflow.openhands_runner.subprocess.run")
+    def test_finalize_phase_delivery_fails_fast_when_push_rejected_non_fast_forward(
+        self,
+        subprocess_run_mock,
+        prepare_phase_execution_context_mock,
+    ) -> None:
+        target_path = Path("/tmp/particle-life-3d")
+        prepare_phase_execution_context_mock.return_value = OpenHandsTargetContext(
+            local_path=target_path,
+            branch="issue/21",
+        )
+        subprocess_run_mock.side_effect = [
+            subprocess.CompletedProcess(args=["git", "status"], returncode=0, stdout=" M src/app.ts\n", stderr=""),
+            subprocess.CompletedProcess(args=["git", "add"], returncode=0, stdout="", stderr=""),
+            subprocess.CompletedProcess(args=["git", "commit"], returncode=0, stdout="[issue/21 abc123] msg", stderr=""),
+            subprocess.CompletedProcess(
+                args=["git", "push"],
+                returncode=1,
+                stdout="",
+                stderr="! [rejected] issue/21 -> issue/21 (fetch first)",
+            ),
+        ]
+
+        with self.assertRaises(SystemExit) as exc:
+            finalize_phase_delivery(
+                repo="fedevela/particle-life-3d",
+                issue=21,
+                phase="7",
+                issue_title="Example Delivery Title",
+            )
+
+        self.assertIn("Human intervention required", str(exc.exception))
+        self.assertEqual(subprocess_run_mock.call_count, 4)
+
+    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
+    @patch("trigger_workflow.openhands_runner.subprocess.run")
     def test_finalize_phase_delivery_fails_when_no_git_changes_exist(
         self,
         subprocess_run_mock,
@@ -419,23 +488,47 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("without repository changes", str(exc.exception))
 
-    @patch("trigger_workflow.openhands_runner.extract_conversation_id", return_value="")
     @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
     @patch("trigger_workflow.openhands_runner.subprocess.run")
-    def test_run_openhands_never_resumes_existing_conversation_for_same_repo_and_issue(
+    def test_finalize_phase_delivery_fails_when_issue_title_missing_and_fallbacks_disabled(
         self,
         subprocess_run_mock,
+        prepare_phase_execution_context_mock,
+    ) -> None:
+        target_path = Path("/tmp/particle-life-3d")
+        prepare_phase_execution_context_mock.return_value = OpenHandsTargetContext(
+            local_path=target_path,
+            branch="issue/21",
+        )
+        subprocess_run_mock.side_effect = [
+            subprocess.CompletedProcess(args=["git", "status"], returncode=0, stdout=" M src/app.ts\n", stderr=""),
+            subprocess.CompletedProcess(args=["git", "add"], returncode=0, stdout="", stderr=""),
+        ]
+
+        with self.assertRaises(SystemExit) as exc:
+            finalize_phase_delivery(
+                repo="fedevela/particle-life-3d",
+                issue=21,
+                phase="7",
+                issue_title="   ",
+            )
+
+        self.assertIn("Fallback commit/PR titles are disabled by policy", str(exc.exception))
+
+    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
+    @patch("trigger_workflow.openhands_runner._run_openhands_command")
+    def test_run_openhands_never_resumes_existing_conversation_for_same_repo_and_issue(
+        self,
+        run_openhands_command_mock,
         prepare_openhands_run_context_mock,
-        extract_conversation_id_mock,
     ) -> None:
         # Policy is stateless execution: every run starts a fresh conversation.
-        del extract_conversation_id_mock
         target_path = Path("/tmp/particle-life-3d")
         prepare_openhands_run_context_mock.return_value = OpenHandsTargetContext(
             local_path=target_path,
             branch="issue/21",
         )
-        subprocess_run_mock.return_value = subprocess.CompletedProcess(
+        run_openhands_command_mock.return_value = subprocess.CompletedProcess(
             args=["openhands"],
             returncode=0,
             stdout="",
@@ -444,26 +537,23 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         run_openhands("Test prompt", repo="fedevela/particle-life-3d", issue=21, phase="5")
 
-        command = subprocess_run_mock.call_args.args[0]
+        command = run_openhands_command_mock.call_args.args[0]
         self.assertNotIn("--resume", command)
 
-    @patch("trigger_workflow.openhands_runner.extract_conversation_id", return_value="")
     @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner.subprocess.run")
+    @patch("trigger_workflow.openhands_runner._run_openhands_command")
     def test_run_openhands_does_not_resume_when_phase_scope_is_set(
         self,
-        subprocess_run_mock,
+        run_openhands_command_mock,
         prepare_openhands_run_context_mock,
-        extract_conversation_id_mock,
     ) -> None:
         # Phase-scoped runs are also stateless under the global no-resume policy.
-        del extract_conversation_id_mock
         target_path = Path("/tmp/particle-life-3d")
         prepare_openhands_run_context_mock.return_value = OpenHandsTargetContext(
             local_path=target_path,
             branch="main",
         )
-        subprocess_run_mock.return_value = subprocess.CompletedProcess(
+        run_openhands_command_mock.return_value = subprocess.CompletedProcess(
             args=["openhands"],
             returncode=0,
             stdout="",
@@ -478,15 +568,15 @@ class OpenHandsRunnerTests(unittest.TestCase):
             session_scope="phase-2b",
         )
 
-        command = subprocess_run_mock.call_args.args[0]
+        command = run_openhands_command_mock.call_args.args[0]
         self.assertNotIn("--resume", command)
 
     @patch("trigger_workflow.openhands_runner.save_session_state")
     @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner.subprocess.run")
+    @patch("trigger_workflow.openhands_runner._run_openhands_command")
     def test_run_openhands_does_not_persist_conversation_id_under_repo_issue_key(
         self,
-        subprocess_run_mock,
+        run_openhands_command_mock,
         prepare_openhands_run_context_mock,
         save_session_state_mock,
     ) -> None:
@@ -495,7 +585,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
             local_path=target_path,
             branch="main",
         )
-        subprocess_run_mock.return_value = subprocess.CompletedProcess(
+        run_openhands_command_mock.return_value = subprocess.CompletedProcess(
             args=["openhands"],
             returncode=0,
             stdout="Conversation ID: conv-999\n",
@@ -508,10 +598,10 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
     @patch("trigger_workflow.openhands_runner.save_session_state")
     @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner.subprocess.run")
+    @patch("trigger_workflow.openhands_runner._run_openhands_command")
     def test_run_openhands_does_not_persist_conversation_id_under_phase_scoped_key(
         self,
-        subprocess_run_mock,
+        run_openhands_command_mock,
         prepare_openhands_run_context_mock,
         save_session_state_mock,
     ) -> None:
@@ -520,7 +610,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
             local_path=target_path,
             branch="main",
         )
-        subprocess_run_mock.return_value = subprocess.CompletedProcess(
+        run_openhands_command_mock.return_value = subprocess.CompletedProcess(
             args=["openhands"],
             returncode=0,
             stdout="Conversation ID: conv-phase\n",

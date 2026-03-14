@@ -324,6 +324,13 @@ def build_implementation_phase_prompt(
     issue_data: dict[str, Any],
 ) -> str:
     """Build the prompt for phases 5-9 implementation and validation work."""
+    terminal_discipline_requirements = [
+        "- Terminal discipline (mandatory): favor bounded, deterministic commands (`rg`, targeted paths) and avoid broad recursive scans from repo root.",
+        "- Exclude heavy/generated trees when searching (for example `node_modules`, `build`, `.git`) unless explicitly needed.",
+        "- Always constrain potentially long-running commands (path filters and/or explicit command timeouts).",
+        "- If terminal reports the previous command is still running and blocks new commands, immediately recover by interacting with the active process (`is_input=true`): first poll with empty input, then interrupt with `C-c` if needed, then continue with a narrower command.",
+        "- Do not loop on blocked terminal state; recover deterministically and proceed with code edits.",
+    ]
     phase_requirements: list[str] = []
     if phase == "7":
         phase_requirements = [
@@ -358,8 +365,9 @@ def build_implementation_phase_prompt(
         ]
 
     requirements_block = ""
-    if phase_requirements:
-        requirements_block = f"\n\nPhase-specific requirements:\n{chr(10).join(phase_requirements)}"
+    requirement_lines = [*terminal_discipline_requirements, *phase_requirements]
+    if requirement_lines:
+        requirements_block = f"\n\nPhase-specific requirements:\n{chr(10).join(requirement_lines)}"
 
     return f"""{strip_microagent(microagent)}
 

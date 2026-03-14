@@ -139,12 +139,27 @@ def execute_phase_with_needs_human_tagging(
 
 def run_labeled_issue_phase(label: Optional[str] = None, issue: Optional[int] = None, repo: Optional[str] = None) -> None:
     """Route the label to the correct phase workflow."""
+    run_labeled_issue_phase_with_mode(label=label, issue=issue, repo=repo, manual=False)
+
+
+def run_labeled_issue_phase_with_mode(
+    label: Optional[str] = None,
+    issue: Optional[int] = None,
+    repo: Optional[str] = None,
+    *,
+    manual: bool = False,
+) -> None:
+    """Route the label to the correct phase workflow with optional manual preview mode."""
     repo = repo or DEFAULT_REPO
     log_section("STARTING PHASE EXECUTION")
     log_info(f"Repository: {repo}")
 
-    log_step("Step 0: Ensuring canonical phase labels exist")
-    ensure_phase_labels(repo)
+    if manual:
+        log_step("Step 0: Manual mode enabled")
+        log_info("Skipping canonical phase label synchronization to avoid GitHub mutations")
+    else:
+        log_step("Step 0: Ensuring canonical phase labels exist")
+        ensure_phase_labels(repo)
 
     log_step("Step 1a: Resolving issue and label")
     if label is None:
@@ -183,22 +198,36 @@ def run_labeled_issue_phase(label: Optional[str] = None, issue: Optional[int] = 
     log_info(f"Current labels: {', '.join(label_names) if label_names else '(none)'}")
 
     if not issue_has_label(issue_data, label):
-        log_error(f"Issue #{issue} in {repo} is not labeled '{label}'. Skipping phase execution.")
-        raise SystemExit(1)
-    log_info("Label verification: PASSED")
+        if manual:
+            log_info(
+                f"Manual mode label override: issue #{issue} is not labeled '{label}', "
+                "but continuing with the requested label for preview."
+            )
+        else:
+            log_error(f"Issue #{issue} in {repo} is not labeled '{label}'. Skipping phase execution.")
+            raise SystemExit(1)
+    else:
+        log_info("Label verification: PASSED")
+
+    request = PhaseExecutionRequest(
+        label=label,
+        issue=issue,
+        repo=repo,
+        microagent_content=microagent_content,
+        phase=phase,
+        issue_data=issue_data,
+    )
 
     log_step("Step 4: Executing phase workflow")
+    if manual:
+        log_info("Manual mode: previewing prompt and planned actions only")
+        preview_phase_execution_plan(request)
+        return
+
     if phase in DISCUSSION_PHASES:
         log_info(f"Running discussion workflow for phase {phase.upper()}")
         execute_phase_with_needs_human_tagging(
-            PhaseExecutionRequest(
-                label=label,
-                issue=issue,
-                repo=repo,
-                microagent_content=microagent_content,
-                phase=phase,
-                issue_data=issue_data,
-            ),
+            request,
             execute_comment_phase_handoff,
         )
         return
@@ -206,28 +235,67 @@ def run_labeled_issue_phase(label: Optional[str] = None, issue: Optional[int] = 
     if phase == SPECIFICATION_PHASE:
         log_info("Running specification workflow for phase 4")
         execute_phase_with_needs_human_tagging(
-            PhaseExecutionRequest(
-                label=label,
-                issue=issue,
-                repo=repo,
-                microagent_content=microagent_content,
-                phase=phase,
-                issue_data=issue_data,
-            ),
+            request,
             execute_tiferet_specification_phase,
         )
         return
 
     log_info(f"Running implementation workflow for phase {phase.upper()}")
-    execute_implementation_phase_task(
-        PhaseExecutionRequest(
-            label=label,
-            issue=issue,
-            repo=repo,
-            microagent_content=microagent_content,
-            phase=phase,
-            issue_data=issue_data,
+    execute_implementation_phase_task(request)
+
+
+def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
+    """Render manual-mode instructions without running OpenHands or mutating GitHub."""
+    phase = request.phase
+    if phase in DISCUSSION_PHASES:
+        prompt, session_scope = build_phase_execution_prompt(request, build_comment_phase_prompt)
+        log_multiline("Manual mode prompt for OpenHands (discussion)", prompt)
+        log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
+        log_multiline(
+            "Manual mode planned actions",
+            "\n".join(
+                [
+                    "1. Run OpenHands with the prompt above and capture the final assistant message.",
+                    "2. Post that message to the issue as a phase comment wrapper.",
+                    "3. Advance the issue label to the next phase.",
+                ]
+            ),
         )
+        return
+
+    if phase == SPECIFICATION_PHASE:
+        prompt, session_scope = build_phase_execution_prompt(request, build_tiferet_specification_prompt)
+        log_multiline("Manual mode prompt for OpenHands (specification JSON)", prompt)
+        log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
+        log_multiline(
+            "Manual mode planned actions",
+            "\n".join(
+                [
+                    "1. Run OpenHands with the prompt above and capture the final assistant message as JSON.",
+                    "2. Validate JSON payload structure and requirement traceability.",
+                    "3. Post the parent phase comment from `payload.comment`.",
+                    "4. Create ordered child issues from `payload.sub_issues` and create child branches.",
+                    "5. Post the generated child issue summary comment.",
+                    "6. Remove the parent phase label from the parent issue.",
+                ]
+            ),
+        )
+        return
+
+    prompt, session_scope = build_phase_execution_prompt(request, build_implementation_phase_prompt)
+    log_multiline("Manual mode prompt for OpenHands (implementation)", prompt)
+    log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
+    log_multiline(
+        "Manual mode planned actions",
+        "\n".join(
+            [
+                "1. Run OpenHands with the prompt above on the resolved issue branch.",
+                "2. Run trigger validation flow for phases 6-9 (`typecheck -> build -> test`).",
+                "3. Finalize delivery (git add/commit/push and PR create/lookup).",
+                "4. Post the delivery summary as a wrapped phase comment.",
+                "5. Advance the issue label to the next phase.",
+            ]
+        ),
     )
 
 
@@ -343,7 +411,12 @@ def run_trigger_cli() -> None:
     parser.add_argument("--label", help="GitHub label triggering the phase")
     parser.add_argument("--issue", type=int, help="Issue number")
     parser.add_argument("--repo", help="Repository owner/repo")
+    parser.add_argument(
+        "--manual",
+        action="store_true",
+        help="Preview trigger prompt + algorithmic actions without running OpenHands or mutating GitHub",
+    )
     args = parser.parse_args()
 
-    run_labeled_issue_phase(args.label, args.issue, args.repo)
+    run_labeled_issue_phase_with_mode(args.label, args.issue, args.repo, manual=args.manual)
     log_section("PHASE EXECUTION COMPLETE")
