@@ -26,13 +26,14 @@ from .logging_utils import log_error, log_info, log_multiline
 MAX_VALIDATION_RETRIES = 3
 MAX_VALIDATION_ATTEMPTS = 1 + MAX_VALIDATION_RETRIES
 TEST_OUTPUT_MAX_CHARS = 12000
-VALIDATION_PHASES = {"6", "7", "8", "9"}
+VALIDATION_PHASES = set(IMPLEMENTATION_PHASES)
 VALIDATION_COMMANDS = (
     ["npm", "run", "typecheck"],
     ["npm", "run", "build"],
     ["npm", "run", "test"],
+    ["npm", "run", "tests:e2e"],
 )
-VALIDATION_COMMAND_CONTRACT = "`npm run typecheck` -> `npm run build` -> `npm run test`"
+VALIDATION_COMMAND_CONTRACT = "`npm run typecheck` -> `npm run build` -> `npm run test` -> `npm run tests:e2e`"
 OPENHANDS_HEARTBEAT_SECONDS = 15
 OPENHANDS_RUN_TIMEOUT_SECONDS = 600
 
@@ -1032,7 +1033,9 @@ def run_openhands_implementation_phase(
             log_info("OpenHands run completed with no parsed assistant message (raw output suppressed).")
 
         if phase not in VALIDATION_PHASES:
-            log_info(f"Skipping automated validation for phase {phase}; validation is reserved for phases 6 through 9.")
+            log_info(
+                f"Skipping automated validation for phase {phase}; validation is reserved for phases 5 through 9."
+            )
             print("\nAgent execution complete.")
             return
 

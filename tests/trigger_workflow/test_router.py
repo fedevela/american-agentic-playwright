@@ -14,6 +14,8 @@ from trigger_workflow.router import (
     execute_implementation_phase_task,
     execute_comment_phase_handoff,
     execute_tiferet_specification_phase,
+    resolve_phase_execution_request,
+    render_prompt_only_output,
     run_labeled_issue_phase,
     run_labeled_issue_phase_with_mode,
 )
@@ -327,6 +329,83 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         self.assertEqual(log_multiline_mock.call_args_list[0].args[0], "Manual mode prompt for OpenHands (implementation)")
         self.assertEqual(log_multiline_mock.call_args_list[0].args[1], "PROMPT-CONTENT")
         self.assertEqual(log_multiline_mock.call_args_list[1].args[0], "Manual mode planned actions")
+
+    def test_render_prompt_only_output_for_implementation_includes_delivery_steps(self) -> None:
+        request = PhaseExecutionRequest(
+            label="phase:hod",
+            issue=32,
+            repo="owner/repo",
+            microagent_content="prompt",
+            phase="6",
+            issue_data={"title": "Issue", "body": "Body", "comments": []},
+        )
+
+        rendered = render_prompt_only_output(request, "PROMPT-CONTENT")
+
+        self.assertIn("PROMPT-CONTENT", rendered)
+        self.assertIn("Prompt-only planned actions:", rendered)
+        self.assertIn("Generate a commit message", rendered)
+        self.assertIn("phase:6 issue #32", rendered)
+        self.assertIn("Generate a phase delivery comment body", rendered)
+        self.assertIn("Commit and push the branch updates.", rendered)
+        self.assertIn("Post the delivery comment to the issue as a wrapped phase comment.", rendered)
+
+    def test_render_prompt_only_output_for_discussion_preserves_discussion_actions(self) -> None:
+        request = PhaseExecutionRequest(
+            label="phase:keter",
+            issue=10,
+            repo="owner/repo",
+            microagent_content="prompt",
+            phase="1",
+            issue_data={"title": "Issue", "body": "Body", "comments": []},
+        )
+
+        rendered = render_prompt_only_output(request, "PROMPT-CONTENT")
+
+        self.assertIn("Run OpenHands with the prompt above and capture the final assistant message.", rendered)
+        self.assertIn("Post that message to the issue as a phase comment wrapper.", rendered)
+
+    @patch("trigger_workflow.router.fetch_issue_data")
+    @patch("trigger_workflow.router.read_microagent_for_label")
+    def test_resolve_phase_execution_request_can_include_or_exclude_base_persona(
+        self,
+        read_microagent_for_label_mock,
+        fetch_issue_data_mock,
+    ) -> None:
+        read_microagent_for_label_mock.return_value = "prompt"
+        fetch_issue_data_mock.return_value = {
+            "title": "Issue",
+            "labels": [{"name": "phase:yesod-orchestration"}],
+            "comments": [],
+        }
+
+        resolve_phase_execution_request(
+            label="phase:yesod-orchestration",
+            issue=32,
+            repo="owner/repo",
+            manual=True,
+            include_base_persona=False,
+        )
+
+        read_microagent_for_label_mock.assert_called_once_with(
+            "phase:yesod-orchestration",
+            "7",
+            include_base_persona=False,
+        )
+
+        read_microagent_for_label_mock.reset_mock()
+        resolve_phase_execution_request(
+            label="phase:yesod-orchestration",
+            issue=32,
+            repo="owner/repo",
+            manual=True,
+            include_base_persona=True,
+        )
+        read_microagent_for_label_mock.assert_called_once_with(
+            "phase:yesod-orchestration",
+            "7",
+            include_base_persona=True,
+        )
 
 
 if __name__ == "__main__":

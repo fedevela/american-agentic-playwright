@@ -192,6 +192,7 @@ def resolve_phase_execution_request(
     repo: Optional[str] = None,
     *,
     manual: bool = False,
+    include_base_persona: bool = True,
 ) -> PhaseExecutionRequest:
     """Resolve and validate issue/label context into a reusable phase execution request."""
     repo = repo or DEFAULT_REPO
@@ -232,7 +233,7 @@ def resolve_phase_execution_request(
         log_info("Next: Final phase (no further handoff)")
 
     log_step("Step 2: Reading microagent prompt")
-    microagent_content = read_microagent_for_label(label, phase)
+    microagent_content = read_microagent_for_label(label, phase, include_base_persona=include_base_persona)
     log_info(f"Microagent prompt loaded ({len(microagent_content)} bytes)")
 
     log_step("Step 3: Fetching issue data from GitHub")
@@ -289,6 +290,42 @@ def build_phase_prompt_for_issue(
     )
     prompt, _ = build_phase_execution_prompt(request, select_phase_prompt_builder(request.phase))
     return prompt
+
+
+def render_prompt_only_output(request: PhaseExecutionRequest, prompt: str) -> str:
+    """Return prompt-only output including next-action instructions by phase family."""
+    if request.phase in DISCUSSION_PHASES:
+        actions = [
+            "1. Run OpenHands with the prompt above and capture the final assistant message.",
+            "2. Post that message to the issue as a phase comment wrapper.",
+            "3. Advance the issue label to the next phase.",
+        ]
+    elif request.phase == SPECIFICATION_PHASE:
+        actions = [
+            "1. Run OpenHands with the prompt above and capture the final assistant message as JSON.",
+            "2. Validate JSON payload structure and requirement traceability.",
+            "3. Post the parent phase comment from `payload.comment`.",
+            "4. Create ordered child issues from `payload.sub_issues` and create child branches.",
+            "5. Post the generated child issue summary comment.",
+            "6. Remove the parent phase label from the parent issue.",
+        ]
+    else:
+        actions = [
+            "1. Run OpenHands with the prompt above on the resolved issue branch.",
+            "2. Generate a commit message and keep the trigger format: "
+            f"`phase:{request.phase} issue #{request.issue}: <short summary>`.",
+            "3. Generate a phase delivery comment body summarizing changes and validation.",
+            "4. Commit and push the branch updates.",
+            "5. Post the delivery comment to the issue as a wrapped phase comment.",
+            "6. Advance the issue label to the next phase.",
+        ]
+
+    return "\n\n".join(
+        [
+            prompt,
+            "Prompt-only planned actions:\n" + "\n".join(actions),
+        ]
+    )
 
 
 def label_for_phase_id(phase: str) -> str:
@@ -484,13 +521,15 @@ def run_trigger_cli() -> None:
 
     if args.prompt_only:
         with redirect_stdout(io.StringIO()):
-            prompt = build_phase_prompt_for_issue(
+            request = resolve_phase_execution_request(
                 label=resolved_label,
                 issue=args.issue,
                 repo=args.repo,
                 manual=True,
+                include_base_persona=True,
             )
-        print(prompt)
+            prompt, _ = build_phase_execution_prompt(request, select_phase_prompt_builder(request.phase))
+        print(render_prompt_only_output(request, prompt))
         return
 
     log_section("OPENHANDS SWARM PHASE ROUTER")

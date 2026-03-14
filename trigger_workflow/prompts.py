@@ -34,21 +34,22 @@ def read_required_text_file(path: Path, *, missing_message: str, log_message: st
     return path.read_text().strip()
 
 
-def read_microagent_for_label(label: str, phase: str | None) -> str:
+def read_microagent_for_label(label: str, phase: str | None, *, include_base_persona: bool = True) -> str:
     """Build the effective phase prompt from Daneel, the phase persona, and the microagent."""
     if not phase:
         raise SystemExit(f"Cannot load persona stack for label '{label}' without a resolved phase id.")
 
     sections: list[str] = []
 
-    base_persona_path = PERSONAS_DIR / BASE_PERSONA_FILE
-    sections.append(
-        read_required_text_file(
-            base_persona_path,
-            missing_message=f"Base persona file is missing: {base_persona_path.name}",
-            log_message=f"Including base persona: {base_persona_path.name}",
+    if include_base_persona:
+        base_persona_path = PERSONAS_DIR / BASE_PERSONA_FILE
+        sections.append(
+            read_required_text_file(
+                base_persona_path,
+                missing_message=f"Base persona file is missing: {base_persona_path.name}",
+                log_message=f"Including base persona: {base_persona_path.name}",
+            )
         )
-    )
 
     persona_filename = PERSONA_FILE_MAP.get(phase)
     if not persona_filename:

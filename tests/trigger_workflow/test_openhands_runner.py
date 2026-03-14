@@ -641,6 +641,12 @@ class OpenHandsRunnerTests(unittest.TestCase):
             stderr="",
         )
         run_phase_tests_mock.return_value = subprocess.CompletedProcess(
+            args=["npm", "run", "tests:e2e"],
+            returncode=0,
+            stdout="tests ok",
+            stderr="",
+        )
+        run_phase_tests_mock.return_value = subprocess.CompletedProcess(
             args=["npm", "run", "test"],
             returncode=0,
             stdout="tests ok",
@@ -756,7 +762,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
     @patch("trigger_workflow.openhands_runner.run_phase_tests")
     @patch("trigger_workflow.openhands_runner.run_openhands")
-    def test_run_openhands_implementation_phase_skips_validation_for_phase_5(
+    def test_run_openhands_implementation_phase_validates_for_phase_5(
         self,
         run_openhands_mock,
         run_phase_tests_mock,
@@ -765,6 +771,12 @@ class OpenHandsRunnerTests(unittest.TestCase):
             args=["openhands"],
             returncode=0,
             stdout="ok",
+            stderr="",
+        )
+        run_phase_tests_mock.return_value = subprocess.CompletedProcess(
+            args=["npm", "run", "tests:e2e"],
+            returncode=0,
+            stdout="tests ok",
             stderr="",
         )
 
@@ -776,7 +788,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         )
 
         run_openhands_mock.assert_called_once()
-        run_phase_tests_mock.assert_not_called()
+        run_phase_tests_mock.assert_called_once()
 
 
 if __name__ == "__main__":
