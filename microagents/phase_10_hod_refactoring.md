@@ -61,15 +61,18 @@ OPERATING RULES
    - add tests when a new boundary or contract needs proof
    - add edge-case tests following existing repository conventions
    - modify tests when names or seams become clearer
-   - remove tests only when they cover minor obsolete or redundant edge cases
+   - remove tests when they are traceability-only scaffolding or otherwise obsolete/redundant and meaningful behavior coverage remains
 13. Do not damage the main test corpus:
    - preserve the tests that anchor core workflow behavior
    - preserve the tests that define the system's architectural contracts
    - preserve the tests that guard traceability and phase behavior
 14. Treat E2E tests as executable business narrative:
    - ensure high-level test names/scenarios read as domain process outcomes
-   - validate business intent and end outcomes rather than incidental technical paths
+   - ensure each critical business process is embodied by at least one end-to-end scenario from trigger to outcome
+   - validate process intent and end outcomes rather than incidental technical paths
    - keep E2E language aligned with AGENTS.md and requirement wording
+   - when code structure changes, update E2E tests so process representation remains accurate and readable
+   - explicitly evaluate traceability-only E2E specs for deletion or consolidation (for example `tests/random-walk-world.traceability.phase-7.spec.ts`) when they no longer protect distinct behavior
 15. Keep comments rare and purposeful. If a name or boundary can carry the meaning, prefer that over prose.
 16. Keep the system runnable and verifiable at every step.
 
@@ -81,7 +84,11 @@ EXECUTION PASSES (MANDATORY)
 5. LLM Pass B (Messy Folder Decomposition): split overloaded or mixed-responsibility folders into clearer folder/component boundaries aligned to domain nouns and verbs.
 6. Run the full test suite and make it pass.
 7. Add edge-case tests that follow existing repository testing conventions and keep domain-readable naming.
-8. Run the full test suite again and ensure it passes before finalizing.
+8. Perform an E2E process-audit pass:
+   - verify core workflows are represented as executable E2E scenarios
+   - verify scenario names communicate process semantics, not only technical mechanics
+   - add or refine E2E scenarios when process coverage is implicit or fragmented
+9. Run the full test suite again and ensure it passes before finalizing.
 
 REFACTORING PRIORITIES
 1. Correctness and contract preservation.
@@ -89,7 +96,8 @@ REFACTORING PRIORITIES
 3. DRY orchestration flow.
 4. SOLID responsibility boundaries.
 5. Tests that express the intended seams of the design.
-6. Reducing dependence on markdown explanation by making the code self-describing.
+6. E2E scenarios that embody the system's real operating processes.
+7. Reducing dependence on markdown explanation by making the code self-describing.
 
 PATTERN TO FOLLOW
 - If the design is hard to see, articulate it clearly.
@@ -106,6 +114,7 @@ PATTERN TO FOLLOW
 TEST DISCIPLINE
 - Main corpus tests are contracts, not cleanup targets.
 - Minor edge-case tests may change if the refactor makes them redundant, misleading, or too coupled to the old structure.
+- Traceability-only tests may be removed when they duplicate stronger architecture/runtime coverage and no phase-critical contract is lost.
 - Any deleted test should be replaced by clearer coverage if it was guarding meaningful behavior.
 - Test changes should follow the architecture, not lead it blindly.
 
@@ -113,7 +122,7 @@ ANTI-GOALS
 - Do not perform abstraction theater.
 - Do not invent new workflow phases or responsibilities.
 - Do not hide important orchestration inside vague helpers.
-- Do not paraphrase or weaken traceability-critical structures.
+- Do not paraphrase or weaken traceability-critical structures that still enforce required contracts.
 - Do not leave stale names in tests after renaming production code.
 - Do not preserve markdown architecture as the primary source of truth when executable code can carry it.
 - Do not prune important core tests in the name of tidiness.
