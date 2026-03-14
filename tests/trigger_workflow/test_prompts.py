@@ -43,12 +43,14 @@ class PhaseWorkflowNamingTests(unittest.TestCase):
         self.assertEqual(determine_phase_from_label("phase:gevurah"), "3")
         self.assertEqual(determine_phase_from_label("phase:tiferet"), "4")
         self.assertEqual(determine_phase_from_label("phase:malkhut"), "9")
+        self.assertEqual(determine_phase_from_label("phase:hod-refactoring"), "12")
 
     def test_branch_name_for_phase_uses_main_before_implementation_and_issue_branch_after(self) -> None:
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "2b", 12), "main")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "4", 12), "main")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "5", 12), "issue/12")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "9", 12), "issue/12")
+        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "12", 12), "issue/12")
 
     def test_session_scope_for_phase_isolated_for_all_phases(self) -> None:
         self.assertEqual(conversation_scope_for_phase("1"), "phase-1")
@@ -58,6 +60,7 @@ class PhaseWorkflowNamingTests(unittest.TestCase):
         self.assertEqual(conversation_scope_for_phase("4"), "phase-4")
         self.assertEqual(conversation_scope_for_phase("5"), "phase-5")
         self.assertEqual(conversation_scope_for_phase("9"), "phase-9")
+        self.assertEqual(conversation_scope_for_phase("12"), "phase-12")
 
 
 class PromptBuilderTests(unittest.TestCase):
@@ -258,9 +261,15 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("Phase-specific requirements:", prompt)
         self.assertIn("Deliver architecture artifacts as code changes, not analysis-only notes", prompt)
         self.assertIn("deterministic artifact-discovery pass", prompt)
-        self.assertIn("smallest coherent architecture artifact set that fully covers canonical requirement IDs", prompt)
-        self.assertIn("leave a non-empty git diff with concrete architectural edits", prompt)
-        self.assertIn("explicit completion gate before finishing", prompt)
+
+    def test_phase_12_refactorer_persona_stack_is_resolvable(self) -> None:
+        content = read_microagent_for_label("phase:hod-refactoring", "12")
+        self.assertIn("expanded through Hod", content)
+        self.assertIn("ROLE: Refactoring agent", content)
+        self.assertIn("HOD REFACTORER", content)
+        self.assertIn("Refactor duplicated orchestration into a single trusted path", content)
+        self.assertIn("Preserve critical contracts exactly", content)
+        self.assertIn("keep the system runnable and verifiable at every step", content.lower())
 
     def test_phase_8_prompt_enforces_deterministic_implementation_discovery_and_completion_gate(self) -> None:
         prompt = build_implementation_phase_prompt(

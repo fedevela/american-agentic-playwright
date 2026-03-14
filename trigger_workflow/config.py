@@ -18,8 +18,8 @@ class TargetRepoConfig:
     main_branch: str
     issue_branch_prefix: str = "issue/"
 
-# Canonical 9-phase workflow order:
-# 1 -> 2a -> 2b -> 2c -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
+# Canonical workflow order:
+# 1 -> 2a -> 2b -> 2c -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 (+ optional 12 refactoring phase)
 # Numeric Tree-of-Life positions:
 # 1=1, 2a=2, 2b=3, 2c=4, 3=5, 4=6, 5=7, 6=8, 7=9, 8=10, 9=11
 PHASE_DISPLAY_NAME_MAP = {
@@ -34,6 +34,7 @@ PHASE_DISPLAY_NAME_MAP = {
     "7": "Yesod-Orchestration",
     "8": "Yesod-Embodiment",
     "9": "Malkhut",
+    "12": "Hod-Refactoring",
 }
 
 PHASE_LABEL_METADATA = {
@@ -81,6 +82,10 @@ PHASE_LABEL_METADATA = {
         "description": "Phase 9 Malkhut: SPARC Completion",
         "color": "D1242F",
     },
+    "phase:hod-refactoring": {
+        "description": "Phase 12 Hod Refactoring: Structural Clarity",
+        "color": "1F6FEB",
+    },
     "phase:needsHuman": {
         "description": "Workflow halted: requires human intervention",
         "color": "B60205",
@@ -100,6 +105,7 @@ NEXT_LABEL_MAP = {
     "phase:yesod-orchestration": "phase:yesod-embodiment",
     "phase:yesod-embodiment": "phase:malkhut",
     "phase:malkhut": None,
+    "phase:hod-refactoring": None,
 }
 
 PHASE_LABELS = tuple(NEXT_LABEL_MAP.keys())
@@ -117,6 +123,7 @@ PERSONA_FILE_MAP = {
     "7": "yesod_integrationfoundation.md",
     "8": "yesod_transmissionembodiment.md",
     "9": "malkhut_completionsovereignty.md",
+    "12": "hod_refactoringstructuralclarity.md",
 }
 
 FUNCTIONAL_MICROAGENT_FILE_MAP = {
@@ -131,6 +138,7 @@ FUNCTIONAL_MICROAGENT_FILE_MAP = {
     "7": "phase_09_yesod_orchestration.md",
     "8": "phase_10_yesod_embodiment.md",
     "9": "phase_11_malkhut.md",
+    "12": "phase_12_hod_refactoring.md",
 }
 
 BASE_PERSONA_FILE = "daneel.md"
@@ -148,13 +156,14 @@ LABEL_PHASE_MAP = {
     "phase:yesod-orchestration": "7",
     "phase:yesod-embodiment": "8",
     "phase:malkhut": "9",
+    "phase:hod-refactoring": "12",
 }
 
 DISCUSSION_PHASES = {"1", "2a", "2b", "2c", "3"}
 KETER_DERIVED_PHASES = {"2a", "2b", "2c"}
 SPECIFICATION_PHASE = "4"
 PRE_IMPLEMENTATION_PHASES = DISCUSSION_PHASES | {SPECIFICATION_PHASE}
-IMPLEMENTATION_PHASES = {"5", "6", "7", "8", "9"}
+IMPLEMENTATION_PHASES = {"5", "6", "7", "8", "9", "12"}
 # Session policy: every phase run is conversation-isolated so no phase inherits
 # latent context from a previous phase execution.
 STRICTLY_INDEPENDENT_PHASES = set(PHASE_DISPLAY_NAME_MAP.keys())

@@ -495,7 +495,7 @@ def run_trigger_cli() -> None:
     """Main entry point."""
     parser = argparse.ArgumentParser(description="Trigger OpenHands / GitHub phase workflow")
     parser.add_argument("--label", help="GitHub label triggering the phase")
-    parser.add_argument("--phase", help="Canonical phase id (1, 2a, 2b, 2c, 3, 4, 5, 6, 7, 8, 9)")
+    parser.add_argument("--phase", help="Canonical phase id (1, 2a, 2b, 2c, 3, 4, 5, 6, 7, 8, 9, 12)")
     parser.add_argument("--issue", type=int, help="Issue number")
     parser.add_argument("--repo", help="Repository owner/repo")
     parser.add_argument(
