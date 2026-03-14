@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import io
+from contextlib import redirect_stdout
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from .config import (
     DEFAULT_REPO,
     DISCUSSION_PHASES,
+    LABEL_PHASE_MAP,
     MICROAGENTS_DIR,
     NEXT_LABEL_MAP,
     PHASE_DISPLAY_NAME_MAP,
@@ -150,6 +153,47 @@ def run_labeled_issue_phase_with_mode(
     manual: bool = False,
 ) -> None:
     """Route the label to the correct phase workflow with optional manual preview mode."""
+    request = resolve_phase_execution_request(
+        label=label,
+        issue=issue,
+        repo=repo,
+        manual=manual,
+    )
+
+    log_step("Step 4: Executing phase workflow")
+    if manual:
+        log_info("Manual mode: previewing prompt and planned actions only")
+        preview_phase_execution_plan(request)
+        return
+
+    if request.phase in DISCUSSION_PHASES:
+        log_info(f"Running discussion workflow for phase {request.phase.upper()}")
+        execute_phase_with_needs_human_tagging(
+            request,
+            execute_comment_phase_handoff,
+        )
+        return
+
+    if request.phase == SPECIFICATION_PHASE:
+        log_info("Running specification workflow for phase 4")
+        execute_phase_with_needs_human_tagging(
+            request,
+            execute_tiferet_specification_phase,
+        )
+        return
+
+    log_info(f"Running implementation workflow for phase {request.phase.upper()}")
+    execute_implementation_phase_task(request)
+
+
+def resolve_phase_execution_request(
+    label: Optional[str] = None,
+    issue: Optional[int] = None,
+    repo: Optional[str] = None,
+    *,
+    manual: bool = False,
+) -> PhaseExecutionRequest:
+    """Resolve and validate issue/label context into a reusable phase execution request."""
     repo = repo or DEFAULT_REPO
     log_section("STARTING PHASE EXECUTION")
     log_info(f"Repository: {repo}")
@@ -217,31 +261,43 @@ def run_labeled_issue_phase_with_mode(
         phase=phase,
         issue_data=issue_data,
     )
+    return request
 
-    log_step("Step 4: Executing phase workflow")
-    if manual:
-        log_info("Manual mode: previewing prompt and planned actions only")
-        preview_phase_execution_plan(request)
-        return
 
+def select_phase_prompt_builder(phase: str) -> Callable[..., str]:
+    """Resolve which prompt builder is used for the given phase family."""
     if phase in DISCUSSION_PHASES:
-        log_info(f"Running discussion workflow for phase {phase.upper()}")
-        execute_phase_with_needs_human_tagging(
-            request,
-            execute_comment_phase_handoff,
-        )
-        return
-
+        return build_comment_phase_prompt
     if phase == SPECIFICATION_PHASE:
-        log_info("Running specification workflow for phase 4")
-        execute_phase_with_needs_human_tagging(
-            request,
-            execute_tiferet_specification_phase,
-        )
-        return
+        return build_tiferet_specification_prompt
+    return build_implementation_phase_prompt
 
-    log_info(f"Running implementation workflow for phase {phase.upper()}")
-    execute_implementation_phase_task(request)
+
+def build_phase_prompt_for_issue(
+    label: Optional[str] = None,
+    issue: Optional[int] = None,
+    repo: Optional[str] = None,
+    *,
+    manual: bool = True,
+) -> str:
+    """Resolve issue context and return only the generated phase prompt text."""
+    request = resolve_phase_execution_request(
+        label=label,
+        issue=issue,
+        repo=repo,
+        manual=manual,
+    )
+    prompt, _ = build_phase_execution_prompt(request, select_phase_prompt_builder(request.phase))
+    return prompt
+
+
+def label_for_phase_id(phase: str) -> str:
+    """Resolve canonical label for a canonical phase id."""
+    normalized_phase = phase.strip().lower()
+    for label_name, phase_id in LABEL_PHASE_MAP.items():
+        if phase_id == normalized_phase:
+            return label_name
+    raise SystemExit(f"Unknown phase '{phase}'. Expected one of: {', '.join(sorted(set(LABEL_PHASE_MAP.values())))}.")
 
 
 def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
@@ -400,15 +456,9 @@ def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
 
 def run_trigger_cli() -> None:
     """Main entry point."""
-    log_section("OPENHANDS SWARM PHASE ROUTER")
-    log_info(f"Working directory: {WORKSPACE}")
-    log_info(f"Microagents directory: {MICROAGENTS_DIR}")
-    model_name, connection = resolve_openhands_model_connection()
-    log_info(f"OpenHands model connection: {connection}")
-    log_info(f"OpenHands model name: {model_name}")
-
     parser = argparse.ArgumentParser(description="Trigger OpenHands / GitHub phase workflow")
     parser.add_argument("--label", help="GitHub label triggering the phase")
+    parser.add_argument("--phase", help="Canonical phase id (1, 2a, 2b, 2c, 3, 4, 5, 6, 7, 8, 9)")
     parser.add_argument("--issue", type=int, help="Issue number")
     parser.add_argument("--repo", help="Repository owner/repo")
     parser.add_argument(
@@ -416,7 +466,39 @@ def run_trigger_cli() -> None:
         action="store_true",
         help="Preview trigger prompt + algorithmic actions without running OpenHands or mutating GitHub",
     )
+    parser.add_argument(
+        "--prompt-only",
+        action="store_true",
+        help="Return only the generated phase prompt text for the requested issue/label",
+    )
     args = parser.parse_args()
+    resolved_label = args.label
+    if args.phase:
+        phase_label = label_for_phase_id(args.phase)
+        if resolved_label and resolved_label != phase_label:
+            raise SystemExit(
+                f"Conflicting inputs: --label '{resolved_label}' does not match --phase '{args.phase}' "
+                f"(expected label '{phase_label}')."
+            )
+        resolved_label = phase_label
 
-    run_labeled_issue_phase_with_mode(args.label, args.issue, args.repo, manual=args.manual)
+    if args.prompt_only:
+        with redirect_stdout(io.StringIO()):
+            prompt = build_phase_prompt_for_issue(
+                label=resolved_label,
+                issue=args.issue,
+                repo=args.repo,
+                manual=True,
+            )
+        print(prompt)
+        return
+
+    log_section("OPENHANDS SWARM PHASE ROUTER")
+    log_info(f"Working directory: {WORKSPACE}")
+    log_info(f"Microagents directory: {MICROAGENTS_DIR}")
+    model_name, connection = resolve_openhands_model_connection()
+    log_info(f"OpenHands model connection: {connection}")
+    log_info(f"OpenHands model name: {model_name}")
+
+    run_labeled_issue_phase_with_mode(resolved_label, args.issue, args.repo, manual=args.manual)
     log_section("PHASE EXECUTION COMPLETE")
