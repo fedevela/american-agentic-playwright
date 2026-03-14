@@ -19,39 +19,69 @@ OPERATING MODEL
 4. Re-encode that understanding into the codebase itself.
 5. Remove the need for external explanation wherever executable structure can carry the same truth.
 
+LINGUISTIC MAPPING (ONTOLOGY CONTRACT)
+- Treat the codebase as a domain translation, not a technical artifact dump.
+- Model core domain entities as stable nouns (types/modules/objects) with clear ownership boundaries.
+- Model domain actions and process transitions as explicit verbs (functions/methods/use-cases).
+- Keep naming semantically aligned with AGENTS.md and requirement language so business description maps directly to code.
+
+SOLID AS TAXONOMY CONTRACT
+- SRP: each module/type should have one clear business responsibility.
+- OCP + DIP: isolate stable policy ("why"/intent) from volatile detail ("how"/mechanism) through explicit seams.
+- ISP: expose role-specific interfaces so each actor sees only the capabilities it needs.
+
 OPERATING RULES
 1. Preserve behavior unless the partner explicitly asks for a behavior change.
 2. Prefer names that reveal runtime role, workflow position, and responsibility.
 3. Treat architecture documents as scaffolding, not the final product, unless the partner explicitly wants them retained.
-4. Encode architecture in executable structure:
+4. Maintain AGENTS.md as a code-aligned operational map:
+   - create or update AGENTS.md when structural truth changes
+   - ensure AGENTS.md reflects current executable structure rather than aspirational prose
+   - keep AGENTS.md naming aligned with production/test naming
+5. Rename for consistency when clarity improves, and propagate renames across production code, tests, and AGENTS.md in the same change.
+6. Refactor duplicated orchestration and structure using DRY and SOLID boundaries while preserving behavior.
+7. Encode architecture in executable structure:
    - function names
    - type names
    - request/response objects
    - helper boundaries
    - module seams
    - test names
-5. Refactor duplicated orchestration into a single trusted path when the behavior is truly shared.
-6. Refactor toward single-responsibility boundaries; avoid abstractions that merely relocate confusion.
-7. Preserve critical contracts exactly:
+8. Preserve critical contracts exactly:
    - prompt contracts
    - validation contracts
    - traceability contracts
    - phase handoff contracts
    - CLI behavior
    - test-observed behavior
-8. Prefer explicit data shapes over repeated positional argument lists when multiple execution paths share the same runtime payload.
-9. Preserve readability of the main flow. Do not hide the architecture behind clever helper fragmentation.
-10. If a rename makes the architecture clearer, propagate it through all dependent code and tests in the same change.
-11. Use tests as part of the refactor surface:
+9. Prefer explicit data shapes over repeated positional argument lists when multiple execution paths share the same runtime payload.
+10. Preserve readability of the main flow. Do not hide the architecture behind clever helper fragmentation.
+11. If a rename makes the architecture clearer, propagate it through all dependent code and tests in the same change.
+12. Use tests as part of the refactor surface:
    - add tests when a new boundary or contract needs proof
+   - add edge-case tests following existing repository conventions
    - modify tests when names or seams become clearer
    - remove tests only when they cover minor obsolete or redundant edge cases
-12. Do not damage the main test corpus:
+13. Do not damage the main test corpus:
    - preserve the tests that anchor core workflow behavior
    - preserve the tests that define the system's architectural contracts
    - preserve the tests that guard traceability and phase behavior
-13. Keep comments rare and purposeful. If a name or boundary can carry the meaning, prefer that over prose.
-14. Keep the system runnable and verifiable at every step.
+14. Treat E2E tests as executable business narrative:
+   - ensure high-level test names/scenarios read as domain process outcomes
+   - validate business intent and end outcomes rather than incidental technical paths
+   - keep E2E language aligned with AGENTS.md and requirement wording
+15. Keep comments rare and purposeful. If a name or boundary can carry the meaning, prefer that over prose.
+16. Keep the system runnable and verifiable at every step.
+
+EXECUTION PASSES (MANDATORY)
+1. Create or update AGENTS.md so it reflects current codebase structure and contracts.
+2. Rename inconsistent symbols, modules, and tests so naming is coherent and aligned with AGENTS.md.
+3. Refactor structure for DRY and SOLID boundaries without changing intended behavior.
+4. LLM Pass A (Large File Decomposition): split oversized files into multiple focused modules/components and folders where appropriate, preserving behavior and naming traceability.
+5. LLM Pass B (Messy Folder Decomposition): split overloaded or mixed-responsibility folders into clearer folder/component boundaries aligned to domain nouns and verbs.
+6. Run the full test suite and make it pass.
+7. Add edge-case tests that follow existing repository testing conventions and keep domain-readable naming.
+8. Run the full test suite again and ensure it passes before finalizing.
 
 REFACTORING PRIORITIES
 1. Correctness and contract preservation.
@@ -90,6 +120,7 @@ ANTI-GOALS
 
 DELIVERABLE
 - Refactored code in which architecture is more visible through executable names and boundaries.
+- Updated AGENTS.md aligned to current executable structure and naming.
 - Updated tests that track the refactored seams and preserve behavior.
 - Minor test additions, modifications, or removals only where needed around edge-case coverage.
 - Only the minimum comments or external prose still necessary after the architecture has been poured back into the code.

@@ -14,6 +14,7 @@ from trigger_workflow.router import (
     execute_implementation_phase_task,
     execute_comment_phase_handoff,
     execute_tiferet_specification_phase,
+    label_for_phase_id,
     resolve_phase_execution_request,
     render_prompt_only_output,
     run_labeled_issue_phase,
@@ -406,6 +407,14 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             "7",
             include_base_persona=True,
         )
+
+    def test_label_for_phase_id_supports_phase_10_alias_to_phase_12(self) -> None:
+        self.assertEqual(label_for_phase_id("10"), "phase:hod-refactoring")
+
+    def test_label_for_phase_id_unknown_phase_lists_alias_hint(self) -> None:
+        with self.assertRaises(SystemExit) as exc:
+            label_for_phase_id("bogus")
+        self.assertIn("Aliases: 10 -> 12", str(exc.exception))
 
 
 if __name__ == "__main__":

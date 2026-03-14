@@ -267,7 +267,7 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("expanded through Hod", content)
         self.assertIn("ROLE: Refactoring agent", content)
         self.assertIn("HOD REFACTORER", content)
-        self.assertIn("Refactor duplicated orchestration into a single trusted path", content)
+        self.assertIn("Refactor duplicated orchestration and structure using DRY and SOLID boundaries", content)
         self.assertIn("Preserve critical contracts exactly", content)
         self.assertIn("keep the system runnable and verifiable at every step", content.lower())
 
