@@ -61,26 +61,27 @@ from .prompts import (
 )
 from .validation import validate_tiferet_specification_payload_structure
 
-def run_comment_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str) -> str:
+def run_comment_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> str:
     if RUNNER_TYPE == "gemini":
-        return run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
-    return run_openhands_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+        return run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
+    return run_openhands_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
 
-def run_json_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str) -> dict[str, Any]:
-    if RUNNER_TYPE == "gemini":
-        return run_gemini_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
-    return run_openhands_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
 
-def run_implementation_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str) -> None:
+def run_json_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> dict[str, Any]:
     if RUNNER_TYPE == "gemini":
-        run_gemini_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+        return run_gemini_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
+    return run_openhands_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
+
+def run_implementation_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> None:
+    if RUNNER_TYPE == "gemini":
+        run_gemini_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
     else:
-        run_openhands_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+        run_openhands_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
 
-def finalize_delivery(repo: str, issue: int, phase: str, issue_title: str) -> str:
+def finalize_delivery(repo: str, issue: int, phase: str, issue_title: str, issue_data: dict[str, Any] | None = None) -> str:
     if RUNNER_TYPE == "gemini":
-        return gemini_finalize_delivery(repo=repo, issue=issue, phase=phase, issue_title=issue_title)
-    return openhands_finalize_delivery(repo=repo, issue=issue, phase=phase, issue_title=issue_title)
+        return gemini_finalize_delivery(repo=repo, issue=issue, phase=phase, issue_title=issue_title, issue_data=issue_data)
+    return openhands_finalize_delivery(repo=repo, issue=issue, phase=phase, issue_title=issue_title, issue_data=issue_data)
 
 
 @dataclass(frozen=True)
@@ -462,6 +463,7 @@ def execute_comment_phase_handoff(request: PhaseExecutionRequest) -> None:
         issue=request.issue,
         phase=request.phase,
         session_scope=session_scope,
+        issue_data=request.issue_data,
     )
     log_info(f"Comment generated ({len(comment)} chars)")
     log_multiline("Generated comment", comment)
@@ -487,6 +489,7 @@ def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
         issue=request.issue,
         phase=request.phase,
         session_scope=session_scope,
+        issue_data=request.issue_data,
     )
     log_info("JSON payload received")
 
@@ -504,7 +507,7 @@ def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
     log_info(f"Created and linked {len(created)} child issues")
     child_issue_numbers = [int(item["number"]) for item in created]
     log_info("Creating child issue branches for downstream implementation phases...")
-    create_issue_branches_for_child_issues(request.repo, child_issue_numbers)
+    create_issue_branches_for_child_issues(request.repo, request.issue, child_issue_numbers)
     log_info(f"Created/verified {len(child_issue_numbers)} child issue branches")
 
     log_info("Posting summary comment...")
@@ -536,6 +539,7 @@ def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
         issue=request.issue,
         phase=request.phase,
         session_scope=session_scope,
+        issue_data=request.issue_data,
     )
     log_info("Agent execution complete")
     log_info("Finalizing git delivery (commit + push)...")
@@ -544,6 +548,7 @@ def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
         issue=request.issue,
         phase=request.phase,
         issue_title=str(request.issue_data.get("title") or ""),
+        issue_data=request.issue_data,
     )
     log_multiline("Delivery summary", delivery_summary)
     log_info("Posting delivery summary comment...")

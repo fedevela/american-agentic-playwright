@@ -120,11 +120,24 @@ def openhands_session_key(repo: str, issue: int, session_scope: str) -> str:
     return base_key if not session_scope else f"{base_key}:{session_scope}"
 
 
-def create_issue_branches_for_child_issues(repo: str, issue_numbers: list[int]) -> None:
-    """Create missing issue branches for Tiferet-created child issues in the managed checkout."""
-    from .runner_utils import ensure_git_branch, branch_exists, git_run
-    config, local_path = prepare_target_repo_checkout(repo)
-    ensure_git_branch(local_path, config.main_branch, base_branch=config.main_branch)
+def create_issue_branches_for_child_issues(repo: str, parent_issue: int, issue_numbers: list[int]) -> None:
+    """Create missing issue branches for Tiferet-created child issues, branching from the parent issue branch."""
+    from .runner_utils import ensure_git_branch, branch_exists, git_run, resolve_target_repo_config
+    config = resolve_target_repo_config(repo)
+    _, local_path = prepare_target_repo_checkout(repo)
+    
+    # The parent issue branch name (e.g. issue/51)
+    parent_branch = f"{config.issue_branch_prefix}{parent_issue}"
+    
+    if not branch_exists(local_path, parent_branch):
+        log_info(f"Parent branch '{parent_branch}' does not exist; creating it from '{config.main_branch}'.")
+        result = git_run(local_path, ["switch", "-c", parent_branch, config.main_branch], capture_output=True)
+        if result.returncode != 0:
+            raise SystemExit(f"Failed to create missing parent branch '{parent_branch}' from '{config.main_branch}'.")
+        log_info(f"Pushing new parent branch '{parent_branch}' to origin...")
+        git_run(local_path, ["push", "origin", parent_branch])
+
+    ensure_git_branch(local_path, parent_branch, base_branch=config.main_branch)
 
     for issue_number in issue_numbers:
         branch_name = f"{config.issue_branch_prefix}{issue_number}"
@@ -132,17 +145,15 @@ def create_issue_branches_for_child_issues(repo: str, issue_numbers: list[int]) 
             log_info(f"Issue branch already exists: {branch_name}")
             continue
 
-        # Always branch from the configured main branch for deterministic child issue roots.
-        ensure_git_branch(local_path, config.main_branch, base_branch=config.main_branch)
-        log_info(f"Creating child issue branch '{branch_name}' from '{config.main_branch}'")
-        result = git_run(local_path, ["switch", "-c", branch_name, config.main_branch], capture_output=True)
+        log_info(f"Creating child issue branch '{branch_name}' from '{parent_branch}'")
+        result = git_run(local_path, ["switch", "-c", branch_name, parent_branch], capture_output=True)
         if result.returncode != 0:
             raise SystemExit(
-                f"Failed to create child issue branch '{branch_name}' from '{config.main_branch}' "
+                f"Failed to create child issue branch '{branch_name}' from '{parent_branch}' "
                 f"in {local_path}."
             )
 
-    ensure_git_branch(local_path, config.main_branch, base_branch=config.main_branch)
+    ensure_git_branch(local_path, parent_branch, base_branch=config.main_branch)
 
 
 def _run_openhands_command(
@@ -238,12 +249,13 @@ def run_openhands(
     phase: str,
     branch_override: str | None = None,
     session_scope: str = "",
+    issue_data: dict[str, Any] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run OpenHands headlessly and capture output in the configured target repository."""
     context = (
-        prepare_phase_execution_context(repo, phase, issue)
+        prepare_phase_execution_context(repo, phase, issue, issue_data=issue_data)
         if branch_override is None
-        else prepare_branch_context(repo, branch=branch_override, branch_log_label="Resolved explicit target branch")
+        else prepare_branch_context(repo, branch=branch_override, branch_log_label="Resolved explicit target branch", issue_data=issue_data)
     )
 
     if session_scope:
@@ -282,6 +294,7 @@ def finalize_phase_delivery(
     phase: str,
     issue_title: str = "",
     branch_override: str | None = None,
+    issue_data: dict[str, Any] | None = None,
 ) -> str:
     """Commit and push phase changes, then return a summary suitable for a GitHub issue comment."""
     return utils_finalize_phase_delivery(
@@ -290,6 +303,7 @@ def finalize_phase_delivery(
         phase=phase,
         issue_title=issue_title,
         branch_override=branch_override,
+        issue_data=issue_data,
     )
 
 
@@ -434,10 +448,11 @@ def run_openhands_comment_phase(
     issue: int,
     phase: str,
     session_scope: str = "",
+    issue_data: dict[str, Any] | None = None,
 ) -> str:
     """Run OpenHands and return the assistant reply text."""
     log_info("Requesting comment response from OpenHands")
-    result = run_openhands(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+    result = run_openhands(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
     if result.returncode != 0:
         log_error(f"OpenHands failed for {repo}#{issue} with exit code {result.returncode}")
         print(result.stdout)
@@ -460,10 +475,11 @@ def run_openhands_json_phase(
     issue: int,
     phase: str,
     session_scope: str = "",
+    issue_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run OpenHands and parse the final assistant reply as JSON."""
     log_info("Requesting JSON response from OpenHands")
-    content = run_openhands_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+    content = run_openhands_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
     log_info("Parsing JSON from assistant reply")
     try:
         return json.loads(content)
@@ -481,6 +497,7 @@ def run_openhands_implementation_phase(
     phase: str,
     branch_override: str | None = None,
     session_scope: str = "",
+    issue_data: dict[str, Any] | None = None,
 ) -> None:
     """Run an implementation or validation phase through OpenHands."""
     print("=" * 60)
@@ -498,6 +515,7 @@ def run_openhands_implementation_phase(
             phase=phase,
             branch_override=branch_override,
             session_scope=session_scope,
+            issue_data=issue_data,
         )
         if result.returncode != 0:
             if result.stdout:
@@ -522,7 +540,7 @@ def run_openhands_implementation_phase(
             print("\nAgent execution complete.")
             return
 
-        test_result = run_phase_tests(repo=repo, issue=issue, phase=phase, branch_override=branch_override)
+        test_result = run_phase_tests(repo=repo, issue=issue, phase=phase, branch_override=branch_override, issue_data=issue_data)
         if test_result.stdout:
             print(test_result.stdout)
         if test_result.stderr:

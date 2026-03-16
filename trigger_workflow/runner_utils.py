@@ -195,8 +195,14 @@ def prepare_target_repo_checkout(repo: str) -> tuple[TargetRepoConfig, Path]:
     log_info(f"Verified managed repository path exists: {managed_path}")
     return config, managed_path
 
-def prepare_branch_context(repo: str, *, branch: str, branch_log_label: str) -> RunnerTargetContext:
-    """Resolve and verify the target repository checkout for the requested branch."""
+def prepare_branch_context(
+    repo: str,
+    *,
+    branch: str,
+    branch_log_label: str,
+    issue_data: dict[str, Any] | None = None,
+) -> RunnerTargetContext:
+    """Resolve and verify the target repository checkout for the requested branch, including auto-merge from base."""
     config, local_path = prepare_target_repo_checkout(repo)
     log_info(f"{branch_log_label}: {branch}")
     ensure_git_branch(local_path, branch, base_branch=config.main_branch)
@@ -207,12 +213,48 @@ def prepare_branch_context(repo: str, *, branch: str, branch_log_label: str) -> 
             f"expected '{branch}', found '{verified_branch}'."
         )
     log_info(f"Verified target repository branch loaded: {verified_branch}")
+
+    # Auto-merge from base branch as requested for phases after Tiferet
+    parent_issue = extract_parent_issue(str(issue_data.get("body") or "")) if issue_data else None
+    base_branch = f"{config.issue_branch_prefix}{parent_issue}" if parent_issue else config.main_branch
+
+    if branch != base_branch:
+        log_info(f"Checking for updates from base branch '{base_branch}' to merge into '{branch}'")
+        git_run(local_path, ["fetch", "origin"])
+        
+        # Verify base branch exists on origin
+        origin_branch = f"origin/{base_branch}"
+        check_base = git_run(local_path, ["rev-parse", "--verify", origin_branch], capture_output=True)
+        if check_base.returncode != 0:
+            log_error(f"Base branch '{base_branch}' does not exist on origin. Cannot merge.")
+            raise SystemExit(f"Missing required base branch '{base_branch}' for issue #{issue}.")
+
+        merge_result = git_run(local_path, ["merge", origin_branch], capture_output=True)
+        if merge_result.returncode != 0:
+            log_error(f"Automatic merge from '{base_branch}' failed; human intervention required.")
+            if "CONFLICT" in (merge_result.stdout or "") or "CONFLICT" in (merge_result.stderr or ""):
+                log_error("Merge conflicts detected during branch setup.")
+            raise SystemExit(f"Failed to auto-merge '{base_branch}' into '{branch}'. Check for conflicts.")
+
     return RunnerTargetContext(local_path=local_path, branch=verified_branch)
 
-def prepare_phase_execution_context(repo: str, phase: str, issue: int) -> RunnerTargetContext:
+def prepare_phase_execution_context(repo: str, phase: str, issue: int, issue_data: dict[str, Any] | None = None) -> RunnerTargetContext:
     """Resolve and verify the target repository checkout runner should use."""
     branch = resolve_phase_execution_branch(repo, phase, issue)
-    return prepare_branch_context(repo, branch=branch, branch_log_label=f"Resolved target branch for phase {phase.upper()}")
+    return prepare_branch_context(
+        repo,
+        branch=branch,
+        branch_log_label=f"Resolved target branch for phase {phase.upper()}",
+        issue_data=issue_data,
+    )
+
+def extract_parent_issue(issue_body: str) -> int | None:
+    """Parse the parent issue number from an issue body if it contains the parent-marker."""
+    import re
+    match = re.search(r"Parent issue: #(\d+)", issue_body)
+    if match:
+        return int(match.group(1))
+    return None
 
 def finalize_phase_delivery(
     *,
@@ -221,6 +263,7 @@ def finalize_phase_delivery(
     phase: str,
     issue_title: str = "",
     branch_override: str | None = None,
+    issue_data: dict[str, Any] | None = None,
 ) -> str:
     """Commit and push phase changes, then return a summary suitable for a GitHub issue comment."""
     context = (
@@ -230,6 +273,31 @@ def finalize_phase_delivery(
     )
     branch = context.branch
     local_path = context.local_path
+    config = resolve_target_repo_config(repo)
+
+    # Determine PR base branch. If this is a child issue, PR into the parent issue branch.
+    parent_issue = extract_parent_issue(str(issue_data.get("body") or "")) if issue_data else None
+    pr_base = f"{config.issue_branch_prefix}{parent_issue}" if parent_issue else config.main_branch
+
+    log_info(f"Preparing delivery for issue #{issue} on branch '{branch}' (PR base: '{pr_base}')")
+
+    # Step: Merge from updated parent/base branch before delivery as requested.
+    log_info(f"Merging latest changes from base branch '{pr_base}' into '{branch}' before delivery")
+    git_run(local_path, ["fetch", "origin"])
+    
+    # Verify base branch exists on origin
+    origin_base = f"origin/{pr_base}"
+    check_base = git_run(local_path, ["rev-parse", "--verify", origin_base], capture_output=True)
+    if check_base.returncode != 0:
+        log_error(f"Base branch '{pr_base}' does not exist on origin. Cannot merge before delivery.")
+        raise SystemExit(f"Missing required base branch '{pr_base}' for delivery of issue #{issue}.")
+
+    merge_result = git_run(local_path, ["merge", origin_base], capture_output=True)
+    if merge_result.returncode != 0:
+        log_error(f"Automatic merge from '{pr_base}' failed; human intervention required before delivery.")
+        if "CONFLICT" in (merge_result.stdout or "") or "CONFLICT" in (merge_result.stderr or ""):
+             log_error("Merge conflicts detected during delivery auto-merge.")
+        raise SystemExit(f"Failed to auto-merge '{pr_base}' into '{branch}' before delivery. Check for conflicts.")
 
     status_result = subprocess.run(
         ["git", "status", "--short"],
@@ -336,7 +404,6 @@ def finalize_phase_delivery(
             f"does not match origin/{branch} {remote_sha}."
         )
 
-    config = resolve_target_repo_config(repo)
     pr_lookup_result = subprocess.run(
         ["gh", "pr", "list", "--repo", repo, "--head", branch, "--state", "open", "--json", "number,title,url"],
         cwd=local_path,
@@ -373,7 +440,7 @@ def finalize_phase_delivery(
                 "--repo",
                 repo,
                 "--base",
-                config.main_branch,
+                pr_base,
                 "--head",
                 branch,
                 "--title",
@@ -425,6 +492,7 @@ def finalize_phase_delivery(
         f"- Phase: `{phase}`\n"
         f"- Phase name: `{phase_display}`\n"
         f"- Branch: `{branch}`\n"
+        f"- PR base: `{pr_base}`\n"
         f"- PR: {pr_url}\n"
         f"- Commit: `{short_sha}`\n"
         f"- Commit message: `{commit_message}`\n"
@@ -450,12 +518,13 @@ def run_phase_tests(
     issue: int,
     phase: str,
     branch_override: str | None = None,
+    issue_data: dict[str, Any] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run repository validation commands for a phase using the same checkout/branch context."""
     context = (
-        prepare_phase_execution_context(repo, phase, issue)
+        prepare_phase_execution_context(repo, phase, issue, issue_data=issue_data)
         if branch_override is None
-        else prepare_branch_context(repo, branch=branch_override, branch_log_label="Resolved explicit target branch")
+        else prepare_branch_context(repo, branch=branch_override, branch_log_label="Resolved explicit target branch", issue_data=issue_data)
     )
     ensure_playwright_test_prerequisites(context.local_path)
     combined_stdout: list[str] = []

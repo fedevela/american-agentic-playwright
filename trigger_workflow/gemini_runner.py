@@ -31,12 +31,13 @@ def run_gemini(
     issue: int,
     phase: str,
     branch_override: str | None = None,
+    issue_data: dict[str, Any] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run Gemini CLI headlessly and capture output in the configured target repository."""
     context = (
-        prepare_phase_execution_context(repo, phase, issue)
+        prepare_phase_execution_context(repo, phase, issue, issue_data=issue_data)
         if branch_override is None
-        else prepare_branch_context(repo, branch=branch_override, branch_log_label="Resolved explicit target branch")
+        else prepare_branch_context(repo, branch=branch_override, branch_log_label="Resolved explicit target branch", issue_data=issue_data)
     )
 
     log_info(f"Gemini target repository loaded: {context.local_path}")
@@ -110,10 +111,11 @@ def run_gemini_comment_phase(
     issue: int,
     phase: str,
     session_scope: str = "", # Gemini CLI handles sessions differently, ignoring for now
+    issue_data: dict[str, Any] | None = None,
 ) -> str:
     """Run Gemini and return the assistant reply text."""
     log_info("Requesting comment response from Gemini")
-    result = run_gemini(prompt, repo=repo, issue=issue, phase=phase)
+    result = run_gemini(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data)
     if result.returncode != 0:
         sys.exit(result.returncode)
 
@@ -132,10 +134,11 @@ def run_gemini_json_phase(
     issue: int,
     phase: str,
     session_scope: str = "",
+    issue_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run Gemini and parse the final assistant reply as JSON."""
     log_info("Requesting JSON response from Gemini")
-    content = run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase)
+    content = run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data)
     log_info("Parsing JSON from assistant reply")
     json_content = extract_json_from_markdown(content)
     try:
@@ -153,6 +156,7 @@ def run_gemini_implementation_phase(
     phase: str,
     branch_override: str | None = None,
     session_scope: str = "",
+    issue_data: dict[str, Any] | None = None,
 ) -> None:
     """Run an implementation or validation phase through Gemini."""
     print("=" * 60)
@@ -169,6 +173,7 @@ def run_gemini_implementation_phase(
             issue=issue,
             phase=phase,
             branch_override=branch_override,
+            issue_data=issue_data,
         )
         if result.returncode != 0:
             sys.exit(result.returncode)
@@ -186,7 +191,7 @@ def run_gemini_implementation_phase(
             print("\nAgent execution complete.")
             return
 
-        test_result = run_phase_tests(repo=repo, issue=issue, phase=phase, branch_override=branch_override)
+        test_result = run_phase_tests(repo=repo, issue=issue, phase=phase, branch_override=branch_override, issue_data=issue_data)
         if test_result.stdout:
             print(test_result.stdout)
         if test_result.stderr:
@@ -213,6 +218,7 @@ def finalize_phase_delivery(
     phase: str,
     issue_title: str = "",
     branch_override: str | None = None,
+    issue_data: dict[str, Any] | None = None,
 ) -> str:
     """Commit and push phase changes, then return a summary suitable for a GitHub issue comment."""
     return utils_finalize_phase_delivery(
@@ -221,4 +227,5 @@ def finalize_phase_delivery(
         phase=phase,
         issue_title=issue_title,
         branch_override=branch_override,
+        issue_data=issue_data,
     )
