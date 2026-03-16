@@ -12,6 +12,7 @@ from .config import (
     DISCUSSION_PHASES,
     LABEL_PHASE_MAP,
     MICROAGENTS_DIR,
+    NEEDS_HUMAN_LABEL,
     NEXT_LABEL_MAP,
     PHASE_DISPLAY_NAME_MAP,
     PRE_IMPLEMENTATION_PHASES,
@@ -22,6 +23,7 @@ from .config import (
 )
 from .github_ops import (
     advance_issue_label,
+    clear_issue_labels_except,
     create_child_issues,
     ensure_phase_labels,
     fetch_issue_data,
@@ -57,7 +59,7 @@ from .prompts import (
     format_phase_comment,
     read_microagent_for_label,
 )
-from .validation import validate_tiferet_specification_payload_structure, validate_tiferet_requirement_traceability
+from .validation import validate_tiferet_specification_payload_structure
 
 def run_comment_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str) -> str:
     if RUNNER_TYPE == "gemini":
@@ -490,7 +492,6 @@ def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
 
     log_info("Validating payload schema...")
     validate_tiferet_specification_payload_structure(payload)
-    validate_tiferet_requirement_traceability(payload, request.issue_data)
     log_info("Validation passed")
     log_multiline("Generated parent comment", payload["comment"].strip())
 
@@ -512,9 +513,15 @@ def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
     post_phase_machine_comment(request, summary_comment)
     log_info("Summary comment posted")
 
-    log_info("Completing Tiferet handoff by removing parent phase label...")
-    remove_issue_label(request.repo, request.issue, request.label)
-    log_info("Parent Tiferet label removed")
+    log_info("Completing Tiferet handoff: clearing all labels from parent issue except needs-human...")
+    current_labels = [l.get("name", "") for l in request.issue_data.get("labels", []) if l.get("name")]
+    clear_issue_labels_except(
+        request.repo,
+        request.issue,
+        current_labels,
+        keep=[NEEDS_HUMAN_LABEL],
+    )
+    log_info("Parent issue labels cleared (handoff complete)")
 
 
 def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:

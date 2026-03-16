@@ -270,6 +270,24 @@ def remove_issue_label(repo: str, issue_number: int, label: str) -> None:
     log_info("Label removed")
 
 
+def clear_issue_labels_except(
+    repo: str,
+    issue_number: int,
+    current_labels: list[str],
+    *,
+    keep: list[str],
+) -> None:
+    """Remove all labels from an issue except those explicitly listed in 'keep'."""
+    to_remove = [label for label in current_labels if label not in keep]
+    if not to_remove:
+        log_info(f"No labels to remove from issue #{issue_number} (preserving: {', '.join(keep)})")
+        return
+
+    log_info(f"Clearing labels from issue #{issue_number} (preserving: {', '.join(keep)})")
+    edit_issue_labels(repo, issue_number, remove=to_remove)
+    log_info("Labels cleared")
+
+
 def tag_issue_needs_human(repo: str, issue_number: int) -> None:
     """Tag an issue for explicit human intervention."""
     log_info(f"Tagging issue #{issue_number} with '{NEEDS_HUMAN_LABEL}'")

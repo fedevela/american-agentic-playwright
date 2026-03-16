@@ -15,7 +15,7 @@ from .config import (
     WORKSPACE,
     TargetRepoConfig,
 )
-from .logging_utils import log_info
+from .logging_utils import log_error, log_info
 
 @dataclass(frozen=True)
 class RunnerTargetContext:
@@ -143,7 +143,15 @@ def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> Non
         log_info(f"Switching target repository to existing branch '{branch}'")
         result = git_run(local_path, ["switch", branch], capture_output=True)
         if result.returncode != 0:
-            raise SystemExit(f"Failed to switch {local_path} to branch '{branch}'.")
+            # If switch failed due to local changes, perform a reset and clean in the managed repo.
+            log_info(f"Initial switch to '{branch}' failed (dirty state); attempting reset and clean to recover.")
+            git_run(local_path, ["reset", "--hard", "HEAD"], capture_output=True)
+            git_run(local_path, ["clean", "-fd"], capture_output=True)
+            # Second attempt to switch after cleanup.
+            result = git_run(local_path, ["switch", branch], capture_output=True)
+            if result.returncode != 0:
+                log_error(f"Failed to switch {local_path} to branch '{branch}' even after cleanup: {result.stderr or result.stdout or 'no output'}")
+                raise SystemExit(f"Failed to switch {local_path} to branch '{branch}'.")
         return
 
     if branch == base_branch:

@@ -53,7 +53,8 @@ def run_gemini(
         "-o", "json"
     ]
 
-    log_info("Launching Gemini headless run")
+    log_info(f"Launching Gemini headless run in {context.local_path}")
+    log_info(f"Command: {' '.join(command)}")
     result = subprocess.run(
         command,
         cwd=context.local_path,
@@ -63,11 +64,13 @@ def run_gemini(
     )
     
     if result.returncode != 0:
-        log_error(f"Gemini exit code: {result.returncode}")
+        log_error(f"Gemini execution failed with exit code: {result.returncode}")
         if result.stdout:
-            print(result.stdout)
+            log_multiline("Gemini stdout", result.stdout)
         if result.stderr:
-            print(result.stderr, file=sys.stderr)
+            log_multiline("Gemini stderr", result.stderr)
+    else:
+        log_info(f"Gemini execution succeeded (exit code: {result.returncode})")
             
     return result
 
