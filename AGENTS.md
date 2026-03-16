@@ -9,10 +9,13 @@ This document captures the practical architecture and execution rules for workin
 ## Runtime Flow
 
 `run_trigger_cli()` parses:
-- `--label`
-- `--issue`
-- `--repo`
-- `--manual`
+- `--label`: GitHub label triggering the phase.
+- `--phase`: Canonical phase ID (alternative to --label).
+- `--issue`: Issue number to process.
+- `--repo`: Target repository (owner/repo).
+- `--runner`: Agent engine to use (`gemini` or `openhands`).
+- `--working-dir`: Local directory to use as the target repository (bypasses managed checkout).
+- `--manual`: Preview mode (no agent execution or GitHub mutations).
 
 Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 1. Ensures canonical labels exist (unless `--manual`)
@@ -25,12 +28,12 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 ## Phase Families
 
 - Discussion phases: `1`, `2A`, `2B`, `2C`, `3`
-  - OpenHands generates comment text
+  - Agent generates comment text
   - Router posts wrapped phase comment
   - Router advances label to next phase
 
 - Specification phase: `4` (Tiferet)
-  - OpenHands returns JSON payload with:
+  - Agent returns JSON payload with:
     - parent `comment`
     - ordered `sub_issues`
   - Validation enforces schema + Gevurah traceability contract
@@ -39,9 +42,9 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
   - Posts summary comment
   - Removes parent Tiferet label
 
-- Implementation phases: `5`, `6`, `7`, `8`, `9`
-  - OpenHands runs against issue branch
-  - Phases `6-9` run strict validation contract:
+- Implementation phases: `5`, `6`, `7`, `8`, `9`, `10`
+  - Agent runs against issue branch
+  - Implementation phases run strict validation contract:
     - `npm run typecheck`
     - `npm run build`
     - `npm run test`
@@ -74,11 +77,18 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
   - Tiferet JSON payload schema checks
   - Verbatim traceability checks to Gevurah canonical requirements
 
+- `trigger_workflow/gemini_runner.py`
+  - Gemini CLI subprocess execution.
+  - Optimized for fast, single-turn or fixed-retry cycles.
+
 - `trigger_workflow/openhands_runner.py`
+  - OpenHands subprocess execution + event extraction.
+  - Supports complex, multi-turn coding and debugging.
+
+- `trigger_workflow/runner_utils.py`
   - Managed checkout setup under `.openhands/repos`
   - Branch verification and phase branch resolution
-  - OpenHands subprocess execution + event extraction
-  - Validation retry loop for phases `6-9`
+  - Validation retry loop for implementation phases
   - Delivery finalization (commit/push/PR summary)
 
 - `trigger_workflow/logging_utils.py`
@@ -87,22 +97,22 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 ## Operational Constraints
 
 - Managed checkout policy:
-  - OpenHands must run in `.openhands/repos/<owner__repo>`
-  - Refuses running in source checkout path
+  - Agent must run in `.openhands/repos/<owner__repo>` unless `--working-dir` is provided.
+  - Refuses running in source checkout path to prevent local pollution.
 
 - Branch policy:
-  - Phases before implementation run on configured main branch
-  - Implementation phases run on `issue/<number>` branch
-  - Missing implementation branch is a hard failure
+  - Phases before implementation run on configured main branch.
+  - Implementation phases run on `issue/<number>` branch.
+  - Missing implementation branch is a hard failure.
 
 - Stateless conversation policy:
-  - Runs do not resume prior OpenHands conversations
-  - Conversation IDs are not persisted for reuse
+  - Runs do not resume prior conversations by default.
+  - Conversation context is strictly scoped to the current phase.
 
 - Delivery policy:
-  - Refuses phase advancement without git changes
-  - Refuses fallback commit/PR titles when issue title is missing
-  - Push mismatch/rejection is hard-fail and requires human intervention
+  - Refuses phase advancement without git changes.
+  - Refuses fallback commit/PR titles when issue title is missing.
+  - Push mismatch/rejection is hard-fail and requires human intervention.
 
 ## Tests Coverage
 

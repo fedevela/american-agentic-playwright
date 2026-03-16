@@ -6,9 +6,9 @@ Phase sequence: 1→2A→2B→2C→3→4→5→6→7→8→9→10
 
 ## Overview
 
-OpenClaw routes labeled GitHub issues through a 9-phase signal processing system where:
+OpenClaw routes labeled GitHub issues through a 10-phase signal processing system where:
 - **Phases 1-4**: GitHub comment discussion only
-- **Phases 5-9**: Working code in PRs, using E2E tests as communication medium
+- **Phases 5-10**: Working code in PRs, using E2E tests as communication medium
 
 ## SPARC Methodology Mapping
 
@@ -25,6 +25,7 @@ OpenClaw routes labeled GitHub issues through a 9-phase signal processing system
 | 9 | Yesod-Orchestration | A: Architecture | Module/class structure (on child issues) | `tests/e2e/test_auth_session.py`, `class TestAuthSession:` |
 | 10 | Yesod-Embodiment | R: Refinement | Implementation (on child issues) | Full function body matching name contract |
 | 11 | Malkhut | C: Completion | E2E test execution (on child issues) | `pytest tests/e2e/` → pass/fail |
+| 12 | Hod-Refactoring | — | structural clarity | POST completion refactoring |
 
 ### SPARC 5-Phase Summary
 
@@ -71,59 +72,65 @@ GitHub Issue + Label → OpenClaw Cron → trigger.py → SDLCPhasedAgent → Op
 | `phase:yesod-orchestration` | 7 | SPARC A: Architecture (child issues, module structure) |
 | `phase:yesod-embodiment` | 8 | SPARC R: Refinement (child issues, implementation) |
 | `phase:malkhut` | 9 | SPARC C: Completion (child issues, validation) |
+| `phase:hod-refactoring` | 10 | Structural Clarity (post-completion refinement) |
 
 ## Files
 
 ```
 openhands-swarm/
-├── trigger.py              # Label-to-phase router (called by OpenClaw)
-├── agent.py               # SDLCPhasedAgent (orchestrates phases)
-├── run_phase.sh           # CLI runner for testing phases manually
-├── workspace/             # Runtime state & artifacts
-│   ├── .sdlc-state.json
-│   └── <generated files>
-├── .openhands/
-│   ├── config.json        # Phase routing config
-│   └── microagents/       # 11 phase persona files
-└── README.md             # This file
+├── trigger.py              # Label-to-phase router (CLI entry point)
+├── trigger_workflow/       # Core implementation modules
+│   ├── router.py           # Top-level orchestration and phase dispatch
+│   ├── config.py           # Canonical phase and label configuration
+│   ├── gemini_runner.py    # Gemini CLI runner integration
+│   ├── openhands_runner.py # OpenHands runner integration
+│   ├── prompts.py          # Persona and microagent prompt construction
+│   ├── github_ops.py       # GitHub CLI wrappers and issue management
+│   └── runner_utils.py     # Shared checkout and branch management
+├── microagents/            # Functional phase prompt templates
+├── personas/               # Philosophical persona templates
+├── workspace/              # Persistent session and artifact state
+└── .openhands/             # Managed checkouts and conversation logs
 ```
 
 ## Usage
 
-### OpenClaw Cron (Automatic)
-When an issue is labeled with `phase:*`, OpenClaw calls:
+### Automated (OpenClaw Cron)
+When an issue is labeled with `phase:*`, the orchestrator is invoked:
 ```bash
 python trigger.py --label <label> --issue <issue_number>
 ```
 
-### Manual Testing
+### Manual Execution
 ```bash
 cd openhands-swarm
-python trigger.py --label phase:keter --issue 123
-# preview-only mode (no OpenHands execution, no GitHub mutations)
-python trigger.py --label phase:keter --issue 123 --manual
-# or
-./run_phase.sh 1 "issue context here"
+# Run specific phase for an issue
+python trigger.py --label phase:netzach --issue 53
+# Select a specific runner (default: gemini)
+python trigger.py --runner openhands --phase 5 --issue 53
+# Use current directory as workspace (bypass managed checkout)
+python trigger.py --working-dir . --issue 53
+# Preview mode (no agent execution or GitHub mutations)
+python trigger.py --label phase:keter --issue 53 --manual
 ```
 
 ## Architecture
 
-### trigger.py
-- Receives GitHub label + issue number
-- Maps label to SDLC phase (1-9)
-- Updates `workspace/.sdlc-state.json`
-- Calls `run_phase.sh` to execute
+### Router (`router.py`)
+- Resolves GitHub issue context and determines the active phase.
+- Composes the system prompt from base personas and phase-specific microagents.
+- Dispatches execution to the appropriate runner (Gemini or OpenHands).
+- Manages the state machine transitions by advancing labels on success.
 
-### SDLCPhasedAgent (agent.py)
-- Reads workspace context
-- Executes phase-specific logic
-- Phases 1-4: Generates GitHub comments
-- Phase 4: Creates PR with specification documents
-- Phases 5-9: All work on same PR, producing working code and tests
+### Runners
+- **Gemini Runner**: Optimized for fast, headless execution using the Gemini CLI.
+- **OpenHands Runner**: Supports complex, multi-turn coding tasks with interactive feedback.
+- Both runners share a consistent validation contract (`typecheck` → `build` → `test`).
 
-### OpenHands
-- Executes code generation, tests, PRs for phases 5-9
-- Uses `.openhands/config.json` for workspace and model config
+### Target Management (`runner_utils.py`)
+- Maintains isolated, managed clones of target repositories under `.openhands/repos/`.
+- Automatically handles branch creation, switching, and merging from parent branches.
+- Ensures changes are committed and delivered via Pull Requests.
 
 ## State Tracking
 
