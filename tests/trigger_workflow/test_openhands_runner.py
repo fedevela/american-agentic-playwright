@@ -17,15 +17,18 @@ from trigger_workflow.openhands_runner import (
     OpenHandsTargetContext,
     action_observation_event_lines,
     create_issue_branches_for_child_issues,
-    ensure_git_branch,
     extract_message_events,
     finalize_phase_delivery,
     run_openhands_implementation_phase,
-    resolve_phase_execution_branch,
     load_session_state,
-    prepare_phase_execution_context,
     resolve_openhands_model_connection,
     run_openhands,
+)
+from trigger_workflow.runner_utils import (
+    RunnerTargetContext,
+    ensure_git_branch,
+    resolve_phase_execution_branch,
+    prepare_phase_execution_context,
 )
 
 
@@ -115,8 +118,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("No local target repository config exists", str(exc.exception))
 
-    @patch("trigger_workflow.openhands_runner.current_branch", return_value="main")
-    @patch("trigger_workflow.openhands_runner.branch_exists", return_value=False)
+    @patch("trigger_workflow.runner_utils.current_branch", return_value="main")
+    @patch("trigger_workflow.runner_utils.branch_exists", return_value=False)
     def test_ensure_git_branch_errors_when_non_base_branch_is_missing(
         self,
         branch_exists_mock,
@@ -129,9 +132,9 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("Phase 4/Tiferet must create child issue branches", str(exc.exception))
 
-    @patch("trigger_workflow.openhands_runner.git_run")
-    @patch("trigger_workflow.openhands_runner.ensure_git_branch")
-    @patch("trigger_workflow.openhands_runner.branch_exists")
+    @patch("trigger_workflow.runner_utils.git_run")
+    @patch("trigger_workflow.runner_utils.ensure_git_branch")
+    @patch("trigger_workflow.runner_utils.branch_exists")
     @patch("trigger_workflow.openhands_runner.prepare_target_repo_checkout")
     def test_create_issue_branches_for_child_issues_creates_missing_and_skips_existing(
         self,
@@ -159,12 +162,12 @@ class OpenHandsRunnerTests(unittest.TestCase):
         )
         self.assertEqual(ensure_git_branch_mock.call_count, 3)
 
-    @patch("trigger_workflow.openhands_runner.log_info")
-    @patch("trigger_workflow.openhands_runner.ensure_managed_repo_checkout")
-    @patch("trigger_workflow.openhands_runner.current_branch", return_value="issue/21")
-    @patch("trigger_workflow.openhands_runner.ensure_git_branch")
-    @patch("trigger_workflow.openhands_runner.resolve_phase_execution_branch", return_value="issue/21")
-    @patch("trigger_workflow.openhands_runner.resolve_target_repo_config")
+    @patch("trigger_workflow.runner_utils.log_info")
+    @patch("trigger_workflow.runner_utils.ensure_managed_repo_checkout")
+    @patch("trigger_workflow.runner_utils.current_branch", return_value="issue/21")
+    @patch("trigger_workflow.runner_utils.ensure_git_branch")
+    @patch("trigger_workflow.runner_utils.resolve_phase_execution_branch", return_value="issue/21")
+    @patch("trigger_workflow.runner_utils.resolve_target_repo_config")
     def test_prepare_openhands_run_context_logs_loaded_repo_and_verified_branch(
         self,
         resolve_target_repo_config_mock,
@@ -207,8 +210,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertIn("Resolved target branch for phase 5: issue/21", messages)
         self.assertIn("Verified target repository branch loaded: issue/21", messages)
 
-    @patch("trigger_workflow.openhands_runner.ensure_managed_repo_checkout")
-    @patch("trigger_workflow.openhands_runner.resolve_target_repo_config")
+    @patch("trigger_workflow.runner_utils.ensure_managed_repo_checkout")
+    @patch("trigger_workflow.runner_utils.resolve_target_repo_config")
     def test_prepare_openhands_run_context_errors_when_target_repo_path_missing(
         self,
         resolve_target_repo_config_mock,
@@ -228,8 +231,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("Configured target repository path does not exist", str(exc.exception))
 
-    @patch("trigger_workflow.openhands_runner.ensure_managed_repo_checkout")
-    @patch("trigger_workflow.openhands_runner.resolve_target_repo_config")
+    @patch("trigger_workflow.runner_utils.ensure_managed_repo_checkout")
+    @patch("trigger_workflow.runner_utils.resolve_target_repo_config")
     def test_prepare_openhands_run_context_errors_when_git_directory_missing(
         self,
         resolve_target_repo_config_mock,
@@ -250,8 +253,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("is not a git checkout", str(exc.exception))
 
-    @patch("trigger_workflow.openhands_runner.ensure_managed_repo_checkout")
-    @patch("trigger_workflow.openhands_runner.resolve_target_repo_config")
+    @patch("trigger_workflow.runner_utils.ensure_managed_repo_checkout")
+    @patch("trigger_workflow.runner_utils.resolve_target_repo_config")
     def test_prepare_openhands_run_context_errors_when_managed_checkout_path_is_not_openhands_clone(
         self,
         resolve_target_repo_config_mock,
@@ -276,13 +279,13 @@ class OpenHandsRunnerTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as exc:
                 prepare_phase_execution_context("fedevela/particle-life-3d", "5", 21)
 
-        self.assertIn("managed checkout path mismatch", str(exc.exception))
+        self.assertIn("Managed checkout path mismatch", str(exc.exception))
 
-    @patch("trigger_workflow.openhands_runner.ensure_managed_repo_checkout")
-    @patch("trigger_workflow.openhands_runner.current_branch", side_effect=["main", "main"])
-    @patch("trigger_workflow.openhands_runner.ensure_git_branch")
-    @patch("trigger_workflow.openhands_runner.resolve_phase_execution_branch", return_value="issue/21")
-    @patch("trigger_workflow.openhands_runner.resolve_target_repo_config")
+    @patch("trigger_workflow.runner_utils.ensure_managed_repo_checkout")
+    @patch("trigger_workflow.runner_utils.current_branch", side_effect=["main", "main"])
+    @patch("trigger_workflow.runner_utils.ensure_git_branch")
+    @patch("trigger_workflow.runner_utils.resolve_phase_execution_branch", return_value="issue/21")
+    @patch("trigger_workflow.runner_utils.resolve_target_repo_config")
     def test_prepare_openhands_run_context_errors_when_branch_verification_fails(
         self,
         resolve_target_repo_config_mock,
@@ -315,7 +318,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as exc:
                 prepare_phase_execution_context("fedevela/particle-life-3d", "5", 21)
 
-        self.assertIn("branch verification failed", str(exc.exception))
+        self.assertIn("Target repository branch verification failed", str(exc.exception))
 
     @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
     @patch("trigger_workflow.openhands_runner._run_openhands_command")
@@ -343,15 +346,15 @@ class OpenHandsRunnerTests(unittest.TestCase):
         run_openhands_command_mock.assert_called_once()
         self.assertEqual(run_openhands_command_mock.call_args.kwargs["cwd"], target_path)
 
-    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner.subprocess.run")
+    @patch("trigger_workflow.runner_utils.prepare_phase_execution_context")
+    @patch("trigger_workflow.runner_utils.subprocess.run")
     def test_finalize_phase_delivery_commits_pushes_and_returns_summary(
         self,
         subprocess_run_mock,
         prepare_phase_execution_context_mock,
     ) -> None:
         target_path = Path("/tmp/particle-life-3d")
-        prepare_phase_execution_context_mock.return_value = OpenHandsTargetContext(
+        prepare_phase_execution_context_mock.return_value = RunnerTargetContext(
             local_path=target_path,
             branch="issue/21",
         )
@@ -391,15 +394,15 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertIn("- `src/app.ts`", summary)
         self.assertEqual(subprocess_run_mock.call_count, 10)
 
-    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner.subprocess.run")
+    @patch("trigger_workflow.runner_utils.prepare_phase_execution_context")
+    @patch("trigger_workflow.runner_utils.subprocess.run")
     def test_finalize_phase_delivery_strips_auto_tiferet_prefix_from_commit_message(
         self,
         subprocess_run_mock,
         prepare_phase_execution_context_mock,
     ) -> None:
         target_path = Path("/tmp/particle-life-3d")
-        prepare_phase_execution_context_mock.return_value = OpenHandsTargetContext(
+        prepare_phase_execution_context_mock.return_value = RunnerTargetContext(
             local_path=target_path,
             branch="issue/21",
         )
@@ -432,15 +435,15 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertEqual(commit_cmd[0:3], ["git", "commit", "-m"])
         self.assertEqual(commit_cmd[3], "phase:6 issue #21: Example Child Issue")
 
-    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner.subprocess.run")
+    @patch("trigger_workflow.runner_utils.prepare_phase_execution_context")
+    @patch("trigger_workflow.runner_utils.subprocess.run")
     def test_finalize_phase_delivery_fails_fast_when_push_rejected_non_fast_forward(
         self,
         subprocess_run_mock,
         prepare_phase_execution_context_mock,
     ) -> None:
         target_path = Path("/tmp/particle-life-3d")
-        prepare_phase_execution_context_mock.return_value = OpenHandsTargetContext(
+        prepare_phase_execution_context_mock.return_value = RunnerTargetContext(
             local_path=target_path,
             branch="issue/21",
         )
@@ -467,15 +470,15 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertIn("Human intervention required", str(exc.exception))
         self.assertEqual(subprocess_run_mock.call_count, 4)
 
-    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner.subprocess.run")
+    @patch("trigger_workflow.runner_utils.prepare_phase_execution_context")
+    @patch("trigger_workflow.runner_utils.subprocess.run")
     def test_finalize_phase_delivery_fails_when_no_git_changes_exist(
         self,
         subprocess_run_mock,
         prepare_phase_execution_context_mock,
     ) -> None:
         target_path = Path("/tmp/particle-life-3d")
-        prepare_phase_execution_context_mock.return_value = OpenHandsTargetContext(
+        prepare_phase_execution_context_mock.return_value = RunnerTargetContext(
             local_path=target_path,
             branch="issue/21",
         )
@@ -488,15 +491,15 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("without repository changes", str(exc.exception))
 
-    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner.subprocess.run")
+    @patch("trigger_workflow.runner_utils.prepare_phase_execution_context")
+    @patch("trigger_workflow.runner_utils.subprocess.run")
     def test_finalize_phase_delivery_fails_when_issue_title_missing_and_fallbacks_disabled(
         self,
         subprocess_run_mock,
         prepare_phase_execution_context_mock,
     ) -> None:
         target_path = Path("/tmp/particle-life-3d")
-        prepare_phase_execution_context_mock.return_value = OpenHandsTargetContext(
+        prepare_phase_execution_context_mock.return_value = RunnerTargetContext(
             local_path=target_path,
             branch="issue/21",
         )

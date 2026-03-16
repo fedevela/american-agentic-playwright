@@ -15,6 +15,7 @@ from .config import (
     NEXT_LABEL_MAP,
     PHASE_DISPLAY_NAME_MAP,
     PRE_IMPLEMENTATION_PHASES,
+    RUNNER_TYPE,
     SPECIFICATION_PHASE,
     STRICTLY_INDEPENDENT_PHASES,
     WORKSPACE,
@@ -25,6 +26,7 @@ from .github_ops import (
     ensure_phase_labels,
     fetch_issue_data,
     issue_has_label,
+    issue_phase_labels,
     post_issue_comment,
     remove_issue_label,
     resolve_issue_by_label,
@@ -34,11 +36,17 @@ from .github_ops import (
 from .logging_utils import log_error, log_info, log_multiline, log_section, log_step
 from .openhands_runner import (
     create_issue_branches_for_child_issues,
-    finalize_phase_delivery,
+    finalize_phase_delivery as openhands_finalize_delivery,
     resolve_openhands_model_connection,
     run_openhands_comment_phase,
     run_openhands_json_phase,
     run_openhands_implementation_phase,
+)
+from .gemini_runner import (
+    finalize_phase_delivery as gemini_finalize_delivery,
+    run_gemini_comment_phase,
+    run_gemini_json_phase,
+    run_gemini_implementation_phase,
 )
 from .prompts import (
     build_implementation_phase_prompt,
@@ -50,6 +58,27 @@ from .prompts import (
     read_microagent_for_label,
 )
 from .validation import validate_tiferet_specification_payload_structure, validate_tiferet_requirement_traceability
+
+def run_comment_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str) -> str:
+    if RUNNER_TYPE == "gemini":
+        return run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+    return run_openhands_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+
+def run_json_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str) -> dict[str, Any]:
+    if RUNNER_TYPE == "gemini":
+        return run_gemini_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+    return run_openhands_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+
+def run_implementation_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str) -> None:
+    if RUNNER_TYPE == "gemini":
+        run_gemini_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+    else:
+        run_openhands_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope)
+
+def finalize_delivery(repo: str, issue: int, phase: str, issue_title: str) -> str:
+    if RUNNER_TYPE == "gemini":
+        return gemini_finalize_delivery(repo=repo, issue=issue, phase=phase, issue_title=issue_title)
+    return openhands_finalize_delivery(repo=repo, issue=issue, phase=phase, issue_title=issue_title)
 
 
 @dataclass(frozen=True)
@@ -207,53 +236,73 @@ def resolve_phase_execution_request(
         log_step("Step 0: Ensuring canonical phase labels exist")
         ensure_phase_labels(repo)
 
-    log_step("Step 1a: Resolving issue and label")
-    if label is None:
-        log_info("No label provided, finding oldest phased issue...")
+    log_step("Step 1: Resolving issue and label context")
+    if issue is None and label is None:
+        log_info("No issue or label provided; finding oldest phased issue...")
         issue, label = resolve_oldest_phased_issue(repo)
         log_info(f"Selected issue #{issue} with label '{label}'")
+    elif issue is None and label is not None:
+        log_info(f"Label '{label}' provided; finding oldest issue carrying this label...")
+        issue = resolve_issue_by_label(repo, label)
+        log_info(f"Selected issue #{issue} for label '{label}'")
+    elif issue is not None and label is None:
+        log_info(f"Issue #{issue} provided; resolving phase label from issue metadata...")
+    else:
+        log_info(f"Issue #{issue} and label '{label}' provided; will verify label on issue...")
 
-    log_step("Step 1b: Determining phase id")
+    log_step("Step 2: Fetching issue data from GitHub")
+    issue_data = fetch_issue_data(repo, issue)
+    log_info(f"Issue #{issue} fetched: '{issue_data.get('title', 'Unknown')}'")
+
+    if label is None:
+        # Resolve label from issue_data
+        labels = issue_phase_labels(issue_data)
+        if not labels:
+            log_error(f"Issue #{issue} in {repo} has no phase labels. Cannot determine phase.")
+            raise SystemExit(1)
+        if len(labels) > 1:
+            log_error(
+                f"Issue #{issue} in {repo} has multiple phase labels: {', '.join(labels)}. "
+                "Pass --label explicitly to select one."
+            )
+            raise SystemExit(1)
+        label = labels[0]
+        log_info(f"Resolved label '{label}' from issue #{issue}")
+    else:
+        # Verify label on issue_data
+        if not issue_has_label(issue_data, label):
+            if manual:
+                log_info(
+                    f"Manual mode label override: issue #{issue} is not labeled '{label}', "
+                    "but continuing with the requested label for preview."
+                )
+            else:
+                log_error(f"Issue #{issue} in {repo} is not labeled '{label}'. Skipping phase execution.")
+                raise SystemExit(1)
+        else:
+            log_info("Label verification: PASSED")
+
+    log_step("Step 3: Determining phase id")
     phase = determine_phase_from_label(label)
     if not phase:
         raise SystemExit(f"Unknown label '{label}'. Cannot determine phase.")
     log_info(f"Label '{label}' → Phase {phase.upper()} ({PHASE_DISPLAY_NAME_MAP.get(phase, 'Unknown')})")
 
-    log_step("Step 1c: Resolving issue number")
-    if issue is None:
-        log_info(f"Finding issue with label '{label}'...")
-        issue = resolve_issue_by_label(repo, label)
-    log_info(f"Issue number: #{issue}")
-
     log_step("Sequence Context")
     log_info(f"Current: Phase {phase.upper()}")
-    next_phase = determine_phase_from_label(NEXT_LABEL_MAP.get(label, ""))
+    next_phase_label = NEXT_LABEL_MAP.get(label, "")
+    next_phase = determine_phase_from_label(next_phase_label) if next_phase_label else None
     if next_phase:
         log_info(f"Next: Phase {next_phase.upper()} ({PHASE_DISPLAY_NAME_MAP.get(next_phase, 'Unknown')})")
     else:
         log_info("Next: Final phase (no further handoff)")
 
-    log_step("Step 2: Reading microagent prompt")
+    log_step("Step 4: Reading microagent prompt")
     microagent_content = read_microagent_for_label(label, phase, include_base_persona=include_base_persona)
     log_info(f"Microagent prompt loaded ({len(microagent_content)} bytes)")
 
-    log_step("Step 3: Fetching issue data from GitHub")
-    issue_data = fetch_issue_data(repo, issue)
-    log_info(f"Issue #{issue} fetched: '{issue_data.get('title', 'Unknown')}'")
     label_names = [l.get("name", "") for l in issue_data.get("labels", []) if l.get("name")]
     log_info(f"Current labels: {', '.join(label_names) if label_names else '(none)'}")
-
-    if not issue_has_label(issue_data, label):
-        if manual:
-            log_info(
-                f"Manual mode label override: issue #{issue} is not labeled '{label}', "
-                "but continuing with the requested label for preview."
-            )
-        else:
-            log_error(f"Issue #{issue} in {repo} is not labeled '{label}'. Skipping phase execution.")
-            raise SystemExit(1)
-    else:
-        log_info("Label verification: PASSED")
 
     request = PhaseExecutionRequest(
         label=label,
@@ -345,17 +394,17 @@ def label_for_phase_id(phase: str) -> str:
 
 
 def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
-    """Render manual-mode instructions without running OpenHands or mutating GitHub."""
+    """Render manual-mode instructions without running agent or mutating GitHub."""
     phase = request.phase
     if phase in DISCUSSION_PHASES:
         prompt, session_scope = build_phase_execution_prompt(request, build_comment_phase_prompt)
-        log_multiline("Manual mode prompt for OpenHands (discussion)", prompt)
+        log_multiline(f"Manual mode prompt for {RUNNER_TYPE} (discussion)", prompt)
         log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
         log_multiline(
             "Manual mode planned actions",
             "\n".join(
                 [
-                    "1. Run OpenHands with the prompt above and capture the final assistant message.",
+                    f"1. Run {RUNNER_TYPE} with the prompt above and capture the final assistant message.",
                     "2. Post that message to the issue as a phase comment wrapper.",
                     "3. Advance the issue label to the next phase.",
                 ]
@@ -365,13 +414,13 @@ def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
 
     if phase == SPECIFICATION_PHASE:
         prompt, session_scope = build_phase_execution_prompt(request, build_tiferet_specification_prompt)
-        log_multiline("Manual mode prompt for OpenHands (specification JSON)", prompt)
+        log_multiline(f"Manual mode prompt for {RUNNER_TYPE} (specification JSON)", prompt)
         log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
         log_multiline(
             "Manual mode planned actions",
             "\n".join(
                 [
-                    "1. Run OpenHands with the prompt above and capture the final assistant message as JSON.",
+                    f"1. Run {RUNNER_TYPE} with the prompt above and capture the final assistant message as JSON.",
                     "2. Validate JSON payload structure and requirement traceability.",
                     "3. Post the parent phase comment from `payload.comment`.",
                     "4. Create ordered child issues from `payload.sub_issues` and create child branches.",
@@ -383,13 +432,13 @@ def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
         return
 
     prompt, session_scope = build_phase_execution_prompt(request, build_implementation_phase_prompt)
-    log_multiline("Manual mode prompt for OpenHands (implementation)", prompt)
+    log_multiline(f"Manual mode prompt for {RUNNER_TYPE} (implementation)", prompt)
     log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
     log_multiline(
         "Manual mode planned actions",
         "\n".join(
             [
-                "1. Run OpenHands with the prompt above on the resolved issue branch.",
+                f"1. Run {RUNNER_TYPE} with the prompt above on the resolved issue branch.",
                 "2. Run trigger validation flow for phases 6-9 (`typecheck -> build -> test:e2e`).",
                 "3. Finalize delivery (git add/commit/push and PR create/lookup).",
                 "4. Post the delivery summary as a wrapped phase comment.",
@@ -404,8 +453,8 @@ def execute_comment_phase_handoff(request: PhaseExecutionRequest) -> None:
     log_info("Building discussion prompt...")
     prompt, session_scope = build_phase_execution_prompt(request, build_comment_phase_prompt)
 
-    log_info(f"Running OpenHands for phase {request.phase.upper()}...")
-    comment = run_openhands_comment_phase(
+    log_info(f"Running {RUNNER_TYPE} for phase {request.phase.upper()}...")
+    comment = run_comment_phase(
         prompt,
         repo=request.repo,
         issue=request.issue,
@@ -429,8 +478,8 @@ def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
     log_info("Building specification prompt...")
     prompt, session_scope = build_phase_execution_prompt(request, build_tiferet_specification_prompt)
 
-    log_info("Running OpenHands for JSON payload...")
-    payload = run_openhands_json_phase(
+    log_info(f"Running {RUNNER_TYPE} for JSON payload...")
+    payload = run_json_phase(
         prompt,
         repo=request.repo,
         issue=request.issue,
@@ -469,12 +518,12 @@ def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
 
 
 def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
-    """Execute phases 5-9 headlessly in OpenHands."""
+    """Execute phases 5-9 headlessly in the configured runner."""
     log_info("Building agent prompt...")
     prompt, session_scope = build_phase_execution_prompt(request, build_implementation_phase_prompt)
 
-    log_info("Running OpenHands agent...")
-    run_openhands_implementation_phase(
+    log_info(f"Running {RUNNER_TYPE} agent...")
+    run_implementation_phase(
         prompt,
         repo=request.repo,
         issue=request.issue,
@@ -483,7 +532,7 @@ def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
     )
     log_info("Agent execution complete")
     log_info("Finalizing git delivery (commit + push)...")
-    delivery_summary = finalize_phase_delivery(
+    delivery_summary = finalize_delivery(
         repo=request.repo,
         issue=request.issue,
         phase=request.phase,
@@ -500,16 +549,23 @@ def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
 
 def run_trigger_cli() -> None:
     """Main entry point."""
-    log_info("Starting OpenHands swarm phase router CLI")
-    parser = argparse.ArgumentParser(description="Trigger OpenHands / GitHub phase workflow")
+    global RUNNER_TYPE
+    log_info("Starting swarm phase router CLI")
+    parser = argparse.ArgumentParser(description="Trigger Swarm Phase / GitHub workflow")
     parser.add_argument("--label", help="GitHub label triggering the phase")
     parser.add_argument("--phase", help="Canonical phase id (1, 2A, 2B, 2C, 3, 4, 5, 6, 7, 8, 9, 10)")
     parser.add_argument("--issue", type=int, help="Issue number")
     parser.add_argument("--repo", help="Repository owner/repo")
     parser.add_argument(
+        "--runner",
+        choices=["gemini", "openhands"],
+        default=RUNNER_TYPE,
+        help=f"Runner to use for phase execution (default: {RUNNER_TYPE})",
+    )
+    parser.add_argument(
         "--manual",
         action="store_true",
-        help="Preview trigger prompt + algorithmic actions without running OpenHands or mutating GitHub",
+        help="Preview trigger prompt + algorithmic actions without running agent or mutating GitHub",
     )
     parser.add_argument(
         "--prompt-only",
@@ -517,9 +573,13 @@ def run_trigger_cli() -> None:
         help="Return only the generated phase prompt text for the requested issue/label",
     )
     args = parser.parse_args()
+    
+    # Override global RUNNER_TYPE with CLI argument
+    RUNNER_TYPE = args.runner
+
     log_info(
         f"CLI arguments: label={args.label}, phase={args.phase}, issue={args.issue}, "
-        f"repo={args.repo}, manual={args.manual}, prompt-only={args.prompt_only}"
+        f"repo={args.repo}, runner={args.runner}, manual={args.manual}, prompt-only={args.prompt_only}"
     )
     resolved_label = args.label
     if args.phase:
@@ -555,12 +615,15 @@ def run_trigger_cli() -> None:
         log_info("Prompt-only output generated")
         return
 
-    log_section("OPENHANDS SWARM PHASE ROUTER")
+    log_section("SWARM PHASE ROUTER")
     log_info(f"Working directory: {WORKSPACE}")
     log_info(f"Microagents directory: {MICROAGENTS_DIR}")
-    model_name, connection = resolve_openhands_model_connection()
-    log_info(f"OpenHands model connection: {connection}")
-    log_info(f"OpenHands model name: {model_name}")
+    log_info(f"Active runner: {RUNNER_TYPE}")
+    
+    if RUNNER_TYPE == "openhands":
+        model_name, connection = resolve_openhands_model_connection()
+        log_info(f"OpenHands model connection: {connection}")
+        log_info(f"OpenHands model name: {model_name}")
 
     run_labeled_issue_phase_with_mode(resolved_label, args.issue, args.repo, manual=args.manual)
     log_section("PHASE EXECUTION COMPLETE")

@@ -166,6 +166,9 @@ IMPLEMENTATION_PHASES = {"5", "6", "7", "8", "9", "10"}
 # latent context from a previous phase execution.
 STRICTLY_INDEPENDENT_PHASES = set(PHASE_DISPLAY_NAME_MAP.keys())
 
+# Runner configuration
+RUNNER_TYPE = "gemini"  # Options: "gemini", "openhands"
+
 TARGET_REPO_CONFIG_MAP = {
     "fedevela/particle-life-3d": TargetRepoConfig(
         local_path=Path("/Users/macbook/Documents/gitworkspace/particle-life-3d"),

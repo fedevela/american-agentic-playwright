@@ -1,7 +1,7 @@
 """Router tests for phase dispatch and execution policy.
 
 These cases verify that the top-level router sends work to the correct phase
-handler and carries the expected OpenHands session policy into that handler.
+handler and carries the expected session policy into that handler.
 """
 
 from __future__ import annotations
@@ -33,10 +33,10 @@ class RouterPhaseExecutionTests(unittest.TestCase):
     @patch("trigger_workflow.router.advance_issue_label")
     @patch("trigger_workflow.router.post_issue_comment")
     @patch("trigger_workflow.router.log_multiline")
-    @patch("trigger_workflow.router.run_openhands_comment_phase", return_value="Line one\nLine two")
+    @patch("trigger_workflow.router.run_comment_phase", return_value="Line one\nLine two")
     def test_execute_discussion_phase_logs_generated_comment_body(
         self,
-        run_openhands_for_comment_mock,
+        run_comment_phase_mock,
         log_multiline_mock,
         post_issue_comment_mock,
         advance_issue_label_mock,
@@ -55,7 +55,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         )
 
         log_multiline_mock.assert_called_once_with("Generated comment", "Line one\nLine two")
-        self.assertEqual(run_openhands_for_comment_mock.call_args.kwargs["session_scope"], "phase-1")
+        self.assertEqual(run_comment_phase_mock.call_args.kwargs["session_scope"], "phase-1")
 
     @patch("trigger_workflow.router.post_issue_comment")
     @patch("trigger_workflow.router.remove_issue_label")
@@ -68,12 +68,12 @@ class RouterPhaseExecutionTests(unittest.TestCase):
     )
     @patch("trigger_workflow.router.validate_tiferet_specification_payload_structure")
     @patch(
-        "trigger_workflow.router.run_openhands_json_phase",
+        "trigger_workflow.router.run_json_phase",
         return_value={"comment": "Parent body", "sub_issues": []},
     )
     def test_execute_specification_phase_uses_shared_issue_session_scope(
         self,
-        run_openhands_for_json_mock,
+        run_json_phase_mock,
         validate_phase_four_payload_mock,
         create_child_issues_mock,
         build_phase_four_summary_mock,
@@ -123,18 +123,18 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(run_openhands_for_json_mock.call_args.kwargs["session_scope"], "phase-4")
+        self.assertEqual(run_json_phase_mock.call_args.kwargs["session_scope"], "phase-4")
         create_issue_branches_for_child_issues_mock.assert_called_once_with("owner/repo", [101])
         remove_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:tiferet")
 
     @patch("trigger_workflow.router.advance_issue_label")
     @patch("trigger_workflow.router.post_issue_comment")
-    @patch("trigger_workflow.router.finalize_phase_delivery", return_value="Delivery summary")
-    @patch("trigger_workflow.router.run_openhands_implementation_phase")
+    @patch("trigger_workflow.router.finalize_delivery", return_value="Delivery summary")
+    @patch("trigger_workflow.router.run_implementation_phase")
     def test_execute_agent_phase_uses_shared_issue_session_scope(
         self,
-        run_openhands_task_mock,
-        finalize_phase_delivery_mock,
+        run_implementation_phase_mock,
+        finalize_delivery_mock,
         post_issue_comment_mock,
         advance_issue_label_mock,
     ) -> None:
@@ -149,8 +149,8 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(run_openhands_task_mock.call_args.kwargs["session_scope"], "phase-5")
-        finalize_phase_delivery_mock.assert_called_once_with(
+        self.assertEqual(run_implementation_phase_mock.call_args.kwargs["session_scope"], "phase-5")
+        finalize_delivery_mock.assert_called_once_with(
             repo="owner/repo",
             issue=55,
             phase="5",
@@ -327,7 +327,8 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         preview_phase_execution_plan(request)
 
         build_phase_execution_prompt_mock.assert_called_once()
-        self.assertEqual(log_multiline_mock.call_args_list[0].args[0], "Manual mode prompt for OpenHands (implementation)")
+        # RUNNER_TYPE defaults to gemini
+        self.assertEqual(log_multiline_mock.call_args_list[0].args[0], "Manual mode prompt for gemini (implementation)")
         self.assertEqual(log_multiline_mock.call_args_list[0].args[1], "PROMPT-CONTENT")
         self.assertEqual(log_multiline_mock.call_args_list[1].args[0], "Manual mode planned actions")
 
@@ -349,7 +350,6 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         self.assertIn("phase:6 issue #32", rendered)
         self.assertIn("Generate a phase delivery comment body", rendered)
         self.assertIn("Commit and push the branch updates.", rendered)
-        self.assertIn("Post the delivery comment to the issue as a wrapped phase comment.", rendered)
 
     def test_render_prompt_only_output_for_discussion_preserves_discussion_actions(self) -> None:
         request = PhaseExecutionRequest(
@@ -363,8 +363,8 @@ class RouterPhaseExecutionTests(unittest.TestCase):
 
         rendered = render_prompt_only_output(request, "PROMPT-CONTENT")
 
-        self.assertIn("Run OpenHands with the prompt above and capture the final assistant message.", rendered)
-        self.assertIn("Post that message to the issue as a phase comment wrapper.", rendered)
+        self.assertIn("Prepare a commit message", rendered)
+        self.assertIn("Generate the gh command to post the comment", rendered)
 
     @patch("trigger_workflow.router.fetch_issue_data")
     @patch("trigger_workflow.router.read_microagent_for_label")
