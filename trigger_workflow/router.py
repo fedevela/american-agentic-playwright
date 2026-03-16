@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import sys
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
@@ -296,27 +297,27 @@ def render_prompt_only_output(request: PhaseExecutionRequest, prompt: str) -> st
     """Return prompt-only output including next-action instructions by phase family."""
     if request.phase in DISCUSSION_PHASES:
         actions = [
-            "1. Run OpenHands with the prompt above and capture the final assistant message.",
-            "2. Post that message to the issue as a phase comment wrapper.",
-            "3. Advance the issue label to the next phase.",
+            "1. Prepare a commit message with the above prompt.",
+            "5. Generate the gh command to post the comment to the issue in md format.",
+            "3. Generate the issue label to the next phase.",
         ]
     elif request.phase == SPECIFICATION_PHASE:
         actions = [
-            "1. Run OpenHands with the prompt above and capture the final assistant message as JSON.",
+            "1. Prepare a commit message with the above prompt.",
             "2. Validate JSON payload structure and requirement traceability.",
             "3. Post the parent phase comment from `payload.comment`.",
             "4. Create ordered child issues from `payload.sub_issues` and create child branches.",
-            "5. Post the generated child issue summary comment.",
+            "5. Generate the gh command to post the comment to the issue in md format.",
             "6. Remove the parent phase label from the parent issue.",
         ]
     else:
         actions = [
-            "1. Run OpenHands with the prompt above on the resolved issue branch.",
+            "1. Prepare a commit message with the above prompt.",
             "2. Generate a commit message and keep the trigger format: "
             f"`phase:{request.phase} issue #{request.issue}: <short summary>`.",
             "3. Generate a phase delivery comment body summarizing changes and validation.",
             "4. Commit and push the branch updates.",
-            "5. Post the delivery comment to the issue as a wrapped phase comment.",
+            "5. Generate the gh command to post the comment to the issue in md format.",
             "6. Advance the issue label to the next phase.",
         ]
 
@@ -499,6 +500,7 @@ def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
 
 def run_trigger_cli() -> None:
     """Main entry point."""
+    log_info("Starting OpenHands swarm phase router CLI")
     parser = argparse.ArgumentParser(description="Trigger OpenHands / GitHub phase workflow")
     parser.add_argument("--label", help="GitHub label triggering the phase")
     parser.add_argument("--phase", help="Canonical phase id (1, 2A, 2B, 2C, 3, 4, 5, 6, 7, 8, 9, 10)")
@@ -515,6 +517,10 @@ def run_trigger_cli() -> None:
         help="Return only the generated phase prompt text for the requested issue/label",
     )
     args = parser.parse_args()
+    log_info(
+        f"CLI arguments: label={args.label}, phase={args.phase}, issue={args.issue}, "
+        f"repo={args.repo}, manual={args.manual}, prompt-only={args.prompt_only}"
+    )
     resolved_label = args.label
     if args.phase:
         phase_label = label_for_phase_id(args.phase)
@@ -523,19 +529,30 @@ def run_trigger_cli() -> None:
                 f"Conflicting inputs: --label '{resolved_label}' does not match --phase '{args.phase}' "
                 f"(expected label '{phase_label}')."
             )
+        log_info(f"Mapped phase argument '{args.phase}' to label '{phase_label}'")
         resolved_label = phase_label
 
     if args.prompt_only:
-        with redirect_stdout(io.StringIO()):
-            request = resolve_phase_execution_request(
-                label=resolved_label,
-                issue=args.issue,
-                repo=args.repo,
-                manual=True,
-                include_base_persona=True,
-            )
-            prompt, _ = build_phase_execution_prompt(request, select_phase_prompt_builder(request.phase))
+        log_info("Prompt-only mode: generating and outputting the phase prompt without running OpenHands or mutating GitHub.")
+        captured_logs = io.StringIO()
+        try:
+            with redirect_stdout(captured_logs):
+                log_info("Resolving phase execution request for prompt generation...")
+                request = resolve_phase_execution_request(
+                    label=resolved_label,
+                    issue=args.issue,
+                    repo=args.repo,
+                    manual=True,
+                    include_base_persona=True,
+                )
+                prompt, _ = build_phase_execution_prompt(request, select_phase_prompt_builder(request.phase))
+        except SystemExit:
+            print(captured_logs.getvalue(), file=sys.stderr)
+            raise
+
+        print(captured_logs.getvalue(), file=sys.stderr)
         print(render_prompt_only_output(request, prompt))
+        log_info("Prompt-only output generated")
         return
 
     log_section("OPENHANDS SWARM PHASE ROUTER")

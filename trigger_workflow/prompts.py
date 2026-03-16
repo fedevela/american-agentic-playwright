@@ -91,25 +91,43 @@ def read_functional_microagent(label: str, phase: str | None) -> str:
 def extract_phase_1_comment(issue_data: dict[str, Any]) -> str | None:
     """Extract the normalized Keter comment body from machine-marked issue comments."""
     comments = issue_data.get("comments") or []
-    for comment in comments:
+    log_info(f"Extracting phase 1 comment from {len(comments)} comments...")
+    for i, comment in enumerate(comments):
+        log_info(f"  Processing comment {i + 1}/{len(comments)}")
         if not isinstance(comment, dict):
+            log_info("    - Skipping: not a dictionary.")
             continue
-        body = comment.get("body", "")
+        body = str(comment.get("body") or "")
         if not body:
+            log_info("    - Skipping: empty body.")
             continue
-        if "<!-- phase:1:start" in body:
-            start_marker = "<!-- phase:1:start"
-            end_marker = "<!-- phase:1:end"
-            if start_marker in body and end_marker in body:
-                start_idx = body.find(start_marker)
-                end_idx = body.find(end_marker, start_idx)
-                if end_idx > start_idx:
-                    content = body[start_idx:end_idx]
-                    lines = content.split("\n")
-                    for i, line in enumerate(lines):
-                        if line.startswith("### Phase 1:"):
-                            return "\n".join(lines[i + 2 :]).strip() if i + 2 < len(lines) else ""
-                    return content
+
+        log_info(f"    - Comment body length: {len(body)}")
+        start_marker = "<!-- phase:1:start"
+        end_marker = "<!-- phase:1:end"
+
+        if start_marker in body and end_marker in body:
+            log_info("    - Found start and end markers for phase 1.")
+            start_idx = body.find(start_marker)
+            end_idx = body.find(end_marker, start_idx)
+            if end_idx > start_idx:
+                content = body[start_idx:end_idx]
+                log_info(f"    - Extracted content block (length: {len(content)})")
+                lines = content.split("\n")
+                for j, line in enumerate(lines):
+                    if line.startswith("### Phase 1:"):
+                        log_info(f"    - Found '### Phase 1:' on line {j + 1}.")
+                        extracted = "\n".join(lines[j + 2 :]).strip() if j + 2 < len(lines) else ""
+                        log_info(f"    - Returning extracted clarification (length: {len(extracted)})")
+                        return extracted
+                log_info("    - Fallback: returning raw content between markers because '### Phase 1:' was not found.")
+                return content
+            else:
+                log_info(f"    - Skipping: end marker found before start marker (start={start_idx}, end={end_idx}).")
+        else:
+            log_info("    - Skipping: missing start or end marker for phase 1.")
+
+    log_info("No phase 1 comment found after checking all comments.")
     return None
 
 
@@ -174,6 +192,7 @@ def build_phase_prompt_input_context(
         log_info(f"Prompt input source: {source} for phase {phase.upper()}")
         return build_issue_runtime_context(label, issue, repo, phase, issue_data, include_comments=include_comments)
 
+    log_info(f"Phase {phase.upper()} is in KETER_DERIVED_PHASES, extracting Phase 1/Keter comment for prompt context")
     phase_1_comment = extract_phase_1_comment(issue_data)
     if not phase_1_comment:
         log_error(f"Phase {phase.upper()} requires an existing Phase 1/Keter comment, but none was found on the issue.")
@@ -232,6 +251,7 @@ def build_comment_phase_prompt(
     phase: str,
     issue_data: dict[str, Any],
 ) -> str:
+    log_info(f"Building comment-producing prompt for phase {phase.upper()}")
     """Build a prompt for comment-producing phases."""
     requirements = [
         "- Be concise and authoritative.",
