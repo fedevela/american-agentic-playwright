@@ -559,7 +559,7 @@ def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
     log_info("Label advanced")
 
 
-def run_trigger_cli(mode: str = "sdlc") -> None:
+def run_trigger_cli(mode: str = "creative-writer") -> None:
     """Main entry point."""
     global RUNNER_TYPE
     log_info("Starting swarm phase router CLI")

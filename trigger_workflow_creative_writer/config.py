@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 WORKSPACE = Path(__file__).resolve().parent.parent
-MICROAGENTS_DIR = WORKSPACE / "microagents" / "sdlc"
-PERSONAS_DIR = WORKSPACE / "personas" / "sdlc"
+MICROAGENTS_DIR = WORKSPACE / "microagents" / "creative-writer"
+PERSONAS_DIR = WORKSPACE / "personas" / "creative-writer"
 DEFAULT_REPO = "fedevela/particle-life-3d"
 SESSION_STATE_PATH = WORKSPACE / "workspace" / ".session-state.json"
 
