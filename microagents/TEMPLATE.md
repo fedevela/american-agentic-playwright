@@ -1,6 +1,7 @@
 ---
 phase:++++
 name:
+category:
 kabbalistic keywords: 
 ---
 
@@ -12,4 +13,4 @@ YOUR LAWS
 
 YOUR PRECISE DIRECTIVES
 
-YOUR PRODUCTS
+YOUR NARRATIVE PRODUCTS
