@@ -114,6 +114,25 @@ python trigger.py --working-dir . --issue 53
 python trigger.py --label phase:keter --issue 53 --manual
 ```
 
+### Testing
+The repository contains two distinct test suites for the different modes of operation.
+
+To run all tests across both modes:
+```bash
+source .venv/bin/activate
+pytest tests/
+```
+
+To run only the SDLC tests:
+```bash
+pytest tests/trigger_workflow/
+```
+
+To run only the Creative Writer tests:
+```bash
+pytest tests/trigger_workflow_creative_writer/
+```
+
 ## Architecture
 
 ### Router (`router.py`)
