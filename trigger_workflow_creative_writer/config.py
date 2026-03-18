@@ -84,6 +84,10 @@ PHASE_LABEL_METADATA = {
         "description": "Phase 10 Hod Refactoring: Structural Clarity",
         "color": "1F6FEB",
     },
+    "phase:askQuestion": {
+        "description": "Workflow paused: awaiting clarification from the human Showrunner",
+        "color": "D4C5F9",
+    },
     "phase:needsHuman": {
         "description": "Workflow halted: requires human intervention",
         "color": "B60205",

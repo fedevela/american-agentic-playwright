@@ -472,6 +472,14 @@ def execute_comment_phase_handoff(request: PhaseExecutionRequest) -> None:
     post_phase_machine_comment(request, comment)
     log_info("Comment posted")
 
+    if comment.strip().startswith("[ACTION: ASK_QUESTION]"):
+        log_info("Phase output requested clarification. Routing to askQuestion state.")
+        remove_issue_label(request.repo, request.issue, request.label)
+        from .github_ops import run_gh_command
+        run_gh_command("issue", "edit", str(request.issue), "--repo", request.repo, "--add-label", "phase:askQuestion")
+        log_info("Label swapped to phase:askQuestion. Execution paused.")
+        return
+
     log_info("Advancing to next phase label...")
     advance_issue_label(request.repo, request.issue, request.label)
     log_info("Label advanced")
