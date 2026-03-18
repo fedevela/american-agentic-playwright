@@ -456,7 +456,11 @@ def create_child_issues(
         if prefix_lines:
             body = "\n".join(prefix_lines) + f"\n\n{body}"
 
-        payload = create_issue_via_api(repo, normalized_title, body, labels=["phase:netzach"])
+        size_label = "phase:keter"
+        if "[SMALL]" in body:
+            size_label = "phase:netzach"
+
+        payload = create_issue_via_api(repo, normalized_title, body, labels=[size_label])
         issue_number = int(payload["number"])
         issue_id = int(payload["id"])
         url = str(payload["html_url"]).strip()
