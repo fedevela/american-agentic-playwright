@@ -16,7 +16,7 @@ from trigger_workflow_formal_document_writer.runner_utils import resolve_phase_e
 from trigger_workflow_formal_document_writer.prompts import (
     build_implementation_phase_prompt,
     build_comment_phase_prompt,
-    build_phase_2_story_requirements,
+    build_phase_2_requirement_rules,
     build_phase_prompt_input_context,
     build_tiferet_specification_prompt,
     determine_phase_from_label,
@@ -109,12 +109,13 @@ class PromptBuilderTests(unittest.TestCase):
         )
         self.assertIn("- CRITICAL LANGUAGE MANDATE: You must write your response and all artifacts in the same language as the original issue text.", prompt_p2a)
 
-    def test_phase_2_story_requirements_enforce_e2e_observable_outcomes(self) -> None:
-        requirements = build_phase_2_story_requirements()
+    def test_phase_2_requirement_rules_enforce_bureaucratic_tone(self) -> None:
+        requirements = build_phase_2_requirement_rules()
         joined = "\n".join(requirements)
-        self.assertIn("observable, automatable, and verifiable through end-to-end tests", joined)
-        self.assertIn("Write `then` clauses in measurable terms", joined)
-        self.assertIn("Do not rely on subjective human judgments", joined)
+        self.assertIn("Emit Document Requirements only", joined)
+        self.assertIn("formal, professional, and highly technical language", joined)
+        self.assertIn("Do not generate user stories, narrative beats, or software specifications.", joined)
+        self.assertIn("Use only the `[RED]` semaphore tag", joined)
 
     def test_phase_3_persona_stack_requires_atomic_id_bearing_requirements_and_justification(self) -> None:
         content = read_microagent_for_label("phase:gevurah", "3")

@@ -235,17 +235,17 @@ def strip_microagent(microagent: str) -> str:
     return microagent_stripped
 
 
-def build_phase_2_story_requirements() -> list[str]:
-    """Return shared requirements for phase-2 semaphored user-story comments."""
+def build_phase_2_requirement_rules() -> list[str]:
+    """Return shared requirements for phase-2 formal document structuring."""
     return [
-        "- Emit semaphored user stories only; do not add headings, preamble, summary, or commentary.",
-        "- Format every line as `[COLOR] Given ..., when ..., then ...`.",
-        "- Use only these semaphore tags: `[RED]`, `[ORANGE]`, and `[GREEN]`.",
-        "- Keep the output shape consistent across all phase 2 variants: a flat list of semaphored user stories.",
-        "- Derive every story exclusively from the Keter clarification provided in the prompt.",
-        "- Favor behaviors that are observable, automatable, and verifiable through end-to-end tests.",
-        "- Write `then` clauses in measurable terms: concrete state changes, DOM/UI changes, emitted values, preserved controls, deterministic outputs, or other inspectable outcomes.",
-        "- Do not rely on subjective human judgments such as 'feels natural', 'looks better', 'visibly improved', or 'responsive' unless those claims are tied to explicit, testable signals.",
+        "- Emit Document Requirements only; do not add headings, preamble, summary, or commentary.",
+        "- Format every line as `[RED] [SECTION: <NAME>] ...`.",
+        "- Use only the `[RED]` semaphore tag, as all generated requirements are mandatory for a competitive grant proposal.",
+        "- Keep the output shape consistent across all phase 2 variants: a flat list of formal Document Requirements.",
+        "- Derive every requirement exclusively from the Keter clarification and the official guideline artifacts provided in the prompt.",
+        "- Favor requirements that enforce concrete evidence, specific methodologies, and clear alignment with the grant's evaluation criteria.",
+        "- Write requirements in formal, professional, and highly technical language suitable for an expert evaluation panel.",
+        "- Do not generate user stories, narrative beats, or software specifications.",
         "- Do not mention other phases, personas, or handoff language.",
     ]
 
@@ -284,7 +284,7 @@ def build_comment_phase_prompt(
             ]
         )
     elif phase in {"2A", "2B", "2C"}:
-        requirements.extend(build_phase_2_story_requirements())
+        requirements.extend(build_phase_2_requirement_rules())
 
     return f"""{strip_microagent(microagent)}
 
