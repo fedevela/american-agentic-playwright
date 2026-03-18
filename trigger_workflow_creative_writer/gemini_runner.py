@@ -22,6 +22,8 @@ from .runner_utils import (
     summarize_test_output,
 )
 
+from .artifact_validation import validate_required_artifacts
+
 VALIDATION_PHASES = set(IMPLEMENTATION_PHASES)
 
 def run_gemini(
@@ -42,6 +44,9 @@ def run_gemini(
 
     log_info(f"Gemini target repository loaded: {context.local_path}")
     log_info(f"Gemini target branch loaded: {context.branch}")
+
+    # Validate that all required creative writing artifacts exist in the local workspace.
+    validate_required_artifacts(context.local_path)
 
     # Use the requested "yolo" and "non-interactive" style
     # Prepend '@. ' to ensure Gemini reads the current folder context
@@ -140,6 +145,11 @@ def run_gemini_json_phase(
     """Run Gemini and parse the final assistant reply as JSON."""
     log_info("Requesting JSON response from Gemini")
     content = run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data)
+    
+    if "[ERROR]" in content or "[ERROR:REJECT_BEAT]" in content:
+        log_info("Agent emitted an explicit error/rejection instead of JSON.")
+        return {"__action_rejection": True, "comment": content}
+
     log_info("Parsing JSON from assistant reply")
     json_content = extract_json_from_markdown(content)
     try:

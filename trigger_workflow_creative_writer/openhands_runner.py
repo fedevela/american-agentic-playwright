@@ -480,6 +480,11 @@ def run_openhands_json_phase(
     """Run OpenHands and parse the final assistant reply as JSON."""
     log_info("Requesting JSON response from OpenHands")
     content = run_openhands_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
+    
+    if "[ERROR]" in content or "[ERROR:REJECT_BEAT]" in content:
+        log_info("Agent emitted an explicit error/rejection instead of JSON.")
+        return {"__action_rejection": True, "comment": content}
+
     log_info("Parsing JSON from assistant reply")
     try:
         return json.loads(content)

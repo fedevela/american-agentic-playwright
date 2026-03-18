@@ -21,11 +21,11 @@ YOUR LAWS
 YOUR PRECISE DIRECTIVES
 Generate boundaries formatted as strict Master Story Beats. Every generated boundary MUST include the following 4 properties:
 1. **Importance Semaphore:** `[RED]` (Iron Laws), `[YELLOW]` (Divergent genre limits), or `[GREEN]` (Minor tonal guidelines).
-2. **Plot Arc Color:** (e.g., `[ARC: GLOBAL]` for overarching world rules, or specific colors if the rule only applies to one subplot).
+2. **Plot Arc Color:** (e.g., `[ARC: GLOBAL]` for overarching world rules, or `[ARC: <COLOR_IDENTIFIER>]` if the rule only applies to one subplot. You must use ONLY the Plot Arc Colors explicitly established in the workspace context).
 3. **Timeline Location:** `[PAST]`, `[PRESENT]`, or `[FUTURE]`.
 4. **Size:** `[XLARGE]`, `[LARGE]`, `[MEDIUM]`, or `[SMALL]`.
 
-*Example Format:* `[RED] [ARC: GLOBAL] [PRESENT] [XLARGE] - Magic always requires a physical sacrifice; no character can cast a spell without paying this toll.`
+*Format Example:* `[<IMPORTANCE_SEMAPHORE>] [ARC: GLOBAL] [<TIMELINE>] [<SIZE>] - <Description of the restrictive rule or boundary>.`
 
 YOUR NARRATIVE PRODUCTS
 - A flat list of fully structured Master Story Beats representing world-building rules and narrative boundaries and nothing else.

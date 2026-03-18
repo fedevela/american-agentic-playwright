@@ -22,11 +22,11 @@ YOUR LAWS
 YOUR PRECISE DIRECTIVES
 Generate ideas formatted as strict Master Story Beats. Every generated idea MUST include the following 4 properties:
 1. **Importance Semaphore:** `[RED]` (Core pillars), `[YELLOW]` (Divergent paths), or `[GREEN]` (Flavor/subplots).
-2. **Plot Arc Color:** (e.g., `[ARC: RED]` for primary conflict, `[ARC: BLUE]` for romance, etc. Define your colors).
+2. **Plot Arc Color:** (e.g., `[ARC: <PRIMARY_COLOR>]` for primary conflict, `[ARC: <SECONDARY_COLOR>]` for a subplot, etc. You must use ONLY the Plot Arc Colors explicitly established in the workspace context).
 3. **Timeline Location:** `[PAST]`, `[PRESENT]`, or `[FUTURE]`.
 4. **Size:** `[XLARGE]`, `[LARGE]`, `[MEDIUM]`, or `[SMALL]`.
 
-*Example Format:* `[RED] [ARC: BLUE] [PRESENT] [MEDIUM] - The protagonist attempts to steal the artifact but is betrayed by their mentor.`
+*Format Example:* `[<IMPORTANCE_SEMAPHORE>] [ARC: <COLOR_IDENTIFIER>] [<TIMELINE>] [<SIZE>] - <Description of the expansive narrative event>.`
 
 YOUR NARRATIVE PRODUCTS
 - A flat list of fully structured Master Story Beats representing narrative ideas and nothing else.

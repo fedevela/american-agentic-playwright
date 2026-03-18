@@ -30,10 +30,10 @@ class RouterPhaseExecutionTests(unittest.TestCase):
     workflow incorrectly while appearing operationally healthy.
     """
 
-    @patch("trigger_workflow_creative_writer.router.advance_issue_label")
-    @patch("trigger_workflow_creative_writer.router.post_issue_comment")
-    @patch("trigger_workflow_creative_writer.router.log_multiline")
-    @patch("trigger_workflow_creative_writer.router.run_comment_phase", return_value="Line one\nLine two")
+    @patch("trigger_workflow_creative_writer.core.advance_issue_label")
+    @patch("trigger_workflow_creative_writer.core.post_issue_comment")
+    @patch("trigger_workflow_creative_writer.core.log_multiline")
+    @patch("trigger_workflow_creative_writer.core.run_comment_phase", return_value="Line one\nLine two")
     def test_execute_discussion_phase_logs_generated_comment_body(
         self,
         run_comment_phase_mock,
@@ -57,18 +57,18 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         log_multiline_mock.assert_called_once_with("Generated comment", "Line one\nLine two")
         self.assertEqual(run_comment_phase_mock.call_args.kwargs["session_scope"], "phase-1")
 
-    @patch("trigger_workflow_creative_writer.router.post_issue_comment")
-    @patch("trigger_workflow_creative_writer.router.clear_issue_labels_except")
-    @patch("trigger_workflow_creative_writer.router.create_issue_branches_for_child_issues")
-    @patch("trigger_workflow_creative_writer.router.log_multiline")
-    @patch("trigger_workflow_creative_writer.router.build_phase_four_summary", return_value="Summary body")
+    @patch("trigger_workflow_creative_writer.core.post_issue_comment")
+    @patch("trigger_workflow_creative_writer.core.clear_issue_labels_except")
+    @patch("trigger_workflow_creative_writer.core.create_issue_branches_for_child_issues")
+    @patch("trigger_workflow_creative_writer.core.log_multiline")
+    @patch("trigger_workflow_creative_writer.core.build_phase_four_summary", return_value="Summary body")
     @patch(
-        "trigger_workflow_creative_writer.router.create_child_issues",
+        "trigger_workflow_creative_writer.core.create_child_issues",
         return_value=[{"number": 101, "id": 1001, "title": "child", "url": "https://example.com/101"}],
     )
-    @patch("trigger_workflow_creative_writer.router.validate_tiferet_specification_payload_structure")
+    @patch("trigger_workflow_creative_writer.core.validate_tiferet_specification_payload_structure")
     @patch(
-        "trigger_workflow_creative_writer.router.run_json_phase",
+        "trigger_workflow_creative_writer.core.run_json_phase",
         return_value={"comment": "Parent body", "sub_issues": []},
     )
     def test_execute_specification_phase_uses_shared_issue_session_scope(
@@ -129,10 +129,10 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             "owner/repo", 55, [], keep=["phase:needsHuman"]
         )
 
-    @patch("trigger_workflow_creative_writer.router.advance_issue_label")
-    @patch("trigger_workflow_creative_writer.router.post_issue_comment")
-    @patch("trigger_workflow_creative_writer.router.finalize_delivery", return_value="Delivery summary")
-    @patch("trigger_workflow_creative_writer.router.run_implementation_phase")
+    @patch("trigger_workflow_creative_writer.core.advance_issue_label")
+    @patch("trigger_workflow_creative_writer.core.post_issue_comment")
+    @patch("trigger_workflow_creative_writer.core.finalize_delivery", return_value="Delivery summary")
+    @patch("trigger_workflow_creative_writer.core.run_implementation_phase")
     def test_execute_agent_phase_uses_shared_issue_session_scope(
         self,
         run_implementation_phase_mock,
@@ -162,12 +162,12 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         post_issue_comment_mock.assert_called_once()
         advance_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:netzach")
 
-    @patch("trigger_workflow_creative_writer.router.execute_implementation_phase_task")
-    @patch("trigger_workflow_creative_writer.router.execute_tiferet_specification_phase")
-    @patch("trigger_workflow_creative_writer.router.execute_comment_phase_handoff")
-    @patch("trigger_workflow_creative_writer.router.fetch_issue_data")
-    @patch("trigger_workflow_creative_writer.router.read_microagent_for_label")
-    @patch("trigger_workflow_creative_writer.router.ensure_phase_labels")
+    @patch("trigger_workflow_creative_writer.core.execute_implementation_phase_task")
+    @patch("trigger_workflow_creative_writer.core.execute_tiferet_specification_phase")
+    @patch("trigger_workflow_creative_writer.core.execute_comment_phase_handoff")
+    @patch("trigger_workflow_creative_writer.core.fetch_issue_data")
+    @patch("trigger_workflow_creative_writer.core.read_microagent_for_label")
+    @patch("trigger_workflow_creative_writer.core.ensure_phase_labels")
     def test_trigger_agent_routes_chesed_to_discussion_phase(
         self,
         ensure_phase_labels_mock,
@@ -194,12 +194,12 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         execute_specification_mock.assert_not_called()
         execute_agent_mock.assert_not_called()
 
-    @patch("trigger_workflow_creative_writer.router.log_error")
-    @patch("trigger_workflow_creative_writer.router.tag_issue_needs_human")
-    @patch("trigger_workflow_creative_writer.router.execute_tiferet_specification_phase", side_effect=SystemExit("phase failed"))
-    @patch("trigger_workflow_creative_writer.router.fetch_issue_data")
-    @patch("trigger_workflow_creative_writer.router.read_microagent_for_label")
-    @patch("trigger_workflow_creative_writer.router.ensure_phase_labels")
+    @patch("trigger_workflow_creative_writer.core.log_error")
+    @patch("trigger_workflow_creative_writer.core.tag_issue_needs_human")
+    @patch("trigger_workflow_creative_writer.core.execute_tiferet_specification_phase", side_effect=SystemExit("phase failed"))
+    @patch("trigger_workflow_creative_writer.core.fetch_issue_data")
+    @patch("trigger_workflow_creative_writer.core.read_microagent_for_label")
+    @patch("trigger_workflow_creative_writer.core.ensure_phase_labels")
     def test_trigger_agent_tags_needs_human_when_pre_netzach_phase_fails(
         self,
         ensure_phase_labels_mock,
@@ -225,10 +225,10 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         self.assertIn("phase failed", str(exc.exception))
         tag_issue_needs_human_mock.assert_called_once_with("owner/repo", 55)
 
-    @patch("trigger_workflow_creative_writer.router.log_error")
-    @patch("trigger_workflow_creative_writer.router.fetch_issue_data")
-    @patch("trigger_workflow_creative_writer.router.read_microagent_for_label")
-    @patch("trigger_workflow_creative_writer.router.ensure_phase_labels")
+    @patch("trigger_workflow_creative_writer.core.log_error")
+    @patch("trigger_workflow_creative_writer.core.fetch_issue_data")
+    @patch("trigger_workflow_creative_writer.core.read_microagent_for_label")
+    @patch("trigger_workflow_creative_writer.core.ensure_phase_labels")
     def test_trigger_agent_errors_when_issue_lacks_requested_label(
         self,
         ensure_phase_labels_mock,
@@ -251,13 +251,13 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         log_error_mock.assert_called_once()
         self.assertIn("is not labeled 'phase:chesed'", log_error_mock.call_args.args[0])
 
-    @patch("trigger_workflow_creative_writer.router.preview_phase_execution_plan")
-    @patch("trigger_workflow_creative_writer.router.execute_implementation_phase_task")
-    @patch("trigger_workflow_creative_writer.router.execute_tiferet_specification_phase")
-    @patch("trigger_workflow_creative_writer.router.execute_comment_phase_handoff")
-    @patch("trigger_workflow_creative_writer.router.fetch_issue_data")
-    @patch("trigger_workflow_creative_writer.router.read_microagent_for_label")
-    @patch("trigger_workflow_creative_writer.router.ensure_phase_labels")
+    @patch("trigger_workflow_creative_writer.core.preview_phase_execution_plan")
+    @patch("trigger_workflow_creative_writer.core.execute_implementation_phase_task")
+    @patch("trigger_workflow_creative_writer.core.execute_tiferet_specification_phase")
+    @patch("trigger_workflow_creative_writer.core.execute_comment_phase_handoff")
+    @patch("trigger_workflow_creative_writer.core.fetch_issue_data")
+    @patch("trigger_workflow_creative_writer.core.read_microagent_for_label")
+    @patch("trigger_workflow_creative_writer.core.ensure_phase_labels")
     def test_manual_mode_routes_to_preview_only_without_execution_or_label_sync(
         self,
         ensure_phase_labels_mock,
@@ -283,10 +283,10 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         execute_tiferet_specification_phase_mock.assert_not_called()
         execute_implementation_phase_task_mock.assert_not_called()
 
-    @patch("trigger_workflow_creative_writer.router.preview_phase_execution_plan")
-    @patch("trigger_workflow_creative_writer.router.fetch_issue_data")
-    @patch("trigger_workflow_creative_writer.router.read_microagent_for_label")
-    @patch("trigger_workflow_creative_writer.router.ensure_phase_labels")
+    @patch("trigger_workflow_creative_writer.core.preview_phase_execution_plan")
+    @patch("trigger_workflow_creative_writer.core.fetch_issue_data")
+    @patch("trigger_workflow_creative_writer.core.read_microagent_for_label")
+    @patch("trigger_workflow_creative_writer.core.ensure_phase_labels")
     def test_manual_mode_forces_requested_label_even_if_issue_labels_do_not_match(
         self,
         ensure_phase_labels_mock,
@@ -306,9 +306,9 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         ensure_phase_labels_mock.assert_not_called()
         preview_phase_execution_plan_mock.assert_called_once()
 
-    @patch("trigger_workflow_creative_writer.router.log_multiline")
-    @patch("trigger_workflow_creative_writer.router.log_info")
-    @patch("trigger_workflow_creative_writer.router.build_phase_execution_prompt", return_value=("PROMPT-CONTENT", ""))
+    @patch("trigger_workflow_creative_writer.core.log_multiline")
+    @patch("trigger_workflow_creative_writer.core.log_info")
+    @patch("trigger_workflow_creative_writer.core.build_phase_execution_prompt", return_value=("PROMPT-CONTENT", ""))
     def test_manual_preview_logs_prompt_and_planned_actions_for_implementation(
         self,
         build_phase_execution_prompt_mock,
@@ -369,8 +369,8 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         self.assertIn("Prepare a commit message", rendered)
         self.assertIn("Generate the gh command to post the comment", rendered)
 
-    @patch("trigger_workflow_creative_writer.router.fetch_issue_data")
-    @patch("trigger_workflow_creative_writer.router.read_microagent_for_label")
+    @patch("trigger_workflow_creative_writer.core.fetch_issue_data")
+    @patch("trigger_workflow_creative_writer.core.read_microagent_for_label")
     def test_resolve_phase_execution_request_can_include_or_exclude_base_persona(
         self,
         read_microagent_for_label_mock,
