@@ -215,6 +215,14 @@ def run_labeled_issue_phase_with_mode(
         )
         return
 
+    if request.phase == "9":
+        log_info("Running Multi-Session Performance Loop for phase 9 (Malkhut)")
+        execute_phase_with_needs_human_tagging(
+            request,
+            execute_malkhut_performance_phase,
+        )
+        return
+
     log_info(f"Running implementation workflow for phase {request.phase.upper()}")
     execute_implementation_phase_task(request)
 
@@ -563,6 +571,55 @@ def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
     post_phase_machine_comment(request, delivery_summary)
     log_info("Delivery summary comment posted")
     log_info("Advancing to next phase label...")
+    advance_issue_label(request.repo, request.issue, request.label)
+    log_info("Label advanced")
+
+
+
+def execute_malkhut_performance_phase(request: PhaseExecutionRequest) -> None:
+    """
+    Execute phase 9/Malkhut using the Multi-Session Performance Loop.
+    This explicitly relieves the LLM from managing loops, enforcing the Slice Principle.
+    The Python trigger acts as the Information Broker here.
+    """
+    log_info("Building Malkhut orchestration loop...")
+    
+    # In a full implementation, the Python script will:
+    # 1. Read the `skeleton.md` file from the target directory.
+    # 2. Parse the <DIALOGUE character="X"> tags to find required personas.
+    # 3. Create isolated `session_scope` identifiers (e.g., 'malkhut_stage_master', 'malkhut_soul_A', 'malkhut_soul_B').
+    
+    stage_master_scope = f"malkhut_stage_master_issue_{request.issue}"
+    
+    log_info(f"Initializing Stage Master session: {stage_master_scope}")
+    # prompt = build_malkhut_slice_prompt(role="stage_master", context=skeleton_content)
+    # stage_output = run_comment_phase(prompt, session_scope=stage_master_scope, ...)
+    
+    log_info("Initializing Character Soul sessions...")
+    # for char in characters:
+    #     soul_scope = f"malkhut_soul_{char}_issue_{request.issue}"
+    #     prompt = build_malkhut_slice_prompt(role="soul", persona=char, context=stage_output)
+    #     run_comment_phase(prompt, session_scope=soul_scope, ...)
+    
+    log_info("Executing Debate Loop (bouncing context between Stage Master and Souls)...")
+    # while not scene_complete:
+    #     stage_output = update_stage(...)
+    #     soul_output = prompt_active_soul(stage_output, ...)
+    #     append_to_script_buffer(soul_output.dialogue)
+    
+    log_info("Debate loop complete. Finalizing script.md output...")
+    # write_final_script(...)
+    
+    log_info("Finalizing git delivery (commit + push)...")
+    delivery_summary = finalize_delivery(
+        repo=request.repo,
+        issue=request.issue,
+        phase=request.phase,
+        issue_title=str(request.issue_data.get("title") or ""),
+        issue_data=request.issue_data,
+    )
+    log_multiline("Delivery summary", delivery_summary)
+    post_phase_machine_comment(request, delivery_summary)
     advance_issue_label(request.repo, request.issue, request.label)
     log_info("Label advanced")
 
