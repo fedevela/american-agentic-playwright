@@ -84,6 +84,31 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("strictly tied to the evaluation criteria: Pertinencia, Viabilidad, Coherencia, and Perfil y experiencia", prompt)
         self.assertIn("Do not invent budget or timeline figures if they were not provided", prompt)
 
+    def test_build_comment_phase_prompt_enforces_op_language(self) -> None:
+        """Verify that comment phases receive the critical language mandate."""
+        # Test Phase 1
+        prompt_p1 = build_comment_phase_prompt(
+            "phase:keter",
+            12,
+            "owner/repo",
+            "Keter microagent",
+            "1",
+            {"title": "Example", "body": "Body", "comments": []},
+        )
+        self.assertIn("- CRITICAL LANGUAGE MANDATE: You must write your response and all artifacts in the same language as the original issue text.", prompt_p1)
+        self.assertIn("- If you are NOT asking a question, include these exact section headings (translated into the language of the original issue text):", prompt_p1)
+
+        # Test Phase 2A
+        prompt_p2a = build_comment_phase_prompt(
+            "phase:chokhmah",
+            12,
+            "owner/repo",
+            "Chokhmah microagent",
+            "2A",
+            {"title": "Example", "body": "Body", "comments": [{"body": "<!-- phase:1:start label=phase:keter name=Keter -->\n### Phase 1: Keter\n\nTest content that gets extracted.\n\n<!-- phase:1:end label=phase:keter name=Keter -->"}]},
+        )
+        self.assertIn("- CRITICAL LANGUAGE MANDATE: You must write your response and all artifacts in the same language as the original issue text.", prompt_p2a)
+
     def test_phase_2_story_requirements_enforce_e2e_observable_outcomes(self) -> None:
         requirements = build_phase_2_story_requirements()
         joined = "\n".join(requirements)

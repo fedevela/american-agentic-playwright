@@ -55,7 +55,6 @@ def run_gemini(
     command = [
         "gemini",
         "-p", full_prompt,
-        "--debug",
         "--approval-mode", "yolo",
         "-o", "json"
     ]

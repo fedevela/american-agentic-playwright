@@ -18,7 +18,7 @@ from .config import (
 from .logging_utils import log_error, log_info
 
 
-COMMENT_VISIBLE_PHASES = {"3", "4", "5", "6", "7", "8", "9"}
+COMMENT_VISIBLE_PHASES = {"1", "3", "4", "5", "6", "7", "8", "9"}
 
 
 def determine_phase_from_label(label: str) -> str | None:
@@ -273,14 +273,14 @@ def build_comment_phase_prompt(
         requirements.extend(
             [
                 "- Produce a comprehensive clarification comment, not an ACK.",
-                "- Start with a short statement that the project concept has been translated to formal application components.",
-                "- Include these exact section headings: `Project Profile & Trajectory`, `Proposed Strategy`, `Formal Constraints`, and `Phase 2 Handoff`.",
-                "- `Project Profile & Trajectory` must describe the applicant's background and alignment with the minimum requirements (e.g. 1 year continuous).",
-                "- `Proposed Strategy` must detail the methodology and actions intended to strengthen the cultural good/service.",
-                "- `Formal Constraints` must be a flat bullet list covering mandatory deliverables, budget/timeline strictures, and evaluation alignment.",
+                "- If you are NOT asking a question (`[ACTION: ASK_QUESTION]`), you must start with a short statement that the project concept has been translated to formal application components.",
+                "- If you are NOT asking a question, include these exact section headings (translated into the language of the original issue text): `Project Profile & Trajectory`, `Proposed Strategy`, `Formal Constraints`, and `Phase 2 Handoff`.",
+                "- The `Project Profile & Trajectory` section must describe the applicant's background and alignment with the minimum requirements (e.g. 1 year continuous).",
+                "- The `Proposed Strategy` section must detail the methodology and actions intended to strengthen the cultural good/service.",
+                "- The `Formal Constraints` section must be a flat bullet list covering mandatory deliverables, budget/timeline strictures, and evaluation alignment.",
                 "- Ensure all generated intent is strictly tied to the evaluation criteria: Pertinencia, Viabilidad, Coherencia, and Perfil y experiencia.",
                 "- Do not invent budget or timeline figures if they were not provided, flag them as doubtful instead using the Question Gate if necessary.",
-                "- `Phase 2 Handoff` must state that formal document structuring may now proceed.",
+                "- If you are NOT asking a question, the `Phase 2 Handoff` section must state that formal document structuring may now proceed.",
             ]
         )
     elif phase in {"2A", "2B", "2C"}:
