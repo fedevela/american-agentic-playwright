@@ -584,32 +584,38 @@ def execute_malkhut_performance_phase(request: PhaseExecutionRequest) -> None:
     """
     log_info("Building Malkhut orchestration loop...")
     
-    # In a full implementation, the Python script will:
-    # 1. Read the `skeleton.md` file from the target directory.
-    # 2. Parse the <DIALOGUE character="X"> tags to find required personas.
-    # 3. Create isolated `session_scope` identifiers (e.g., 'malkhut_stage_master', 'malkhut_soul_A', 'malkhut_soul_B').
+    # How the Trigger Orchestrates Phase 9:
     
-    stage_master_scope = f"malkhut_stage_master_issue_{request.issue}"
+    # 1. The Parse: The Python trigger reads skeleton.md and identifies the required character personas.
+    # skeleton_content = read_skeleton_file()
+    # required_personas = extract_required_personas(skeleton_content)
     
-    log_info(f"Initializing Stage Master session: {stage_master_scope}")
-    # prompt = build_malkhut_slice_prompt(role="stage_master", context=skeleton_content)
-    # stage_output = run_comment_phase(prompt, session_scope=stage_master_scope, ...)
+    # 2. The Session Dictionary: The Python trigger initializes an array of persistent API conversation histories.
+    # session_dict = {
+    #     "stage_master": create_persistent_session("malkhut_stage_master"),
+    #     "souls": {p: create_persistent_session(f"malkhut_soul_{p}") for p in required_personas}
+    # }
     
-    log_info("Initializing Character Soul sessions...")
-    # for char in characters:
-    #     soul_scope = f"malkhut_soul_{char}_issue_{request.issue}"
-    #     prompt = build_malkhut_slice_prompt(role="soul", persona=char, context=stage_output)
-    #     run_comment_phase(prompt, session_scope=soul_scope, ...)
-    
-    log_info("Executing Debate Loop (bouncing context between Stage Master and Souls)...")
-    # while not scene_complete:
-    #     stage_output = update_stage(...)
-    #     soul_output = prompt_active_soul(stage_output, ...)
-    #     append_to_script_buffer(soul_output.dialogue)
-    
-    log_info("Debate loop complete. Finalizing script.md output...")
-    # write_final_script(...)
-    
+    # 3. The Loop: Programmatically bounce prompts between distinct conversation histories.
+    # while tags_remaining_in_skeleton():
+    #     stage_output = prompt_session(session_dict["stage_master"], next_tags)
+    #
+    #     # The Stage Master MUST narrate back to every persona what it is perceiving
+    #     for p in required_personas:
+    #         prompt_session(session_dict["souls"][p], f"Stage Master Narration: {stage_output.narration}")
+    #
+    #     # Take the output of the stage_master and feed it as user input to the specific soul_p's API context
+    #     active_soul = stage_output.emotional_lead
+    #     soul_output = prompt_session(session_dict["souls"][active_soul], stage_output.stimulus)
+    #
+    #     # Feed the soul's external manifestation back to the stage_master
+    #     prompt_session(session_dict["stage_master"], f"Character Action: {soul_output.external_manifestation}")
+    #
+    # 4. The Render: Extract dialogue from API responses and write the final script.md directly.
+    #     append_to_script(stage_output.prose, soul_output.external_manifestation)
+    # 
+    # write_final_script_md()  # Bypassing the need for a general-purpose headless agent entirely.
+
     log_info("Finalizing git delivery (commit + push)...")
     delivery_summary = finalize_delivery(
         repo=request.repo,
