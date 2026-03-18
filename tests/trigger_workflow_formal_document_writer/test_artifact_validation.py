@@ -1,81 +1,45 @@
-import pytest
+import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from trigger_workflow_formal_document_writer.artifact_validation import (
-    validate_required_artifacts,
     REQUIRED_ARTIFACTS,
-    REQUIRED_CHARACTER_ARTIFACTS,
+    validate_required_artifacts,
 )
 
-class TestArtifactValidation:
-    def test_validation_passes_when_all_artifacts_exist(self, tmp_path: Path):
-        # Setup valid structure
+class ArtifactValidationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = TemporaryDirectory()
+        self.workspace_path = Path(self.temp_dir.name)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _create_file(self, rel_path: str) -> None:
+        full_path = self.workspace_path / rel_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_text("dummy content")
+
+    @patch("trigger_workflow_formal_document_writer.artifact_validation.log_info")
+    def test_validation_passes_when_all_artifacts_exist(self, mock_log_info) -> None:
         for artifact in REQUIRED_ARTIFACTS:
-            file_path = tmp_path / artifact
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.touch()
-        
-        char_dir = tmp_path / "agents_artifacts" / "characters" / "test_char"
-        char_dir.mkdir(parents=True, exist_ok=True)
-        for char_artifact in REQUIRED_CHARACTER_ARTIFACTS:
-            (char_dir / char_artifact).touch()
+            self._create_file(artifact)
+            
+        try:
+            validate_required_artifacts(self.workspace_path)
+        except SystemExit:
+            self.fail("validate_required_artifacts raised SystemExit unexpectedly!")
 
-        # Should not raise an exception
-        validate_required_artifacts(tmp_path)
+    @patch("trigger_workflow_formal_document_writer.artifact_validation.log_error")
+    @patch("trigger_workflow_formal_document_writer.artifact_validation.log_info")
+    def test_validation_fails_when_artifact_missing(self, mock_log_info, mock_log_error) -> None:
+        # Create all but the first required artifact
+        for artifact in REQUIRED_ARTIFACTS[1:]:
+            self._create_file(artifact)
 
-    def test_validation_fails_when_top_level_artifact_missing(self, tmp_path: Path):
-        # Setup valid structure EXCEPT agents.md
-        for artifact in REQUIRED_ARTIFACTS:
-            if artifact == "agents.md":
-                continue
-            file_path = tmp_path / artifact
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.touch()
-        
-        char_dir = tmp_path / "agents_artifacts" / "characters" / "test_char"
-        char_dir.mkdir(parents=True, exist_ok=True)
-        for char_artifact in REQUIRED_CHARACTER_ARTIFACTS:
-            (char_dir / char_artifact).touch()
+        with self.assertRaises(SystemExit) as context:
+            validate_required_artifacts(self.workspace_path)
 
-        with pytest.raises(SystemExit):
-            validate_required_artifacts(tmp_path)
-
-    def test_validation_fails_when_characters_directory_missing(self, tmp_path: Path):
-        for artifact in REQUIRED_ARTIFACTS:
-            file_path = tmp_path / artifact
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.touch()
-        
-        # We explicitly DO NOT create agents_artifacts/characters/
-        
-        with pytest.raises(SystemExit):
-            validate_required_artifacts(tmp_path)
-
-    def test_validation_fails_when_no_characters_exist(self, tmp_path: Path):
-        for artifact in REQUIRED_ARTIFACTS:
-            file_path = tmp_path / artifact
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.touch()
-        
-        # Create characters dir but leave it empty
-        char_dir = tmp_path / "agents_artifacts" / "characters"
-        char_dir.mkdir(parents=True, exist_ok=True)
-
-        with pytest.raises(SystemExit):
-            validate_required_artifacts(tmp_path)
-
-    def test_validation_fails_when_character_artifact_missing(self, tmp_path: Path):
-        for artifact in REQUIRED_ARTIFACTS:
-            file_path = tmp_path / artifact
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.touch()
-        
-        char_dir = tmp_path / "agents_artifacts" / "characters" / "test_char"
-        char_dir.mkdir(parents=True, exist_ok=True)
-        for char_artifact in REQUIRED_CHARACTER_ARTIFACTS:
-            if char_artifact == "appearance.md":
-                continue
-            (char_dir / char_artifact).touch()
-
-        with pytest.raises(SystemExit):
-            validate_required_artifacts(tmp_path)
+        self.assertEqual(context.exception.code, 1)
+        mock_log_error.assert_any_call(f"  - {REQUIRED_ARTIFACTS[0]}")

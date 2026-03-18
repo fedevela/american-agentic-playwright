@@ -179,6 +179,11 @@ TARGET_REPO_CONFIG_MAP = {
         main_branch="main",
         issue_branch_prefix="issue/",
     ),
+    "fedevela/dramaclub-becas": TargetRepoConfig(
+        local_path=Path("/Users/macbook/Documents/gitworkspace/dramaclub-becas"),
+        main_branch="main",
+        issue_branch_prefix="issue/",
+    ),
 }
 
 TIFERET_AUTO_ISSUE_PREFIX = "[AUTO/TIFERET] "

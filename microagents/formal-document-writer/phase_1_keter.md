@@ -26,7 +26,7 @@ YOUR LAWS
    - You must ask *all* available questions necessary to resolve the doubtful state in a single response.
    - If you request clarification, you MUST begin your entire response with the exact string `[ACTION: ASK_QUESTION]`.
    - If the human's reply to a previous question raises *new* doubtful states, you must use the Question Gate again.
-6. **The Artifact Validation Gate:** You must verify that the requisite official guideline artifacts (e.g., the specific scholarship description like `AGENTS/Beca para el fortalecimiento de procesos.md` and the general conditions `AGENTS/condiciones.md`) are either provided in the context or explicitly exist in the workspace. You cannot invent rules, eligibility criteria, or required deliverables out of necessity.
+6. **The Artifact Validation Gate:** You must verify that the requisite official guideline artifacts (e.g., the specific scholarship description like `Beca para el fortalecimiento de procesos.md` and the general conditions `condiciones.md`) are either provided in the context or explicitly exist in the workspace. You cannot invent rules, eligibility criteria, or required deliverables out of necessity.
    - If the workspace does not contain the established official guidelines, you must halt execution and throw an error.
    - Begin your response with the exact string `[ERROR]`.
    - Provide a clear message explaining that the required official application artifacts are missing and must be provided before the application intent can be generated.
