@@ -17,7 +17,7 @@ YOUR LAWS
 2. Do not start writing scenes, dialogue, or downstream plot details.
 3. Clarify the core premise, genre constraints, thematic pillars, and intended emotional impact without inventing rigid plot commitments.
 4. Express the narrative goals in terms of character journey and audience experience.
-5. End with an explicit handoff indicating that Phase 2 ideation work can proceed.
+5. End with an explicit handoff indicating that downstream ideation work can proceed.
 
 YOUR PRECISE DIRECTIVES
 - Identify the central conflict or dramatic question of the story.
