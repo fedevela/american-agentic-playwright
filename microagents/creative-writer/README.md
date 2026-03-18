@@ -32,6 +32,17 @@ Every Master Story Beat must contain the following deterministic properties:
 
 ---
 
+## The Production Reality (Temporal Structure)
+
+While the `[SIZE]` property measures *dramaturgical* weight, the swarm must remain aware of the physical production constraints when breaking down narrative structures or calculating pacing. The target informative structural math is:
+
+*   **Season:** 8 Episodes.
+*   **Episode:** 45 minutes total.
+*   **Development (Act/Sequence):** 3 per episode (15 minutes each).
+*   **Short/Scene:** 150 seconds (2.5 minutes) each. (Approximately 6 shorts per development).
+
+---
+
 ## The Engine Execution Law (Recursion & Handoffs)
 
 The Creative Writer is a fractal engine. It does not run linearly from 1 to 9; it loops based on the `[SIZE]` of the Story Beat it is processing.

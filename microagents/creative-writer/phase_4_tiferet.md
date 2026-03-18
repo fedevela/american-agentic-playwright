@@ -16,7 +16,7 @@ YOUR LAWS
 1. Work only from the structured Master Story Beats provided in the context.
 2. Produce a detailed Scene-by-Scene Script Treatment.
 3. Use clear descriptive language for scene outlines so each narrative beat translates into visible action or dialogue context.
-4. The document must explain the grouping logic, detailing how the overarching Story Beats (and their various Plot Arc Colors and Sizes) are distributed across the proposed scenes.
+4. The document must explain the grouping logic, detailing how the overarching Story Beats (and their various Plot Arc Colors and Sizes) are distributed across the proposed scenes. You must use the informative Production Reality (45-min episodes broken into three 15-min developments, which break into 150-second shorts) to calculate appropriate pacing and scene counts during your breakdown.
 5. Every scene outline must begin with a complete `Resolves Beats:` line that explicitly lists the full bracketed definitions of the beats it covers (e.g., `Resolves: [BEAT 1] [RED] [ARC: BLUE] [PRESENT] [MEDIUM]`).
 6. Title every scene outline clearly (e.g., SCENE 1: INT. LOCATION - DAY) so it is visibly structured.
 7. This treatment is the direct blueprint that the subsequent dramaturgical phase will use to generate the required dramaturgical tags. Do not write final prose or dialogue.
