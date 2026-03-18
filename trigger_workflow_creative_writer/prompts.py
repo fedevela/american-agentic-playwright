@@ -355,32 +355,26 @@ def build_implementation_phase_prompt(
     phase_requirements: list[str] = []
     if phase == "7":
         phase_requirements = [
-            "- This is Phase 7 (Yesod Architecture). Deliver architecture artifacts as code changes, not analysis-only notes.",
-            "- First run a deterministic artifact-discovery pass: derive requirement pressures, map ownership loci, then select artifact classes per locus.",
-            "- Then implement the smallest coherent architecture artifact set that fully covers canonical requirement IDs:",
-            "  1) contract/type artifacts,",
-            "  2) structural placement artifacts,",
-            "  3) ownership-boundary artifacts,",
-            "  4) dependency-direction artifacts,",
-            "  5) integration-seam artifacts.",
-            "- Keep artifacts requirement-traceable: each artifact must map to one or more canonical requirement IDs in the issue.",
-            "- Do not stop at read-only analysis; leave a non-empty git diff with concrete architectural edits suitable for commit.",
-            "- Apply an explicit completion gate before finishing: if canonical requirement coverage or non-empty diff conditions are not met, continue implementing artifacts.",
-            "- Do not fully implement end-user behavior; focus on placement, boundaries, contracts, and dependency direction.",
+            "- This is Phase 7 (Act Assembly & Pacing). Deliver pacing and structural boundaries as actual document changes, not analysis-only notes.",
+            "- First run a deterministic pacing-discovery pass: derive emotional pressures, map sequence loci, then select boundaries per locus.",
+            "- Then implement the smallest coherent structural set that fully covers canonical beat IDs.",
+            "- Keep artifacts requirement-traceable: each act break must map to one or more canonical beat IDs.",
+            "- Do not stop at read-only analysis; leave a non-empty git diff with concrete structural edits.",
+            "- Apply an explicit completion gate before finishing: if canonical beat coverage or non-empty diff conditions are not met, continue mapping.",
+            "- Do not fully write the dialogue; focus on placement, act seams, rising action, and emotional boundaries.",
         ]
     elif phase == "8":
         phase_requirements = [
-            "- This is Phase 8 (Yesod Refinement). Deliver implementation artifacts as code changes, not analysis-only notes.",
-            "- First run a deterministic implementation-discovery pass: derive implementation obligations from canonical requirements and map ownership loci.",
-            "- Implement the smallest coherent set of contract-faithful deltas that covers all mapped obligations.",
-            "- Keep changes requirement-traceable: changed files and deltas must map to canonical requirement IDs.",
-            "- Apply an explicit completion gate before finishing: if obligations are not covered or the implementation diff is empty, continue implementing.",
-            "- Preserve prior contracts and boundaries; do not expand scope beyond required implementation obligations.",
+            "- This is Phase 8 (First Draft Execution).",
+            "- First run a deterministic scene-discovery pass: identify dialogue and prose obligations from prior outlines.",
+            "- Embody those outlines in flowing prose without deviating from the specified emotional intent.",
+            "- Do not quietly rewrite the core plot to match easier prose; adjust prose to serve the outline.",
+            "- Apply an explicit completion gate before finishing: verify working drafts exist for all assigned beat IDs before finishing.",
         ]
     elif phase == "9":
         phase_requirements = [
-            "- This is Phase 9 (Malkhut Completion). Execute validation with evidence-first discipline.",
-            "- Run a deterministic validation-discovery pass: collect failing evidence, map each failure to violated requirement IDs and ownership loci, then apply minimal corrective deltas.",
+            "- This is Phase 9 (The Final Edit). Execute validation with evidence-first discipline.",
+            "- Run a deterministic narrative-discovery pass: collect pacing flaws, map each failure to violated beat IDs, then apply minimal corrective deltas.",
             "- Keep corrections requirement-traceable and scope-bounded to observed violations.",
             "- Apply an explicit completion gate before finishing: do not terminate on narrative; finish only with evidence-backed readiness status.",
         ]
