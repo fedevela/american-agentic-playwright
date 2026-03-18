@@ -310,28 +310,24 @@ Use this exact schema:
   "sub_issues": [
     {{
       "title": "{TIFERET_AUTO_ISSUE_PREFIX}Short actionable issue title",
-      "body": "Child issue body beginning with a requirement-id traceability line, then a Canonical Requirements section copying full Gevurah requirement sentences verbatim, then Gherkin-oriented Given/When/Then scenarios"
+      "body": "Child issue body beginning with a 'Resolves Beats:' traceability line copying the full Master Story Beat definitions verbatim, followed by a detailed Scene/Sequence Outline."
     }}
   ]
 }}
 
 Requirements:
 - `comment` must summarize the specification and explain that child issues were spawned.
-- `comment` must explicitly reconcile the Gevurah input against the final child issue set.
-- `comment` must explain the grouping logic for every child issue, not only the final counts.
-- `comment` must state which requirement IDs are covered by each child issue and why those IDs belong together.
-- If multiple Gevurah requirements were merged, collapsed as duplicates, absorbed into another issue, or deferred, explain that in the `comment`.
-- If the number of child issues differs from the number of Gevurah suggestions, explain why the counts differ in the `comment`.
+- `comment` must explicitly reconcile the provided Master Story Beats against the final child issue set.
+- `comment` must explain the grouping logic for every child issue, ensuring the Scale/Size of the beat is accurately fractured down (e.g. from a [LARGE] episode beat into [MEDIUM] sequence beats, or [MEDIUM] down to [SMALL] scene beats).
+- `comment` must state which Master Story Beats are covered by each child issue and why they belong together.
 - `sub_issues` must contain one or more items.
-- Order `sub_issues` from earliest required implementation step to latest dependent step.
+- Order `sub_issues` from earliest required chronological step to the latest.
 - Prefix every child issue title with `{TIFERET_AUTO_ISSUE_PREFIX}` so auto-created issues are visibly distinct from human-authored issues.
-- Every child issue body must begin with a `Requirement IDs:` line listing every Gevurah GUID consolidated into that child issue.
-- The requirement-id list must be complete for that child issue; do not omit any covered Gevurah requirement IDs.
-- Every child issue body must contain a `Canonical Requirements` section immediately after the requirement-id line.
-- In that section, include one bullet per listed requirement ID in the exact Gevurah form `- CH-001: ...`.
-- Copy the full canonical requirement sentences verbatim from the Gevurah `Canonical Requirements` section. Do not paraphrase or compress them.
-- Each child issue body must use Gherkin language with explicit `Given`, `When`, and `Then` sections.
-- Assume child issues will be created in listed order, attached as sub-issues to the parent issue, and each later child issue blocked by the immediately preceding child issue.
+- Every child issue body must begin with a `Resolves Beats:` line listing every Master Story Beat (with its full bracketed definition) consolidated into that child issue.
+- The beat list must be complete for that child issue; do not omit any covered beats.
+- Copy the full canonical beat definitions verbatim. Do not paraphrase or compress them.
+- Each child issue body must contain a detailed `Scene/Sequence Outline` explaining how the beats translate into visible action.
+- Assume child issues will be created in listed order, attached as sub-issues to the parent issue.
 - Do not mention tool limitations, environment limitations, or inability to post.
 """
 
