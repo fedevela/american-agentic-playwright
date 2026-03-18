@@ -597,22 +597,28 @@ def execute_malkhut_performance_phase(request: PhaseExecutionRequest) -> None:
     # }
     
     # 3. The Loop: Programmatically bounce prompts between distinct conversation histories.
-    # while tags_remaining_in_skeleton():
-    #     stage_output = prompt_session(session_dict["stage_master"], next_tags)
+    # current_stimulus = initial_tags
+    # while not scene_complete:
+    #     # 1. Stage Master narrates the environment/action and explicitly designates the next speaker
+    #     stage_output = prompt_session(session_dict["stage_master"], current_stimulus)
     #
-    #     # The Stage Master MUST narrate back to every persona what it is perceiving
+    #     # 2. The Stage Master MUST narrate back to every persona what is happening
     #     for p in required_personas:
     #         prompt_session(session_dict["souls"][p], f"Stage Master Narration: {stage_output.narration}")
     #
-    #     # Take the output of the stage_master and feed it as user input to the specific soul_p's API context
-    #     active_soul = stage_output.emotional_lead
-    #     soul_output = prompt_session(session_dict["souls"][active_soul], stage_output.stimulus)
+    #     # 3. The Python trigger reads the Stage Master's decision on who acts next
+    #     active_soul = stage_output.next_speaker
+    #     if not active_soul:
+    #         break # Scene over
     #
-    #     # Feed the soul's external manifestation back to the stage_master
-    #     prompt_session(session_dict["stage_master"], f"Character Action: {soul_output.external_manifestation}")
+    #     # 4. Prompt the chosen Character Soul to react (dialogue, action, or parenthetical)
+    #     soul_output = prompt_session(session_dict["souls"][active_soul], "It is your turn to act/speak.")
     #
-    # 4. The Render: Extract dialogue from API responses and write the final script.md directly.
-    #     append_to_script(stage_output.prose, soul_output.external_manifestation)
+    #     # 5. Extract dialogue/actions and write to the final script buffer
+    #     append_to_script(stage_output.narration, soul_output.external_manifestation)
+    #
+    #     # 6. Feed the soul's external manifestation back to the Stage Master as the new stimulus for the next loop
+    #     current_stimulus = f"Character {active_soul} did/said: {soul_output.external_manifestation}"
     # 
     # write_final_script_md()  # Bypassing the need for a general-purpose headless agent entirely.
 
