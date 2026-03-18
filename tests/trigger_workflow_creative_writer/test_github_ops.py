@@ -86,7 +86,7 @@ class GitHubOpsTests(unittest.TestCase):
         self.assertEqual(created[0]["title"], f"{TIFERET_AUTO_ISSUE_PREFIX}First")
         self.assertEqual(
             create_issue_via_api_mock.call_args_list[0].kwargs["labels"],
-            ["phase:netzach"],
+            ["phase:keter"],
         )
 
         add_sub_issue_relationship_mock.assert_any_call("owner/repo", 77, 1001)

@@ -96,16 +96,16 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIsNotNone(content)
         assert content is not None
         self.assertIn(
-            "Include these exact section headings: `Canonical Narrative Beats`, `Synthesis Decisions`, `Rejected or Deferred`, and `Tiferet Handoff`.",
+            "Include these exact section headings: `Master Story Beats`, `Showrunner Options (Human Gate)`, and `Next Phase Handoff`.",
             content,
         )
         self.assertIn(
-            "Each canonical beat bullet must be atomic: exactly one ID, one semaphore, and one single-sentence narrative event",
+            "Every beat in your final chronological sequence MUST retain the 4 core properties",
             content,
         )
-        self.assertIn("Use stable requirement IDs in the form `GUID: <TOKEN>-NNN`", content)
+        self.assertIn("Assign each surviving, synthesized narrative event a sequential identifier", content)
         self.assertIn(
-            "must explicitly explain which prior ideas were merged, collapsed, narrowed, split, or altered in severity",
+            "Provide a clear dramaturgical rationale for excluded or merged",
             content,
         )
 
@@ -119,21 +119,21 @@ class PromptBuilderTests(unittest.TestCase):
             {"title": "Example", "body": "Body", "comments": []},
         )
         self.assertIn(f'"title": "{TIFERET_AUTO_ISSUE_PREFIX}Short actionable issue title"', prompt)
-        self.assertIn("must explicitly reconcile the Gevurah input against the final child issue set", prompt)
+        self.assertIn("must explicitly reconcile the provided Master Story Beats against the final child issue set", prompt)
         self.assertIn(
-            "If the number of child issues differs from the number of Gevurah suggestions",
+            "ensuring the Scale/Size of the beat is accurately fractured down",
             prompt,
         )
-        self.assertIn("must state which requirement IDs are covered by each child issue", prompt)
-        self.assertIn("Every child issue body must begin with a `Requirement IDs:` line", prompt)
-        self.assertIn("Canonical Requirements", prompt)
+        self.assertIn("must state which Master Story Beats are covered by each child issue", prompt)
+        self.assertIn("Every child issue body must begin with a `Resolves Beats:` line", prompt)
+        self.assertIn("Copy the full canonical beat definitions verbatim.", prompt)
         self.assertIn("Do not paraphrase or compress them", prompt)
 
     def test_phase_4_microagent_requires_canonical_requirements_section_verbatim(self) -> None:
         content = read_microagent_for_label("phase:tiferet", "4")
 
-        self.assertIn("`Canonical Beats` section", content)
-        self.assertIn("clone the exact canonical beat text", content)
+        self.assertIn("`Resolves Beats:` line", content)
+        self.assertIn("explicitly lists the full bracketed definitions of the beats it covers", content)
 
     def test_read_microagent_for_label_composes_base_persona_phase_persona_and_microagent(self) -> None:
         content = read_microagent_for_label("phase:binah", "2B")
@@ -206,8 +206,8 @@ class PromptBuilderTests(unittest.TestCase):
 
     def test_phase_5_microagent_enforces_traceability_only_contract_stubs(self) -> None:
         content = read_microagent_for_label("phase:netzach", "5")
-        self.assertIn("continuity tracking only", content)
-        self.assertIn("placeholder notes", content)
+        self.assertIn("You must maintain strict traceability.", content)
+        self.assertIn("A deterministic checklist of required dramaturgical artifacts", content)
         self.assertIn("YOUR PRECISE DIRECTIVES", content)
 
     def test_sparc_sister_microagents_include_explicit_alignment_and_boundary_contracts(self) -> None:
@@ -234,9 +234,9 @@ class PromptBuilderTests(unittest.TestCase):
 
     def test_phase_7_microagent_requires_architecture_artifacts_and_non_empty_diff(self) -> None:
         content = read_microagent_for_label("phase:yesod-orchestration", "7")
-        self.assertIn("Define the act boundaries and sequence clusters", content)
-        self.assertIn("An architectural document establishing act breaks", content)
-        self.assertIn("Do not write full dialogue here", content)
+        self.assertIn("Read the structured bracket `scene_skeleton`.", content)
+        self.assertIn("An orchestration document detailing the required persona assets", content)
+        self.assertIn("Do NOT write prose or alter the structural flow of the tags.", content)
 
     def test_phase_7_prompt_enforces_code_level_artifacts_not_analysis_only(self) -> None:
         prompt = build_implementation_phase_prompt(
