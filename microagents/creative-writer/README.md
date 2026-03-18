@@ -21,14 +21,23 @@ Every Master Story Beat must contain the following deterministic properties:
     *   **`[GREEN]`**: Side plots, flavor, or non-critical tonal refinements.
 2.  **Plot Arc Color:** A thematic identifier linking the beat to a specific storyline (e.g., `[ARC: RED]` for the family plot, `[ARC: BLUE]` for the betrayal plot).
 3.  **Timeline Location:** The chronological reality of the beat: `[PAST]`, `[PRESENT]`, or `[FUTURE]`.
-4.  **Size (Scale of Impact):**
-    *   `[XLARGE]`: Season-wide arc.
-    *   `[LARGE]`: Episode-wide arc.
-    *   `[MEDIUM]`: Episode sub-arc.
-    *   `[SMALL]`: Final short-video/scene arc.
+4.  **Size (Dramaturgical Scope):**
+    *   `[XLARGE]`: A Structural Paradigm Shift (alters overarching reality, long-term character destiny, or core world state).
+    *   `[LARGE]`: A Major Narrative Resolution (resolves a central conflict or decisively answers a primary dramatic question for a storyline).
+    *   `[MEDIUM]`: A Significant Escalation or Reversal (a sequence of events that permanently changes the immediate tactical situation).
+    *   `[SMALL]`: An Atomic Dramatic Unit (a single, unbroken chain of action/dialogue where a character pursues one immediate objective within a continuous space).
 
 *Example Beat Definition:*
-`[BEAT 1] [RED] [ARC: BLUE] [PRESENT] [SMALL] - The protagonist discovers the hidden letter.`
+`[BEAT 1] [RED] [ARC: BLUE] [PRESENT] [MEDIUM] - The protagonist is ambushed and loses the map, shifting the tactical advantage to the antagonist.`
+
+---
+
+## The Engine Execution Law (Recursion & Handoffs)
+
+The Creative Writer is a fractal engine. It does not run linearly from 1 to 9; it loops based on the `[SIZE]` of the Story Beat it is processing.
+
+*   **The Upstream Loop (Phases 1-4):** These phases operate recursively on `[XLARGE]`, `[LARGE]`, and `[MEDIUM]` beats. Their entire purpose is to fracture macro-narrative structures downward. Tiferet (Phase 4) breaks a `[LARGE]` beat into multiple `[MEDIUM]` beats, which are then fed back into the top of the loop to be broken down again.
+*   **The Downstream Pipeline (Phases 5-9):** These phases are the execution engine. They **only awaken** when a beat has been fractured down to the `[SMALL]` atomic unit. You cannot write a `<CAMERA>` tag for a season-long arc; you can only write it for a `[SMALL]` atomic scene.
 
 ---
 
