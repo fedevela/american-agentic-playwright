@@ -6,7 +6,7 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--mode", type=str, choices=["sdlc", "creative-writer"], default="sdlc", help="The operating mode of the swarm (default: sdlc).")
+    parser.add_argument("--mode", type=str, choices=["sdlc", "creative-writer", "formal-document-writer"], default="sdlc", help="The operating mode of the swarm (default: sdlc).")
     
     # We parse the mode but keep everything else
     args, remaining_argv = parser.parse_known_args()
@@ -17,7 +17,8 @@ def main():
     
     if args.mode == "creative-writer":
         from trigger_workflow_creative_writer.router import run_trigger_cli
-        # Inject the mode flag into their help output
+    elif args.mode == "formal-document-writer":
+        from trigger_workflow_formal_document_writer.router import run_trigger_cli
     else:
         from trigger_workflow.router import run_trigger_cli
 
