@@ -153,6 +153,7 @@ def build_issue_runtime_context(
 The formal document generator requires the official guideline artifacts to be present in the local file system. These form the binding constraints of the scholarship application. The caller must provide them, and you must rely on them for all foundational truth rather than inventing it:
 1. `Beca para el fortalecimiento de procesos.md`
 2. `condiciones.md`
+3. `table-of-contents.md`
 
 **Memory Check Directive:** Before proceeding with any generation, you must verify that you have successfully read and loaded all of the above artifacts into your working memory. If they are not in your context, you must read them from the local file system now.
 

@@ -6,7 +6,8 @@ from .logging_utils import log_error, log_info
 
 REQUIRED_ARTIFACTS = [
     "Beca para el fortalecimiento de procesos.md",
-    "condiciones.md"
+    "condiciones.md",
+    "table-of-contents.md"
 ]
 
 def validate_required_artifacts(workspace_path: Path) -> None:
