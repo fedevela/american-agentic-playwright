@@ -13,7 +13,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from trigger_workflow.openhands_runner import (
+from trigger_workflow_creative_writer.openhands_runner import (
     OpenHandsTargetContext,
     action_observation_event_lines,
     create_issue_branches_for_child_issues,
@@ -24,7 +24,7 @@ from trigger_workflow.openhands_runner import (
     resolve_openhands_model_connection,
     run_openhands,
 )
-from trigger_workflow.runner_utils import (
+from trigger_workflow_creative_writer.runner_utils import (
     RunnerTargetContext,
     ensure_git_branch,
     resolve_phase_execution_branch,
@@ -41,7 +41,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
     """
 
     @patch(
-        "trigger_workflow.openhands_runner.openhands_env",
+        "trigger_workflow_creative_writer.openhands_runner.openhands_env",
         return_value={"LLM_MODEL": "env-model", "LLM_BASE_URL": "https://llm.example"},
     )
     def test_resolve_openhands_model_connection_prefers_effective_env_values(self, openhands_env_mock) -> None:
@@ -60,7 +60,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
             # process launches with ambiguous configuration.
             (config_dir / "config.json").write_text("{invalid json")
 
-            with patch("trigger_workflow.openhands_runner.WORKSPACE", workspace):
+            with patch("trigger_workflow_creative_writer.openhands_runner.WORKSPACE", workspace):
                 with self.assertRaises(SystemExit) as exc:
                     resolve_openhands_model_connection()
 
@@ -71,7 +71,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
             session_state_path = Path(temp_dir) / ".session-state.json"
             session_state_path.write_text("{invalid json")
 
-            with patch("trigger_workflow.openhands_runner.SESSION_STATE_PATH", session_state_path):
+            with patch("trigger_workflow_creative_writer.openhands_runner.SESSION_STATE_PATH", session_state_path):
                 with self.assertRaises(SystemExit) as exc:
                     load_session_state()
 
@@ -82,7 +82,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
             session_state_path = Path(temp_dir) / ".session-state.json"
             session_state_path.write_text('["conv-123"]')
 
-            with patch("trigger_workflow.openhands_runner.SESSION_STATE_PATH", session_state_path):
+            with patch("trigger_workflow_creative_writer.openhands_runner.SESSION_STATE_PATH", session_state_path):
                 with self.assertRaises(SystemExit) as exc:
                     load_session_state()
 
@@ -118,8 +118,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("No local target repository config exists", str(exc.exception))
 
-    @patch("trigger_workflow.runner_utils.current_branch", return_value="main")
-    @patch("trigger_workflow.runner_utils.branch_exists", return_value=False)
+    @patch("trigger_workflow_creative_writer.runner_utils.current_branch", return_value="main")
+    @patch("trigger_workflow_creative_writer.runner_utils.branch_exists", return_value=False)
     def test_ensure_git_branch_errors_when_non_base_branch_is_missing(
         self,
         branch_exists_mock,
@@ -132,11 +132,11 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("Phase 4/Tiferet must create child issue branches", str(exc.exception))
 
-    @patch("trigger_workflow.runner_utils.git_run")
-    @patch("trigger_workflow.runner_utils.ensure_git_branch")
-    @patch("trigger_workflow.runner_utils.branch_exists")
-    @patch("trigger_workflow.openhands_runner.prepare_target_repo_checkout")
-    @patch("trigger_workflow.runner_utils.resolve_target_repo_config")
+    @patch("trigger_workflow_creative_writer.runner_utils.git_run")
+    @patch("trigger_workflow_creative_writer.runner_utils.ensure_git_branch")
+    @patch("trigger_workflow_creative_writer.runner_utils.branch_exists")
+    @patch("trigger_workflow_creative_writer.openhands_runner.prepare_target_repo_checkout")
+    @patch("trigger_workflow_creative_writer.runner_utils.resolve_target_repo_config")
     def test_create_issue_branches_for_child_issues_creates_missing_and_skips_existing(
         self,
         resolve_target_repo_config_mock,
@@ -171,12 +171,12 @@ class OpenHandsRunnerTests(unittest.TestCase):
         )
         self.assertEqual(ensure_git_branch_mock.call_count, 2)
 
-    @patch("trigger_workflow.runner_utils.log_info")
-    @patch("trigger_workflow.runner_utils.ensure_managed_repo_checkout")
-    @patch("trigger_workflow.runner_utils.current_branch", return_value="issue/21")
-    @patch("trigger_workflow.runner_utils.ensure_git_branch")
-    @patch("trigger_workflow.runner_utils.resolve_phase_execution_branch", return_value="issue/21")
-    @patch("trigger_workflow.runner_utils.resolve_target_repo_config")
+    @patch("trigger_workflow_creative_writer.runner_utils.log_info")
+    @patch("trigger_workflow_creative_writer.runner_utils.ensure_managed_repo_checkout")
+    @patch("trigger_workflow_creative_writer.runner_utils.current_branch", return_value="issue/21")
+    @patch("trigger_workflow_creative_writer.runner_utils.ensure_git_branch")
+    @patch("trigger_workflow_creative_writer.runner_utils.resolve_phase_execution_branch", return_value="issue/21")
+    @patch("trigger_workflow_creative_writer.runner_utils.resolve_target_repo_config")
     def test_prepare_openhands_run_context_logs_loaded_repo_and_verified_branch(
         self,
         resolve_target_repo_config_mock,
@@ -219,8 +219,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertIn("Resolved target branch for phase 5: issue/21", messages)
         self.assertIn("Verified target repository branch loaded: issue/21", messages)
 
-    @patch("trigger_workflow.runner_utils.ensure_managed_repo_checkout")
-    @patch("trigger_workflow.runner_utils.resolve_target_repo_config")
+    @patch("trigger_workflow_creative_writer.runner_utils.ensure_managed_repo_checkout")
+    @patch("trigger_workflow_creative_writer.runner_utils.resolve_target_repo_config")
     def test_prepare_openhands_run_context_errors_when_target_repo_path_missing(
         self,
         resolve_target_repo_config_mock,
@@ -240,8 +240,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("Configured target repository path does not exist", str(exc.exception))
 
-    @patch("trigger_workflow.runner_utils.ensure_managed_repo_checkout")
-    @patch("trigger_workflow.runner_utils.resolve_target_repo_config")
+    @patch("trigger_workflow_creative_writer.runner_utils.ensure_managed_repo_checkout")
+    @patch("trigger_workflow_creative_writer.runner_utils.resolve_target_repo_config")
     def test_prepare_openhands_run_context_errors_when_git_directory_missing(
         self,
         resolve_target_repo_config_mock,
@@ -262,8 +262,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("is not a git checkout", str(exc.exception))
 
-    @patch("trigger_workflow.runner_utils.ensure_managed_repo_checkout")
-    @patch("trigger_workflow.runner_utils.resolve_target_repo_config")
+    @patch("trigger_workflow_creative_writer.runner_utils.ensure_managed_repo_checkout")
+    @patch("trigger_workflow_creative_writer.runner_utils.resolve_target_repo_config")
     def test_prepare_openhands_run_context_errors_when_managed_checkout_path_is_not_openhands_clone(
         self,
         resolve_target_repo_config_mock,
@@ -290,11 +290,11 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("Managed checkout path mismatch", str(exc.exception))
 
-    @patch("trigger_workflow.runner_utils.ensure_managed_repo_checkout")
-    @patch("trigger_workflow.runner_utils.current_branch", side_effect=["main", "main"])
-    @patch("trigger_workflow.runner_utils.ensure_git_branch")
-    @patch("trigger_workflow.runner_utils.resolve_phase_execution_branch", return_value="issue/21")
-    @patch("trigger_workflow.runner_utils.resolve_target_repo_config")
+    @patch("trigger_workflow_creative_writer.runner_utils.ensure_managed_repo_checkout")
+    @patch("trigger_workflow_creative_writer.runner_utils.current_branch", side_effect=["main", "main"])
+    @patch("trigger_workflow_creative_writer.runner_utils.ensure_git_branch")
+    @patch("trigger_workflow_creative_writer.runner_utils.resolve_phase_execution_branch", return_value="issue/21")
+    @patch("trigger_workflow_creative_writer.runner_utils.resolve_target_repo_config")
     def test_prepare_openhands_run_context_errors_when_branch_verification_fails(
         self,
         resolve_target_repo_config_mock,
@@ -329,8 +329,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("Target repository branch verification failed", str(exc.exception))
 
-    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner._run_openhands_command")
+    @patch("trigger_workflow_creative_writer.openhands_runner.prepare_phase_execution_context")
+    @patch("trigger_workflow_creative_writer.openhands_runner._run_openhands_command")
     def test_run_openhands_uses_target_repo_cwd(
         self,
         run_openhands_command_mock,
@@ -355,8 +355,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
         run_openhands_command_mock.assert_called_once()
         self.assertEqual(run_openhands_command_mock.call_args.kwargs["cwd"], target_path)
 
-    @patch("trigger_workflow.runner_utils.prepare_phase_execution_context")
-    @patch("trigger_workflow.runner_utils.subprocess.run")
+    @patch("trigger_workflow_creative_writer.runner_utils.prepare_phase_execution_context")
+    @patch("trigger_workflow_creative_writer.runner_utils.subprocess.run")
     def test_finalize_phase_delivery_commits_pushes_and_returns_summary(
         self,
         subprocess_run_mock,
@@ -406,8 +406,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertIn("- `src/app.ts`", summary)
         self.assertEqual(subprocess_run_mock.call_count, 13)
 
-    @patch("trigger_workflow.runner_utils.prepare_phase_execution_context")
-    @patch("trigger_workflow.runner_utils.subprocess.run")
+    @patch("trigger_workflow_creative_writer.runner_utils.prepare_phase_execution_context")
+    @patch("trigger_workflow_creative_writer.runner_utils.subprocess.run")
     def test_finalize_phase_delivery_strips_auto_tiferet_prefix_from_commit_message(
         self,
         subprocess_run_mock,
@@ -450,8 +450,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertEqual(commit_cmd[0:3], ["git", "commit", "-m"])
         self.assertEqual(commit_cmd[3], "phase:6 issue #21: Example Child Issue")
 
-    @patch("trigger_workflow.runner_utils.prepare_phase_execution_context")
-    @patch("trigger_workflow.runner_utils.subprocess.run")
+    @patch("trigger_workflow_creative_writer.runner_utils.prepare_phase_execution_context")
+    @patch("trigger_workflow_creative_writer.runner_utils.subprocess.run")
     def test_finalize_phase_delivery_fails_fast_when_push_rejected_non_fast_forward(
         self,
         subprocess_run_mock,
@@ -488,8 +488,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertIn("Human intervention required", str(exc.exception))
         self.assertEqual(subprocess_run_mock.call_count, 7)
 
-    @patch("trigger_workflow.runner_utils.prepare_phase_execution_context")
-    @patch("trigger_workflow.runner_utils.subprocess.run")
+    @patch("trigger_workflow_creative_writer.runner_utils.prepare_phase_execution_context")
+    @patch("trigger_workflow_creative_writer.runner_utils.subprocess.run")
     def test_finalize_phase_delivery_fails_when_no_git_changes_exist(
         self,
         subprocess_run_mock,
@@ -509,8 +509,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("without repository changes", str(exc.exception))
 
-    @patch("trigger_workflow.runner_utils.prepare_phase_execution_context")
-    @patch("trigger_workflow.runner_utils.subprocess.run")
+    @patch("trigger_workflow_creative_writer.runner_utils.prepare_phase_execution_context")
+    @patch("trigger_workflow_creative_writer.runner_utils.subprocess.run")
     def test_finalize_phase_delivery_fails_when_issue_title_missing_and_fallbacks_disabled(
         self,
         subprocess_run_mock,
@@ -539,8 +539,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("Fallback commit/PR titles are disabled by policy", str(exc.exception))
 
-    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner._run_openhands_command")
+    @patch("trigger_workflow_creative_writer.openhands_runner.prepare_phase_execution_context")
+    @patch("trigger_workflow_creative_writer.openhands_runner._run_openhands_command")
     def test_run_openhands_never_resumes_existing_conversation_for_same_repo_and_issue(
         self,
         run_openhands_command_mock,
@@ -564,8 +564,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
         command = run_openhands_command_mock.call_args.args[0]
         self.assertNotIn("--resume", command)
 
-    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner._run_openhands_command")
+    @patch("trigger_workflow_creative_writer.openhands_runner.prepare_phase_execution_context")
+    @patch("trigger_workflow_creative_writer.openhands_runner._run_openhands_command")
     def test_run_openhands_does_not_resume_when_phase_scope_is_set(
         self,
         run_openhands_command_mock,
@@ -595,9 +595,9 @@ class OpenHandsRunnerTests(unittest.TestCase):
         command = run_openhands_command_mock.call_args.args[0]
         self.assertNotIn("--resume", command)
 
-    @patch("trigger_workflow.openhands_runner.save_session_state")
-    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner._run_openhands_command")
+    @patch("trigger_workflow_creative_writer.openhands_runner.save_session_state")
+    @patch("trigger_workflow_creative_writer.openhands_runner.prepare_phase_execution_context")
+    @patch("trigger_workflow_creative_writer.openhands_runner._run_openhands_command")
     def test_run_openhands_does_not_persist_conversation_id_under_repo_issue_key(
         self,
         run_openhands_command_mock,
@@ -620,9 +620,9 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         save_session_state_mock.assert_not_called()
 
-    @patch("trigger_workflow.openhands_runner.save_session_state")
-    @patch("trigger_workflow.openhands_runner.prepare_phase_execution_context")
-    @patch("trigger_workflow.openhands_runner._run_openhands_command")
+    @patch("trigger_workflow_creative_writer.openhands_runner.save_session_state")
+    @patch("trigger_workflow_creative_writer.openhands_runner.prepare_phase_execution_context")
+    @patch("trigger_workflow_creative_writer.openhands_runner._run_openhands_command")
     def test_run_openhands_does_not_persist_conversation_id_under_phase_scoped_key(
         self,
         run_openhands_command_mock,
@@ -651,8 +651,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         save_session_state_mock.assert_not_called()
 
-    @patch("trigger_workflow.openhands_runner.run_phase_tests")
-    @patch("trigger_workflow.openhands_runner.run_openhands")
+    @patch("trigger_workflow_creative_writer.openhands_runner.run_phase_tests")
+    @patch("trigger_workflow_creative_writer.openhands_runner.run_openhands")
     def test_run_openhands_implementation_phase_validates_for_phase_6(
         self,
         run_openhands_mock,
@@ -687,8 +687,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
         run_openhands_mock.assert_called_once()
         run_phase_tests_mock.assert_called_once()
 
-    @patch("trigger_workflow.openhands_runner.run_phase_tests")
-    @patch("trigger_workflow.openhands_runner.run_openhands")
+    @patch("trigger_workflow_creative_writer.openhands_runner.run_phase_tests")
+    @patch("trigger_workflow_creative_writer.openhands_runner.run_openhands")
     def test_run_openhands_implementation_phase_stops_when_tests_pass(
         self,
         run_openhands_mock,
@@ -717,8 +717,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
         run_openhands_mock.assert_called_once()
         run_phase_tests_mock.assert_called_once()
 
-    @patch("trigger_workflow.openhands_runner.run_phase_tests")
-    @patch("trigger_workflow.openhands_runner.run_openhands")
+    @patch("trigger_workflow_creative_writer.openhands_runner.run_phase_tests")
+    @patch("trigger_workflow_creative_writer.openhands_runner.run_openhands")
     def test_run_openhands_implementation_phase_retries_with_scoped_feedback_when_validation_fails_then_passes(
         self,
         run_openhands_mock,
@@ -752,8 +752,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertIn("Do not expand scope beyond fixing these validation failures.", retry_task)
         self.assertIn("FAIL: expected 1 got 0", retry_task)
 
-    @patch("trigger_workflow.openhands_runner.run_phase_tests")
-    @patch("trigger_workflow.openhands_runner.run_openhands")
+    @patch("trigger_workflow_creative_writer.openhands_runner.run_phase_tests")
+    @patch("trigger_workflow_creative_writer.openhands_runner.run_openhands")
     def test_run_openhands_implementation_phase_fails_after_three_retries(
         self,
         run_openhands_mock,
@@ -784,8 +784,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertEqual(run_openhands_mock.call_count, 4)
         self.assertEqual(run_phase_tests_mock.call_count, 4)
 
-    @patch("trigger_workflow.openhands_runner.run_phase_tests")
-    @patch("trigger_workflow.openhands_runner.run_openhands")
+    @patch("trigger_workflow_creative_writer.openhands_runner.run_phase_tests")
+    @patch("trigger_workflow_creative_writer.openhands_runner.run_openhands")
     def test_run_openhands_implementation_phase_validates_for_phase_5(
         self,
         run_openhands_mock,

@@ -149,6 +149,22 @@ def build_issue_runtime_context(
 - Issue number: #{issue}
 - Phase: {phase}
 
+### Required Local Context (The Law of the World)
+The creative engine requires the following 11 standardized artifacts to be present in the local file system. These form the binding constraints of the story, characters, and world. The caller must provide them, and you must rely on them for all foundational truth rather than inventing it:
+1. `agents.md`
+2. `agents_artifacts/dramatic_arcs.md`
+3. `agents_artifacts/world_rules.md`
+4. `agents_artifacts/theme.md`
+5. `agents_artifacts/relationships.drawio`
+6. `agents_artifacts/characters/[character_name]/appearance.md`
+7. `agents_artifacts/characters/[character_name]/personality.md`
+8. `agents_artifacts/characters/[character_name]/interiorvoice.md`
+9. `agents_artifacts/characters/[character_name]/motivations_and_fears.md`
+10. `agents_artifacts/characters/[character_name]/secrets.md`
+11. `agents_artifacts/characters/[character_name]/lexicon.md`
+
+**Memory Check Directive:** Before proceeding with any generation, you must verify that you have successfully read and loaded all of the above artifacts into your working memory. If they are not in your context, you must read them from the local file system now.
+
 ## Issue Content
 
 **Title:** {title}
@@ -282,7 +298,12 @@ def build_comment_phase_prompt(
 
 {build_phase_prompt_input_context(label, issue, repo, phase, issue_data)}
 
-Return only the GitHub comment body for this phase.
+Return valid JSON only. No markdown fences. No explanation outside JSON.
+
+Use this exact schema:
+{{
+  "response": "The complete GitHub comment body for this phase."
+}}
 
 Requirements:
 {chr(10).join(requirements)}
@@ -310,28 +331,24 @@ Use this exact schema:
   "sub_issues": [
     {{
       "title": "{TIFERET_AUTO_ISSUE_PREFIX}Short actionable issue title",
-      "body": "Child issue body beginning with a requirement-id traceability line, then a Canonical Requirements section copying full Gevurah requirement sentences verbatim, then Gherkin-oriented Given/When/Then scenarios"
+      "body": "Child issue body beginning with a 'Resolves Beats:' traceability line copying the full Master Story Beat definitions verbatim, followed by a detailed Scene/Sequence Outline."
     }}
   ]
 }}
 
 Requirements:
 - `comment` must summarize the specification and explain that child issues were spawned.
-- `comment` must explicitly reconcile the Gevurah input against the final child issue set.
-- `comment` must explain the grouping logic for every child issue, not only the final counts.
-- `comment` must state which requirement IDs are covered by each child issue and why those IDs belong together.
-- If multiple Gevurah requirements were merged, collapsed as duplicates, absorbed into another issue, or deferred, explain that in the `comment`.
-- If the number of child issues differs from the number of Gevurah suggestions, explain why the counts differ in the `comment`.
+- `comment` must explicitly reconcile the provided Master Story Beats against the final child issue set.
+- `comment` must explain the grouping logic for every child issue, ensuring the Scale/Size of the beat is accurately fractured down (e.g. from a [LARGE] episode beat into [MEDIUM] sequence beats, or [MEDIUM] down to [SMALL] scene beats).
+- `comment` must state which Master Story Beats are covered by each child issue and why they belong together.
 - `sub_issues` must contain one or more items.
-- Order `sub_issues` from earliest required implementation step to latest dependent step.
+- Order `sub_issues` from earliest required chronological step to the latest.
 - Prefix every child issue title with `{TIFERET_AUTO_ISSUE_PREFIX}` so auto-created issues are visibly distinct from human-authored issues.
-- Every child issue body must begin with a `Requirement IDs:` line listing every Gevurah GUID consolidated into that child issue.
-- The requirement-id list must be complete for that child issue; do not omit any covered Gevurah requirement IDs.
-- Every child issue body must contain a `Canonical Requirements` section immediately after the requirement-id line.
-- In that section, include one bullet per listed requirement ID in the exact Gevurah form `- CH-001: ...`.
-- Copy the full canonical requirement sentences verbatim from the Gevurah `Canonical Requirements` section. Do not paraphrase or compress them.
-- Each child issue body must use Gherkin language with explicit `Given`, `When`, and `Then` sections.
-- Assume child issues will be created in listed order, attached as sub-issues to the parent issue, and each later child issue blocked by the immediately preceding child issue.
+- Every child issue body must begin with a `Resolves Beats:` line listing every Master Story Beat (with its full bracketed definition) consolidated into that child issue.
+- The beat list must be complete for that child issue; do not omit any covered beats.
+- Copy the full canonical beat definitions verbatim. Do not paraphrase or compress them.
+- Each child issue body must contain a detailed `Scene/Sequence Outline` explaining how the beats translate into visible action.
+- Assume child issues will be created in listed order, attached as sub-issues to the parent issue.
 - Do not mention tool limitations, environment limitations, or inability to post.
 """
 
@@ -355,32 +372,26 @@ def build_implementation_phase_prompt(
     phase_requirements: list[str] = []
     if phase == "7":
         phase_requirements = [
-            "- This is Phase 7 (Yesod Architecture). Deliver architecture artifacts as code changes, not analysis-only notes.",
-            "- First run a deterministic artifact-discovery pass: derive requirement pressures, map ownership loci, then select artifact classes per locus.",
-            "- Then implement the smallest coherent architecture artifact set that fully covers canonical requirement IDs:",
-            "  1) contract/type artifacts,",
-            "  2) structural placement artifacts,",
-            "  3) ownership-boundary artifacts,",
-            "  4) dependency-direction artifacts,",
-            "  5) integration-seam artifacts.",
-            "- Keep artifacts requirement-traceable: each artifact must map to one or more canonical requirement IDs in the issue.",
-            "- Do not stop at read-only analysis; leave a non-empty git diff with concrete architectural edits suitable for commit.",
-            "- Apply an explicit completion gate before finishing: if canonical requirement coverage or non-empty diff conditions are not met, continue implementing artifacts.",
-            "- Do not fully implement end-user behavior; focus on placement, boundaries, contracts, and dependency direction.",
+            "- This is Phase 7 (Act Assembly & Pacing). Deliver pacing and structural boundaries as actual document changes, not analysis-only notes.",
+            "- First run a deterministic pacing-discovery pass: derive emotional pressures, map sequence loci, then select boundaries per locus.",
+            "- Then implement the smallest coherent structural set that fully covers canonical beat IDs.",
+            "- Keep artifacts requirement-traceable: each act break must map to one or more canonical beat IDs.",
+            "- Do not stop at read-only analysis; leave a non-empty git diff with concrete structural edits.",
+            "- Apply an explicit completion gate before finishing: if canonical beat coverage or non-empty diff conditions are not met, continue mapping.",
+            "- Do not fully write the dialogue; focus on placement, act seams, rising action, and emotional boundaries.",
         ]
     elif phase == "8":
         phase_requirements = [
-            "- This is Phase 8 (Yesod Refinement). Deliver implementation artifacts as code changes, not analysis-only notes.",
-            "- First run a deterministic implementation-discovery pass: derive implementation obligations from canonical requirements and map ownership loci.",
-            "- Implement the smallest coherent set of contract-faithful deltas that covers all mapped obligations.",
-            "- Keep changes requirement-traceable: changed files and deltas must map to canonical requirement IDs.",
-            "- Apply an explicit completion gate before finishing: if obligations are not covered or the implementation diff is empty, continue implementing.",
-            "- Preserve prior contracts and boundaries; do not expand scope beyond required implementation obligations.",
+            "- This is Phase 8 (First Draft Execution).",
+            "- First run a deterministic scene-discovery pass: identify dialogue and prose obligations from prior outlines.",
+            "- Embody those outlines in flowing prose without deviating from the specified emotional intent.",
+            "- Do not quietly rewrite the core plot to match easier prose; adjust prose to serve the outline.",
+            "- Apply an explicit completion gate before finishing: verify working drafts exist for all assigned beat IDs before finishing.",
         ]
     elif phase == "9":
         phase_requirements = [
-            "- This is Phase 9 (Malkhut Completion). Execute validation with evidence-first discipline.",
-            "- Run a deterministic validation-discovery pass: collect failing evidence, map each failure to violated requirement IDs and ownership loci, then apply minimal corrective deltas.",
+            "- This is Phase 9 (The Final Edit). Execute validation with evidence-first discipline.",
+            "- Run a deterministic narrative-discovery pass: collect pacing flaws, map each failure to violated beat IDs, then apply minimal corrective deltas.",
             "- Keep corrections requirement-traceable and scope-bounded to observed violations.",
             "- Apply an explicit completion gate before finishing: do not terminate on narrative; finish only with evidence-backed readiness status.",
         ]

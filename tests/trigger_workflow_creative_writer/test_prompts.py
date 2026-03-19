@@ -11,9 +11,9 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from trigger_workflow.config import TIFERET_AUTO_ISSUE_PREFIX
-from trigger_workflow.runner_utils import resolve_phase_execution_branch
-from trigger_workflow.prompts import (
+from trigger_workflow_creative_writer.config import TIFERET_AUTO_ISSUE_PREFIX
+from trigger_workflow_creative_writer.runner_utils import resolve_phase_execution_branch
+from trigger_workflow_creative_writer.prompts import (
     build_implementation_phase_prompt,
     build_comment_phase_prompt,
     build_phase_2_story_requirements,
@@ -23,7 +23,7 @@ from trigger_workflow.prompts import (
     read_functional_microagent,
     read_microagent_for_label,
 )
-from trigger_workflow.router import conversation_scope_for_phase
+from trigger_workflow_creative_writer.router import conversation_scope_for_phase
 
 
 class PhaseWorkflowNamingTests(unittest.TestCase):
@@ -96,17 +96,16 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIsNotNone(content)
         assert content is not None
         self.assertIn(
-            "Include these exact section headings: `Canonical Requirements`, `Synthesis Decisions`, `Rejected or Deferred`, and `Tiferet Handoff`.",
+            "Include these exact section headings: `Master Story Beats`, `Showrunner Options (Human Gate)`, and `Next Phase Handoff`.",
             content,
         )
         self.assertIn(
-            "Each canonical requirement bullet must be atomic: exactly one ID, one semaphore, and one single-sentence requirement",
+            "Every beat in your final chronological sequence MUST retain the 4 core properties",
             content,
         )
-        self.assertIn("Use stable requirement IDs in the form `GUID: <TOKEN>-NNN`", content)
-        self.assertIn("Do not emit domain-specific category headings or capability-family buckets.", content)
+        self.assertIn("Assign each surviving, synthesized narrative event a sequential identifier", content)
         self.assertIn(
-            "must explicitly explain which prior requirements were merged, collapsed as duplicates, narrowed, split, re-scoped, or had their semaphore changed",
+            "Provide a clear dramaturgical rationale for excluded or merged",
             content,
         )
 
@@ -120,21 +119,21 @@ class PromptBuilderTests(unittest.TestCase):
             {"title": "Example", "body": "Body", "comments": []},
         )
         self.assertIn(f'"title": "{TIFERET_AUTO_ISSUE_PREFIX}Short actionable issue title"', prompt)
-        self.assertIn("must explicitly reconcile the Gevurah input against the final child issue set", prompt)
+        self.assertIn("must explicitly reconcile the provided Master Story Beats against the final child issue set", prompt)
         self.assertIn(
-            "If the number of child issues differs from the number of Gevurah suggestions",
+            "ensuring the Scale/Size of the beat is accurately fractured down",
             prompt,
         )
-        self.assertIn("must state which requirement IDs are covered by each child issue", prompt)
-        self.assertIn("Every child issue body must begin with a `Requirement IDs:` line", prompt)
-        self.assertIn("Canonical Requirements", prompt)
+        self.assertIn("must state which Master Story Beats are covered by each child issue", prompt)
+        self.assertIn("Every child issue body must begin with a `Resolves Beats:` line", prompt)
+        self.assertIn("Copy the full canonical beat definitions verbatim.", prompt)
         self.assertIn("Do not paraphrase or compress them", prompt)
 
     def test_phase_4_microagent_requires_canonical_requirements_section_verbatim(self) -> None:
         content = read_microagent_for_label("phase:tiferet", "4")
 
-        self.assertIn("`Canonical Requirements` section", content)
-        self.assertIn("clone the exact canonical requirement text", content)
+        self.assertIn("`Resolves Beats:` line", content)
+        self.assertIn("explicitly lists the full bracketed definitions of the beats it covers", content)
 
     def test_read_microagent_for_label_composes_base_persona_phase_persona_and_microagent(self) -> None:
         content = read_microagent_for_label("phase:binah", "2B")
@@ -207,13 +206,9 @@ class PromptBuilderTests(unittest.TestCase):
 
     def test_phase_5_microagent_enforces_traceability_only_contract_stubs(self) -> None:
         content = read_microagent_for_label("phase:netzach", "5")
-        self.assertIn("contract traceability only", content)
-        self.assertIn("passing placeholders", content)
-        self.assertIn("assert True", content)
-        self.assertIn("DISCOVERY PROCEDURE (MANDATORY)", content)
-        self.assertIn("Completion gate:", content)
-        self.assertIn("SPARC ALIGNMENT", content)
-        self.assertIn("BOUNDARY CONTRACT", content)
+        self.assertIn("You must maintain strict traceability.", content)
+        self.assertIn("A deterministic checklist of required dramaturgical artifacts", content)
+        self.assertIn("YOUR PRECISE DIRECTIVES", content)
 
     def test_sparc_sister_microagents_include_explicit_alignment_and_boundary_contracts(self) -> None:
         for label, phase in (
@@ -223,8 +218,8 @@ class PromptBuilderTests(unittest.TestCase):
             ("phase:malkhut", "9"),
         ):
             content = read_microagent_for_label(label, phase)
-            self.assertIn("SPARC ALIGNMENT", content)
-            self.assertIn("BOUNDARY CONTRACT", content)
+            self.assertIn("YOUR NATURE", content)
+            self.assertIn("YOUR LAWS", content)
 
     def test_phase_6_to_9_microagents_include_discovery_procedure_and_completion_gate(self) -> None:
         for label, phase in (
@@ -234,16 +229,14 @@ class PromptBuilderTests(unittest.TestCase):
             ("phase:malkhut", "9"),
         ):
             content = read_microagent_for_label(label, phase)
-            self.assertIn("DISCOVERY PROCEDURE (MANDATORY)", content)
-            self.assertIn("Completion gate:", content)
+            self.assertIn("YOUR PRECISE DIRECTIVES", content)
+            self.assertIn("YOUR NARRATIVE PRODUCTS", content)
 
     def test_phase_7_microagent_requires_architecture_artifacts_and_non_empty_diff(self) -> None:
         content = read_microagent_for_label("phase:yesod-orchestration", "7")
-        self.assertIn("Determine the smallest coherent set of code-level architecture artifacts", content)
-        self.assertIn("according to full canonical requirement coverage", content)
-        self.assertIn("Leave the repository with concrete file changes (non-empty git diff)", content)
-        self.assertIn("ARTIFACT DISCOVERY PROCEDURE (MANDATORY)", content)
-        self.assertIn("Completion gate: do not stop after analysis", content)
+        self.assertIn("Read the structured bracket `scene_skeleton`.", content)
+        self.assertIn("An orchestration document detailing the required persona assets", content)
+        self.assertIn("Do NOT write prose or alter the structural flow of the tags.", content)
 
     def test_phase_7_prompt_enforces_code_level_artifacts_not_analysis_only(self) -> None:
         prompt = build_implementation_phase_prompt(
@@ -259,18 +252,15 @@ class PromptBuilderTests(unittest.TestCase):
             },
         )
         self.assertIn("Phase-specific requirements:", prompt)
-        self.assertIn("Deliver architecture artifacts as code changes, not analysis-only notes", prompt)
-        self.assertIn("deterministic artifact-discovery pass", prompt)
+        self.assertIn("Deliver pacing and structural boundaries as actual document changes", prompt)
+        self.assertIn("deterministic pacing-discovery pass", prompt)
 
     def test_phase_10_refactorer_persona_stack_is_resolvable(self) -> None:
         content = read_microagent_for_label("phase:hod-refactoring", "10")
         self.assertIn("expanded through Hod", content)
-        self.assertIn("ROLE: Refactoring agent", content)
-        self.assertIn("HOD REFACTORER", content)
-        self.assertIn("E2E tests as executable process maps", content)
-        self.assertIn("Refactor duplicated orchestration and structure using DRY and SOLID boundaries", content)
-        self.assertIn("Preserve critical contracts exactly", content)
-        self.assertIn("keep the system runnable and verifiable at every step", content.lower())
+        self.assertIn("ROLE: Script Revisions", content)
+        self.assertIn("show, don't tell", content.lower())
+        self.assertIn("preserve the emotional climax", content.lower())
 
     def test_phase_8_prompt_enforces_deterministic_implementation_discovery_and_completion_gate(self) -> None:
         prompt = build_implementation_phase_prompt(
@@ -281,10 +271,10 @@ class PromptBuilderTests(unittest.TestCase):
             "8",
             {"title": "Example", "body": "Original body", "comments": []},
         )
-        self.assertIn("This is Phase 8 (Yesod Refinement)", prompt)
-        self.assertIn("deterministic implementation-discovery pass", prompt)
+        self.assertIn("This is Phase 8 (First Draft Execution)", prompt)
+        self.assertIn("deterministic scene-discovery pass", prompt)
         self.assertIn("explicit completion gate before finishing", prompt)
-        self.assertIn("implementation diff is empty", prompt)
+        self.assertIn("verify working drafts exist", prompt)
 
     def test_phase_9_prompt_enforces_deterministic_validation_discovery_and_evidence_gate(self) -> None:
         prompt = build_implementation_phase_prompt(
@@ -295,8 +285,8 @@ class PromptBuilderTests(unittest.TestCase):
             "9",
             {"title": "Example", "body": "Original body", "comments": []},
         )
-        self.assertIn("This is Phase 9 (Malkhut Completion)", prompt)
-        self.assertIn("deterministic validation-discovery pass", prompt)
+        self.assertIn("This is Phase 9 (The Final Edit)", prompt)
+        self.assertIn("deterministic narrative-discovery pass", prompt)
         self.assertIn("evidence-backed readiness status", prompt)
 
     def test_build_agent_prompt_preserves_canonical_requirements_in_child_issue_body_for_downstream_phases(self) -> None:
@@ -344,14 +334,14 @@ class PromptBuilderTests(unittest.TestCase):
 
         self.assertIn("Phase 2B requires a Phase 1 clarification comment", str(exc.exception))
 
-    @patch("trigger_workflow.prompts.BASE_PERSONA_FILE", "missing-daneel.md")
+    @patch("trigger_workflow_creative_writer.prompts.BASE_PERSONA_FILE", "missing-daneel.md")
     def test_read_microagent_for_label_errors_when_base_persona_missing(self) -> None:
         with self.assertRaises(SystemExit) as exc:
             read_microagent_for_label("phase:binah", "2B")
 
         self.assertIn("Base persona file is missing", str(exc.exception))
 
-    @patch.dict("trigger_workflow.prompts.PERSONA_FILE_MAP", {"2B": "missing-phase-persona.md"}, clear=False)
+    @patch.dict("trigger_workflow_creative_writer.prompts.PERSONA_FILE_MAP", {"2B": "missing-phase-persona.md"}, clear=False)
     def test_read_microagent_for_label_errors_when_phase_persona_missing(self) -> None:
         with self.assertRaises(SystemExit) as exc:
             read_microagent_for_label("phase:binah", "2B")
@@ -359,7 +349,7 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("Phase persona file is missing", str(exc.exception))
 
     @patch.dict(
-        "trigger_workflow.prompts.FUNCTIONAL_MICROAGENT_FILE_MAP",
+        "trigger_workflow_creative_writer.prompts.FUNCTIONAL_MICROAGENT_FILE_MAP",
         {"2B": "missing-functional-agent.md"},
         clear=False,
     )
