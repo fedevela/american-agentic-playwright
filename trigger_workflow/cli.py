@@ -44,6 +44,16 @@ def run_trigger_cli() -> None:
     Parses arguments, resolves the target issue/label context, and routes
      the resulting signal to the appropriate SPARC phase workflow.
     """
+    try:
+        _run_trigger_cli_impl()
+    except SystemExit as exc:
+        if exc.args and isinstance(exc.args[0], str):
+            from .logging_utils import log_error
+            log_error(exc.args[0])
+        raise
+
+
+def _run_trigger_cli_impl() -> None:
     log_info("Starting swarm phase router CLI")
     parser = argparse.ArgumentParser(description="Trigger Swarm Phase / GitHub workflow")
     parser.add_argument("--label", help="GitHub label triggering the phase")

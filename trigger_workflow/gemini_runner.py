@@ -103,12 +103,11 @@ def run_gemini_comment_phase(
     log_info("Requesting comment response from Gemini")
     result = run_gemini(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data)
     if result.returncode != 0:
-        sys.exit(result.returncode)
+        raise SystemExit(f"Gemini execution failed with exit code: {result.returncode}")
 
     response = extract_gemini_response(result.stdout)
     if not response:
-        log_error("Gemini returned no response.")
-        sys.exit(1)
+        raise SystemExit("Gemini returned no response.")
     
     log_info(f"Assistant response extracted ({len(response)} chars)")
     return response

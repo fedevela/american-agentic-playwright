@@ -137,9 +137,10 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
   - Managed clones and isolation folders are deprecated.
 
 - Branch policy:
-  - Phases before implementation run on configured main branch.
-  - Implementation phases run on `issue/<number>` branch.
-  - Missing implementation branch is a hard failure.
+  - All phases execute on an `issue/<number>` branch corresponding to the target issue.
+  - If the branch does not exist locally or on origin, it is automatically created from the repository's base branch (e.g. `main`).
+  - Child issues spawned during Phase 4 (Tiferet) branch directly off their parent issue's branch.
+  - Execution contexts automatically fetch and merge upstream changes from their base branch.
 
 - Stateless conversation policy:
   - Runs do not resume prior conversations by default.

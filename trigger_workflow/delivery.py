@@ -11,6 +11,7 @@ from .config import (
 from .git_client import (
     extract_parent_issue,
     git_run,
+    git_run_strict,
     prepare_branch_context,
     prepare_phase_execution_context,
     resolve_target_repo_config,
@@ -49,27 +50,25 @@ def finalize_phase_delivery(
     
     # Verify base branch exists on origin
     origin_base = f"origin/{pr_base}"
-    check_base = git_run(local_path, ["rev-parse", "--verify", origin_base], capture_output=True)
-    if check_base.returncode != 0:
-        log_error(f"Base branch '{pr_base}' does not exist on origin. Cannot merge before delivery.")
-        raise SystemExit(f"Missing required base branch '{pr_base}' for delivery of issue #{issue}.")
+    git_run_strict(
+        local_path, 
+        ["rev-parse", "--verify", origin_base], 
+        failure_message=f"Missing required base branch '{pr_base}' for delivery of issue #{issue}",
+        capture_output=True
+    )
 
     merge_result = git_run(local_path, ["merge", origin_base], capture_output=True)
     if merge_result.returncode != 0:
-        log_error(f"Automatic merge from '{pr_base}' failed; human intervention required before delivery.")
         if "CONFLICT" in (merge_result.stdout or "") or "CONFLICT" in (merge_result.stderr or ""):
              log_error("Merge conflicts detected during delivery auto-merge.")
         raise SystemExit(f"Failed to auto-merge '{pr_base}' into '{branch}' before delivery. Check for conflicts.")
 
-    status_result = subprocess.run(
-        ["git", "status", "--short"],
-        cwd=local_path,
-        text=True,
-        capture_output=True,
-        timeout=120,
+    status_result = git_run_strict(
+        local_path, 
+        ["status", "--short"], 
+        failure_message=f"Failed to inspect git status before delivery finalization in {local_path}",
+        capture_output=True
     )
-    if status_result.returncode != 0:
-        raise SystemExit(f"Failed to inspect git status before delivery finalization in {local_path}.")
     status_lines = [line.rstrip() for line in (status_result.stdout or "").splitlines() if line.strip()]
     if not status_lines:
         raise SystemExit(
@@ -77,15 +76,12 @@ def finalize_phase_delivery(
             "Refusing to advance phase without a commit."
         )
 
-    add_result = subprocess.run(
-        ["git", "add", "-A"],
-        cwd=local_path,
-        text=True,
-        capture_output=True,
-        timeout=120,
+    git_run_strict(
+        local_path, 
+        ["add", "-A"], 
+        failure_message=f"Failed to stage changes for phase {phase.upper()} delivery in {local_path}",
+        capture_output=True
     )
-    if add_result.returncode != 0:
-        raise SystemExit(f"Failed to stage changes for phase {phase.upper()} delivery in {local_path}.")
 
     normalized_title = " ".join(issue_title.split()).strip()
     if normalized_title.startswith(TIFERET_AUTO_ISSUE_PREFIX):
@@ -99,63 +95,38 @@ def finalize_phase_delivery(
     pr_title_tail = normalized_title[:120]
     commit_title_tail = normalized_title[:72]
     commit_message = f"phase:{phase} issue #{issue}: {commit_title_tail}"
-    commit_result = subprocess.run(
-        ["git", "commit", "-m", commit_message],
-        cwd=local_path,
-        text=True,
-        capture_output=True,
-        timeout=120,
+    git_run_strict(
+        local_path, 
+        ["commit", "-m", commit_message], 
+        failure_message=f"Failed to commit changes for phase {phase.upper()} delivery in {local_path}",
+        capture_output=True
     )
-    if commit_result.returncode != 0:
-        raise SystemExit(
-            f"Failed to commit changes for phase {phase.upper()} delivery in {local_path}.\n"
-            f"stdout:\n{commit_result.stdout}\n"
-            f"stderr:\n{commit_result.stderr}"
-        )
 
-    push_result = subprocess.run(
-        ["git", "push", "origin", branch],
-        cwd=local_path,
-        text=True,
-        capture_output=True,
-        timeout=180,
+    push_result = git_run_strict(
+        local_path, 
+        ["push", "origin", branch], 
+        failure_message=f"Failed to push branch '{branch}' for phase {phase.upper()} delivery. Human intervention required",
+        capture_output=True
     )
-    if push_result.returncode != 0:
-        raise SystemExit(
-            f"Failed to push branch '{branch}' for phase {phase.upper()} delivery.\n"
-            "Human intervention required; automatic rebase/retry is disabled by policy.\n"
-            f"stdout:\n{push_result.stdout}\n"
-            f"stderr:\n{push_result.stderr}"
-        )
     if (push_result.stdout or "").strip():
         log_info(f"Push output: {(push_result.stdout or '').strip()}")
     if (push_result.stderr or "").strip():
         log_info(f"Push diagnostics: {(push_result.stderr or '').strip()}")
 
-    head_sha_result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=local_path,
-        text=True,
-        capture_output=True,
-        timeout=60,
+    head_sha_result = git_run_strict(
+        local_path, 
+        ["rev-parse", "HEAD"], 
+        failure_message=f"Failed to resolve HEAD sha after push for branch '{branch}'",
+        capture_output=True
     )
-    if head_sha_result.returncode != 0:
-        raise SystemExit(f"Failed to resolve HEAD sha after push for branch '{branch}'.")
     head_sha = (head_sha_result.stdout or "").strip()
 
-    remote_sha_result = subprocess.run(
-        ["git", "ls-remote", "--heads", "origin", f"refs/heads/{branch}"],
-        cwd=local_path,
-        text=True,
-        capture_output=True,
-        timeout=120,
+    remote_sha_result = git_run_strict(
+        local_path, 
+        ["ls-remote", "--heads", "origin", f"refs/heads/{branch}"], 
+        failure_message=f"Failed to verify remote head for branch '{branch}' after push",
+        capture_output=True
     )
-    if remote_sha_result.returncode != 0:
-        raise SystemExit(
-            f"Failed to verify remote head for branch '{branch}' after push.\n"
-            f"stdout:\n{remote_sha_result.stdout}\n"
-            f"stderr:\n{remote_sha_result.stderr}"
-        )
     remote_line = (remote_sha_result.stdout or "").strip().splitlines()
     remote_sha = remote_line[0].split()[0].strip() if remote_line else ""
     if not remote_sha:
@@ -225,26 +196,20 @@ def finalize_phase_delivery(
         if not pr_url:
             raise SystemExit(f"PR creation returned no URL for branch '{branch}' in {repo}.")
 
-    sha_result = subprocess.run(
-        ["git", "rev-parse", "--short", "HEAD"],
-        cwd=local_path,
-        text=True,
-        capture_output=True,
-        timeout=60,
+    sha_result = git_run_strict(
+        local_path, 
+        ["rev-parse", "--short", "HEAD"], 
+        failure_message=f"Failed to resolve HEAD sha after delivery push for branch '{branch}'",
+        capture_output=True
     )
-    if sha_result.returncode != 0:
-        raise SystemExit(f"Failed to resolve HEAD sha after delivery push for branch '{branch}'.")
     short_sha = (sha_result.stdout or "").strip()
 
-    changed_files_result = subprocess.run(
-        ["git", "show", "--name-only", "--pretty=format:", "HEAD"],
-        cwd=local_path,
-        text=True,
-        capture_output=True,
-        timeout=60,
+    changed_files_result = git_run_strict(
+        local_path, 
+        ["show", "--name-only", "--pretty=format:", "HEAD"], 
+        failure_message="Failed to read committed file list for delivery summary",
+        capture_output=True
     )
-    if changed_files_result.returncode != 0:
-        raise SystemExit("Failed to read committed file list for delivery summary.")
     changed_files = [line.strip() for line in changed_files_result.stdout.splitlines() if line.strip()]
 
     files_block = "\n".join(f"- `{path}`" for path in changed_files) if changed_files else "- `(no file list available)`"
