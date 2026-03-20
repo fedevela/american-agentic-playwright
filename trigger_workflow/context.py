@@ -8,6 +8,7 @@ from .config import (
     STRICTLY_INDEPENDENT_PHASES,
     NEXT_LABEL_MAP,
 )
+from .persona_loader import read_microagent_persona_for_label, read_functional_microagent_persona
 from .github_ops import (
     ensure_phase_labels,
     fetch_issue_data,
@@ -16,12 +17,10 @@ from .github_ops import (
     resolve_issue_by_label,
     resolve_oldest_phased_issue,
 )
-from .logging_utils import log_error, log_info, log_section, log_step
-from .prompts import (
-    determine_phase_from_label,
-    read_microagent_persona_for_label,
-)
+from .prompts import determine_phase_from_label
 
+
+from .logging_utils import log_error, log_info, log_section, log_step
 
 @dataclass(frozen=True)
 class SfiratPhaseSignal:

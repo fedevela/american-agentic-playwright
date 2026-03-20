@@ -13,6 +13,10 @@ from unittest.mock import patch
 
 from trigger_workflow.config import TIFERET_AUTO_ISSUE_PREFIX
 from trigger_workflow.git_client import resolve_phase_execution_branch
+from trigger_workflow.persona_loader import (
+    read_functional_microagent_persona,
+    read_microagent_persona_for_label,
+)
 from trigger_workflow.prompts import (
     build_implementation_phase_prompt,
     build_comment_phase_prompt,
@@ -20,8 +24,6 @@ from trigger_workflow.prompts import (
     build_phase_prompt_input_context,
     build_tiferet_specification_prompt,
     determine_phase_from_label,
-    read_functional_microagent_persona,
-    read_microagent_persona_for_label,
 )
 from trigger_workflow.context import conversation_scope_for_phase
 
@@ -342,14 +344,14 @@ class PromptBuilderTests(unittest.TestCase):
 
         self.assertIn("Phase 2B requires a Phase 1 clarification comment", str(exc.exception))
 
-    @patch("trigger_workflow.prompts.BASE_PERSONA_FILE", "missing-daneel.md")
+    @patch("trigger_workflow.persona_loader.BASE_PERSONA_FILE", "missing-daneel.md")
     def test_read_microagent_persona_for_label_errors_when_base_persona_missing(self) -> None:
         with self.assertRaises(SystemExit) as exc:
             read_microagent_persona_for_label("phase:binah", "2B")
 
         self.assertIn("Base persona file is missing", str(exc.exception))
 
-    @patch.dict("trigger_workflow.prompts.PERSONA_FILE_MAP", {"2B": "missing-phase-persona.md"}, clear=False)
+    @patch.dict("trigger_workflow.persona_loader.PERSONA_FILE_MAP", {"2B": "missing-phase-persona.md"}, clear=False)
     def test_read_microagent_persona_for_label_errors_when_phase_persona_missing(self) -> None:
         with self.assertRaises(SystemExit) as exc:
             read_microagent_persona_for_label("phase:binah", "2B")
@@ -357,7 +359,7 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("Phase persona file is missing", str(exc.exception))
 
     @patch.dict(
-        "trigger_workflow.prompts.FUNCTIONAL_MICROAGENT_PERSONA_FILE_MAP",
+        "trigger_workflow.persona_loader.FUNCTIONAL_MICROAGENT_PERSONA_FILE_MAP",
         {"2B": "missing-functional-agent.md"},
         clear=False,
     )

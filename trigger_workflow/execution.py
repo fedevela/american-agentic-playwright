@@ -17,11 +17,11 @@ from .github_ops import (
 )
 from .logging_utils import log_error, log_info, log_multiline, log_step
 from .gemini_runner import (
-    finalize_phase_delivery as gemini_finalize_delivery,
     run_gemini_comment_phase,
     run_gemini_json_phase,
-    run_gemini_implementation_phase,
 )
+from .execution_loop import run_agent_implementation_loop as run_gemini_implementation_phase
+from .delivery import finalize_phase_delivery
 from .prompts import (
     build_implementation_phase_prompt,
     build_comment_phase_prompt,
@@ -55,7 +55,7 @@ def formalize_delivery_handoff(repo: str, issue: int, phase: str, issue_title: s
     This marks the transition from 'work-in-progress' to a 'verifiable artifact'
     ready for the next Sfirat.
     """
-    return gemini_finalize_delivery(repo=repo, issue=issue, phase=phase, issue_title=issue_title, issue_data=issue_data)
+    return finalize_phase_delivery(repo=repo, issue=issue, phase=phase, issue_title=issue_title, issue_data=issue_data)
 
 
 def post_phase_signal_comment(signal: SfiratPhaseSignal, body: str) -> None:

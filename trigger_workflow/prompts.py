@@ -26,68 +26,6 @@ def determine_phase_from_label(label: str) -> str | None:
     return LABEL_PHASE_MAP.get(label)
 
 
-def read_required_text_file(path: Path, *, missing_message: str, log_message: str) -> str:
-    """Read a required prompt file with consistent logging and failure behavior."""
-    if not path.exists():
-        raise SystemExit(missing_message)
-    log_info(log_message)
-    return path.read_text().strip()
-
-
-def read_microagent_persona_for_label(label: str, phase: str | None, *, include_base_persona: bool = True) -> str:
-    """Build the effective phase prompt from Daneel, the phase persona, and the microagent_persona."""
-    if not phase:
-        raise SystemExit(f"Cannot load persona stack for label '{label}' without a resolved phase id.")
-
-    sections: list[str] = []
-
-    if include_base_persona:
-        base_persona_path = PERSONAS_DIR / BASE_PERSONA_FILE
-        sections.append(
-            read_required_text_file(
-                base_persona_path,
-                missing_message=f"Base persona file is missing: {base_persona_path.name}",
-                log_message=f"Including base persona: {base_persona_path.name}",
-            )
-        )
-
-    persona_filename = PERSONA_FILE_MAP.get(phase)
-    if not persona_filename:
-        raise SystemExit(f"No phase persona filename is configured for phase {phase.upper()}.")
-    persona_path = PERSONAS_DIR / persona_filename
-    log_info(f"Looking for phase persona file {persona_filename}")
-    sections.append(
-        read_required_text_file(
-            persona_path,
-            missing_message=f"Phase persona file is missing: {persona_filename}",
-            log_message=f"Including phase persona: {persona_path.name}",
-        )
-    )
-
-    microagent_persona_content = read_functional_microagent_persona(label, phase)
-    sections.append(microagent_persona_content.strip())
-
-    return "\n\n".join(sections)
-
-
-def read_functional_microagent_persona(label: str, phase: str | None) -> str:
-    """Read the functional `microagent_personas/` prompt used alongside literary personas."""
-    del label
-    if not phase:
-        raise SystemExit("Cannot load a functional microagent_persona without a resolved phase id.")
-
-    microagent_persona_filename = FUNCTIONAL_MICROAGENT_PERSONA_FILE_MAP.get(phase)
-    if not microagent_persona_filename:
-        raise SystemExit(f"No functional microagent_persona filename is configured for phase {phase.upper()}.")
-
-    microagent_persona_path = MICROAGENT_PERSONAS_DIR / microagent_persona_filename
-    return read_required_text_file(
-        microagent_persona_path,
-        missing_message=f"Functional microagent_persona file is missing: {microagent_persona_filename}",
-        log_message=f"Including functional microagent_persona: {microagent_persona_path.name}",
-    )
-
-
 def extract_phase_1_comment(issue_data: dict[str, Any]) -> str | None:
     """Extract the normalized Keter comment body from machine-marked issue comments."""
     comments = issue_data.get("comments") or []
@@ -220,12 +158,12 @@ Do not derive requirements directly from the original issue body.
 """
 
 
-def strip_microagent_persona(microagent_persona: str) -> str:
-    """Normalize the microagent_persona content before embedding."""
-    microagent_persona_stripped = microagent_persona.strip()
-    if microagent_persona_stripped.endswith("EOF"):
-        microagent_persona_stripped = microagent_persona_stripped[:-3].strip()
-    return microagent_persona_stripped
+def strip_microagent_persona_persona(microagent_persona_persona: str) -> str:
+    """Normalize the microagent_persona_persona content before embedding."""
+    microagent_persona_persona_stripped = microagent_persona_persona.strip()
+    if microagent_persona_persona_stripped.endswith("EOF"):
+        microagent_persona_persona_stripped = microagent_persona_persona_stripped[:-3].strip()
+    return microagent_persona_persona_stripped
 
 
 def build_phase_2_story_requirements() -> list[str]:
@@ -247,7 +185,7 @@ def build_comment_phase_prompt(
     label: str,
     issue: int,
     repo: str,
-    microagent_persona: str,
+    microagent_persona_persona: str,
     phase: str,
     issue_data: dict[str, Any],
 ) -> str:
@@ -278,7 +216,7 @@ def build_comment_phase_prompt(
     elif phase in {"2A", "2B", "2C"}:
         requirements.extend(build_phase_2_story_requirements())
 
-    return f"""{strip_microagent_persona(microagent_persona)}
+    return f"""{strip_microagent_persona_persona(microagent_persona_persona)}
 
 {build_phase_prompt_input_context(label, issue, repo, phase, issue_data)}
 
@@ -294,12 +232,12 @@ def build_tiferet_specification_prompt(
     label: str,
     issue: int,
     repo: str,
-    microagent_persona: str,
+    microagent_persona_persona: str,
     phase: str,
     issue_data: dict[str, Any],
 ) -> str:
     """Build a prompt for phase 4/Tiferet, the child-issue specification phase."""
-    return f"""{strip_microagent_persona(microagent_persona)}
+    return f"""{strip_microagent_persona_persona(microagent_persona_persona)}
 
 {build_phase_prompt_input_context(label, issue, repo, phase, issue_data)}
 
@@ -342,7 +280,7 @@ def build_implementation_phase_prompt(
     label: str,
     issue: int,
     repo: str,
-    microagent_persona: str,
+    microagent_persona_persona: str,
     phase: str,
     issue_data: dict[str, Any],
 ) -> str:
@@ -430,7 +368,7 @@ You are working directly in a git repository. Your changes must be committed and
 {chr(10).join(requirement_lines)}
 """
 
-    return f"""{strip_microagent_persona(microagent_persona)}
+    return f"""{strip_microagent_persona_persona(microagent_persona_persona)}
 
 {build_issue_runtime_context(label, issue, repo, phase, issue_data, include_comments=phase in COMMENT_VISIBLE_PHASES)}
 

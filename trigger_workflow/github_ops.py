@@ -16,16 +16,6 @@ SUB_ISSUE_VERIFICATION_DELAY_SECONDS = 2.0
 
 
 
-def run_gh(args: list[str], *, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
-    """Run a GitHub CLI command with a short preview log."""
-    preview = " ".join(args[:5])
-    log_info(f"GitHub CLI: gh {preview}{' ...' if len(args) > 5 else ''}")
-    return subprocess.run(
-        ["gh", *args],
-        text=True,
-        capture_output=capture_output,
-        timeout=120,
-    )
 
 
 def fetch_issue_data(repo: str, issue_number: int) -> dict[str, Any]:
