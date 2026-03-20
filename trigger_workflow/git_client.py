@@ -49,11 +49,29 @@ def git_run(local_path: Path, args: list[str], *, capture_output: bool = False) 
     )
 
 
+def git_run_strict(
+    local_path: Path,
+    args: list[str],
+    *,
+    failure_message: str,
+    capture_output: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    """Run a git command and immediately raise a formatted SystemExit on failure."""
+    result = git_run(local_path, args, capture_output=capture_output)
+    if result.returncode != 0:
+        error_context = result.stderr or result.stdout or "(no output)"
+        raise SystemExit(f"{failure_message}: {error_context.strip()}")
+    return result
+
+
 def current_branch(local_path: Path) -> str:
     """Read the currently checked-out git branch for the target repository."""
-    result = git_run(local_path, ["branch", "--show-current"], capture_output=True)
-    if result.returncode != 0:
-        raise SystemExit(f"Failed to determine current branch in {local_path}.")
+    result = git_run_strict(
+        local_path, 
+        ["branch", "--show-current"], 
+        failure_message=f"Failed to determine current branch in {local_path}",
+        capture_output=True
+    )
     return (result.stdout or "").strip()
 
 
@@ -72,10 +90,7 @@ def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> Non
 
     if branch_exists(local_path, branch):
         log_info(f"Switching target repository to existing branch '{branch}'")
-        result = git_run(local_path, ["switch", branch], capture_output=True)
-        if result.returncode != 0:
-            log_error(f"Failed to switch {local_path} to branch '{branch}': {result.stderr or result.stdout or 'no output'}")
-            raise SystemExit(f"Failed to switch {local_path} to branch '{branch}'.")
+        git_run_strict(local_path, ["switch", branch], failure_message=f"Failed to switch {local_path} to branch '{branch}'", capture_output=True)
         return
 
     if branch == base_branch:
@@ -89,13 +104,15 @@ def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> Non
         # Fallback to origin/base_branch if local doesn't exist
         log_info(f"Failed to create from local '{base_branch}', trying 'origin/{base_branch}'...")
         git_run(local_path, ["fetch", "origin", base_branch])
-        result = git_run(local_path, ["switch", "-c", branch, f"origin/{base_branch}"], capture_output=True)
-        if result.returncode != 0:
-            log_error(f"Failed to create branch '{branch}' from 'origin/{base_branch}': {result.stderr or result.stdout or 'no output'}")
-            raise SystemExit(f"Failed to create branch '{branch}' from '{base_branch}'.")
+        git_run_strict(
+            local_path, 
+            ["switch", "-c", branch, f"origin/{base_branch}"], 
+            failure_message=f"Failed to create branch '{branch}' from '{base_branch}'", 
+            capture_output=True
+        )
     
     log_info(f"Pushing new branch '{branch}' to origin...")
-    git_run(local_path, ["push", "-u", "origin", branch])
+    git_run_strict(local_path, ["push", "-u", "origin", branch], failure_message=f"Failed to push new branch '{branch}'")
 
 
 def prepare_target_repo_checkout(repo: str) -> tuple[TargetRepoConfig, Path]:
@@ -145,14 +162,15 @@ def prepare_branch_context(
         
         # Verify base branch exists on origin
         origin_branch = f"origin/{base_branch}"
-        check_base = git_run(local_path, ["rev-parse", "--verify", origin_branch], capture_output=True)
-        if check_base.returncode != 0:
-            log_error(f"Base branch '{base_branch}' does not exist on origin. Cannot merge.")
-            raise SystemExit(f"Missing required base branch '{base_branch}' for issue.")
+        git_run_strict(
+            local_path, 
+            ["rev-parse", "--verify", origin_branch], 
+            failure_message=f"Base branch '{base_branch}' does not exist on origin. Cannot merge",
+            capture_output=True
+        )
 
         merge_result = git_run(local_path, ["merge", origin_branch], capture_output=True)
         if merge_result.returncode != 0:
-            log_error(f"Automatic merge from '{base_branch}' failed; human intervention required.")
             if "CONFLICT" in (merge_result.stdout or "") or "CONFLICT" in (merge_result.stderr or ""):
                 log_error("Merge conflicts detected during branch setup.")
             raise SystemExit(f"Failed to auto-merge '{base_branch}' into '{branch}'. Check for conflicts.")

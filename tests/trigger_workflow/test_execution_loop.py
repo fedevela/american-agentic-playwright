@@ -30,17 +30,15 @@ class ExecutionLoopTests(unittest.TestCase):
         run_tests_mock.assert_called_once()
 
     @patch("trigger_workflow.execution_loop.run_gemini")
-    @patch("sys.exit")
-    def test_run_agent_implementation_loop_exits_on_gemini_error(self, sys_exit_mock, run_gemini_mock) -> None:
+    def test_run_agent_implementation_loop_exits_on_gemini_error(self, run_gemini_mock) -> None:
         gemini_result = MagicMock()
         gemini_result.returncode = 1
         run_gemini_mock.return_value = gemini_result
-        sys_exit_mock.side_effect = SystemExit(1)
         
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit) as exc:
             run_agent_implementation_loop("Task", repo="owner/repo", issue=1, phase="5")
         
-        sys_exit_mock.assert_called_once_with(1)
+        self.assertIn("Agent execution failed with exit code: 1", str(exc.exception))
 
     @patch("trigger_workflow.execution_loop.run_gemini")
     @patch("trigger_workflow.execution_loop.run_phase_tests")

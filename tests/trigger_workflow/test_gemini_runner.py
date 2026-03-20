@@ -103,27 +103,25 @@ class GeminiRunnerTests(unittest.TestCase):
         self.assertEqual(result, "Hello")
 
     @patch("trigger_workflow.gemini_runner.run_gemini")
-    @patch("sys.exit")
-    def test_run_gemini_comment_phase_exits_on_failure(self, exit_mock, run_mock) -> None:
+    def test_run_gemini_comment_phase_exits_on_failure(self, run_mock) -> None:
         res = MagicMock()
         res.returncode = 1
         run_mock.return_value = res
-        exit_mock.side_effect = SystemExit(1)
         
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit) as exc:
             run_gemini_comment_phase("P", repo="R", issue=1, phase="P")
-        exit_mock.assert_called_once_with(1)
+        self.assertIn("failed with exit code: 1", str(exc.exception))
 
     @patch("trigger_workflow.gemini_runner.run_gemini")
-    @patch("sys.exit")
-    def test_run_gemini_comment_phase_exits_if_no_response(self, exit_mock, run_mock) -> None:
+    def test_run_gemini_comment_phase_exits_if_no_response(self, run_mock) -> None:
         res = MagicMock()
         res.returncode = 0
         res.stdout = "No json here"
         run_mock.return_value = res
         
-        run_gemini_comment_phase("P", repo="R", issue=1, phase="P")
-        exit_mock.assert_called_once_with(1)
+        with self.assertRaises(SystemExit) as exc:
+            run_gemini_comment_phase("P", repo="R", issue=1, phase="P")
+        self.assertIn("returned no response", str(exc.exception))
 
     @patch("trigger_workflow.gemini_runner.run_gemini_comment_phase")
     def test_run_gemini_json_phase_success(self, run_mock) -> None:

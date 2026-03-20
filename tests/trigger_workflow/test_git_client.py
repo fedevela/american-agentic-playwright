@@ -11,6 +11,7 @@ from trigger_workflow.git_client import (
     resolve_target_repo_config,
     resolve_phase_execution_branch,
     git_run,
+    git_run_strict,
     current_branch,
     branch_exists,
     ensure_git_branch,
@@ -49,6 +50,27 @@ class GitClientTests(unittest.TestCase):
         self.assertEqual(run_mock.call_args.args[0], ["git", "status"])
         self.assertEqual(run_mock.call_args.kwargs["cwd"], Path("/mock/path"))
         self.assertTrue(run_mock.call_args.kwargs["capture_output"])
+
+    @patch("trigger_workflow.git_client.git_run")
+    def test_git_run_strict_success(self, run_mock) -> None:
+        res = MagicMock()
+        res.returncode = 0
+        run_mock.return_value = res
+        
+        result = git_run_strict(Path("/mock"), ["status"], failure_message="Failed to status")
+        self.assertEqual(result, res)
+
+    @patch("trigger_workflow.git_client.git_run")
+    def test_git_run_strict_failure(self, run_mock) -> None:
+        res = MagicMock()
+        res.returncode = 1
+        res.stderr = "git err"
+        res.stdout = ""
+        run_mock.return_value = res
+        
+        with self.assertRaises(SystemExit) as exc:
+            git_run_strict(Path("/mock"), ["status"], failure_message="Failed to status")
+        self.assertIn("Failed to status: git err", str(exc.exception))
 
     @patch("trigger_workflow.git_client.git_run")
     def test_current_branch_success(self, run_mock) -> None:

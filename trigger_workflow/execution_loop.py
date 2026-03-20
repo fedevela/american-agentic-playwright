@@ -45,7 +45,7 @@ def run_agent_implementation_loop(
             issue_data=issue_data,
         )
         if result.returncode != 0:
-            sys.exit(result.returncode)
+            raise SystemExit(f"Agent execution failed with exit code: {result.returncode}")
 
         response = extract_gemini_response(result.stdout)
         if response:
