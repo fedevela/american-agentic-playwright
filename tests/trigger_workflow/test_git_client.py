@@ -101,13 +101,48 @@ class GitClientTests(unittest.TestCase):
     @patch("trigger_workflow.git_client.current_branch", return_value="other")
     @patch("trigger_workflow.git_client.branch_exists", return_value=False)
     @patch("trigger_workflow.git_client.git_run")
-    def test_ensure_git_branch_fails_if_feature_missing(self, run_mock, exists_mock, curr_mock) -> None:
+    def test_ensure_git_branch_fails_if_feature_missing_both_local_and_origin(self, run_mock, exists_mock, curr_mock) -> None:
+        # All git runs fail (local switch, fetch, origin switch)
         res = MagicMock()
         res.returncode = 1
+        res.stderr = "error output"
+        res.stdout = ""
         run_mock.return_value = res
         with self.assertRaises(SystemExit) as exc:
             ensure_git_branch(Path("/mock"), "feature", base_branch="main")
         self.assertIn("Failed to create branch 'feature'", str(exc.exception))
+        self.assertEqual(run_mock.call_count, 3) # switch local, fetch, switch origin
+
+    @patch("trigger_workflow.git_client.current_branch", return_value="other")
+    @patch("trigger_workflow.git_client.branch_exists", return_value=False)
+    @patch("trigger_workflow.git_client.git_run")
+    def test_ensure_git_branch_creates_from_local_base(self, run_mock, exists_mock, curr_mock) -> None:
+        res = MagicMock()
+        res.returncode = 0
+        run_mock.return_value = res
+        ensure_git_branch(Path("/mock"), "feature", base_branch="main")
+        
+        # Should call: switch -c feature main, and push -u origin feature
+        self.assertEqual(run_mock.call_count, 2)
+        self.assertIn("main", run_mock.call_args_list[0].args[1])
+        self.assertIn("push", run_mock.call_args_list[1].args[1])
+
+    @patch("trigger_workflow.git_client.current_branch", return_value="other")
+    @patch("trigger_workflow.git_client.branch_exists", return_value=False)
+    @patch("trigger_workflow.git_client.git_run")
+    def test_ensure_git_branch_creates_from_origin_base_fallback(self, run_mock, exists_mock, curr_mock) -> None:
+        # First call (local switch) fails, second call (fetch) succeeds, third call (origin switch) succeeds, fourth (push) succeeds
+        fail_res = MagicMock()
+        fail_res.returncode = 1
+        success_res = MagicMock()
+        success_res.returncode = 0
+        
+        run_mock.side_effect = [fail_res, success_res, success_res, success_res]
+        
+        ensure_git_branch(Path("/mock"), "feature", base_branch="main")
+        
+        self.assertEqual(run_mock.call_count, 4)
+        self.assertIn("origin/main", run_mock.call_args_list[2].args[1])
 
     @patch("pathlib.Path.exists", return_value=False)
     def test_prepare_target_repo_checkout_fails_if_no_git(self, exists_mock) -> None:
