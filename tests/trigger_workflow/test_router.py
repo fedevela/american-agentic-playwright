@@ -1,6 +1,6 @@
 """Router tests for phase dispatch and execution policy.
 
-These cases verify that the top-level router sends work to the correct phase
+These cases verify that the top-level orchestration sends work to the correct phase
 handler and carries the expected session policy into that handler.
 """
 
@@ -9,17 +9,19 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from trigger_workflow.router import (
-    PhaseExecutionRequest,
-    execute_implementation_phase_task,
-    execute_comment_phase_handoff,
-    execute_tiferet_specification_phase,
-    label_for_phase_id,
-    resolve_phase_execution_request,
-    render_prompt_only_output,
+from trigger_workflow.context import PhaseExecutionRequest
+from trigger_workflow.orchestration import (
     run_labeled_issue_phase,
     run_labeled_issue_phase_with_mode,
 )
+from trigger_workflow.execution import (
+    execute_implementation_phase_task,
+    execute_comment_phase_handoff,
+    execute_tiferet_specification_phase,
+)
+from trigger_workflow.cli import label_for_phase_id
+from trigger_workflow.context import resolve_phase_execution_request
+from trigger_workflow.preview import render_prompt_only_output
 
 
 class RouterPhaseExecutionTests(unittest.TestCase):
@@ -30,10 +32,10 @@ class RouterPhaseExecutionTests(unittest.TestCase):
     workflow incorrectly while appearing operationally healthy.
     """
 
-    @patch("trigger_workflow.router.advance_issue_label")
-    @patch("trigger_workflow.router.post_issue_comment")
-    @patch("trigger_workflow.router.log_multiline")
-    @patch("trigger_workflow.router.run_comment_phase", return_value="Line one\nLine two")
+    @patch("trigger_workflow.execution.advance_issue_label")
+    @patch("trigger_workflow.execution.post_issue_comment")
+    @patch("trigger_workflow.execution.log_multiline")
+    @patch("trigger_workflow.execution.run_comment_phase", return_value="Line one\nLine two")
     def test_execute_discussion_phase_logs_generated_comment_body(
         self,
         run_comment_phase_mock,
@@ -57,18 +59,18 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         log_multiline_mock.assert_called_once_with("Generated comment", "Line one\nLine two")
         self.assertEqual(run_comment_phase_mock.call_args.kwargs["session_scope"], "phase-1")
 
-    @patch("trigger_workflow.router.post_issue_comment")
-    @patch("trigger_workflow.router.remove_issue_label")
-    @patch("trigger_workflow.router.create_issue_branches_for_child_issues")
-    @patch("trigger_workflow.router.log_multiline")
-    @patch("trigger_workflow.router.build_phase_four_summary", return_value="Summary body")
+    @patch("trigger_workflow.execution.post_issue_comment")
+    @patch("trigger_workflow.execution.remove_issue_label")
+    @patch("trigger_workflow.execution.create_issue_branches_for_child_issues")
+    @patch("trigger_workflow.execution.log_multiline")
+    @patch("trigger_workflow.execution.build_phase_four_summary", return_value="Summary body")
     @patch(
-        "trigger_workflow.router.create_child_issues",
+        "trigger_workflow.execution.create_child_issues",
         return_value=[{"number": 101, "id": 1001, "title": "child", "url": "https://example.com/101"}],
     )
-    @patch("trigger_workflow.router.validate_tiferet_specification_payload_structure")
+    @patch("trigger_workflow.execution.validate_tiferet_specification_payload_structure")
     @patch(
-        "trigger_workflow.router.run_json_phase",
+        "trigger_workflow.execution.run_json_phase",
         return_value={"comment": "Parent body", "sub_issues": []},
     )
     def test_execute_specification_phase_uses_shared_issue_session_scope(
@@ -82,9 +84,6 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         remove_issue_label_mock,
         post_issue_comment_mock,
     ) -> None:
-        # Phase 4 must validate against a real-looking Gevurah comment, so this
-        # fixture includes the canonical requirement block expected by router
-        # validation before child issues are posted.
         del validate_phase_four_payload_mock
         del create_child_issues_mock
         del build_phase_four_summary_mock
@@ -127,10 +126,10 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         create_issue_branches_for_child_issues_mock.assert_called_once_with("owner/repo", 55, [101])
         remove_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:tiferet")
 
-    @patch("trigger_workflow.router.advance_issue_label")
-    @patch("trigger_workflow.router.post_issue_comment")
-    @patch("trigger_workflow.router.finalize_delivery", return_value="Delivery summary")
-    @patch("trigger_workflow.router.run_implementation_phase")
+    @patch("trigger_workflow.execution.advance_issue_label")
+    @patch("trigger_workflow.execution.post_issue_comment")
+    @patch("trigger_workflow.execution.finalize_delivery", return_value="Delivery summary")
+    @patch("trigger_workflow.execution.run_implementation_phase")
     def test_execute_agent_phase_uses_shared_issue_session_scope(
         self,
         run_implementation_phase_mock,
@@ -160,12 +159,12 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         post_issue_comment_mock.assert_called_once()
         advance_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:netzach")
 
-    @patch("trigger_workflow.router.execute_implementation_phase_task")
-    @patch("trigger_workflow.router.execute_tiferet_specification_phase")
-    @patch("trigger_workflow.router.execute_comment_phase_handoff")
-    @patch("trigger_workflow.router.fetch_issue_data")
-    @patch("trigger_workflow.router.read_microagent_for_label")
-    @patch("trigger_workflow.router.ensure_phase_labels")
+    @patch("trigger_workflow.orchestration.execute_implementation_phase_task")
+    @patch("trigger_workflow.orchestration.execute_tiferet_specification_phase")
+    @patch("trigger_workflow.orchestration.execute_comment_phase_handoff")
+    @patch("trigger_workflow.context.fetch_issue_data")
+    @patch("trigger_workflow.context.read_microagent_for_label")
+    @patch("trigger_workflow.context.ensure_phase_labels")
     def test_trigger_agent_routes_chesed_to_discussion_phase(
         self,
         ensure_phase_labels_mock,
@@ -175,9 +174,6 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         execute_specification_mock,
         execute_agent_mock,
     ) -> None:
-        # Chesed is still a discussion-only phase. This test keeps the router
-        # from accidentally routing it into the specification or implementation
-        # execution paths.
         del ensure_phase_labels_mock
         read_microagent_for_label_mock.return_value = "prompt"
         fetch_issue_data_mock.return_value = {
@@ -192,12 +188,12 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         execute_specification_mock.assert_not_called()
         execute_agent_mock.assert_not_called()
 
-    @patch("trigger_workflow.router.log_error")
-    @patch("trigger_workflow.router.tag_issue_needs_human")
-    @patch("trigger_workflow.router.execute_tiferet_specification_phase", side_effect=SystemExit("phase failed"))
-    @patch("trigger_workflow.router.fetch_issue_data")
-    @patch("trigger_workflow.router.read_microagent_for_label")
-    @patch("trigger_workflow.router.ensure_phase_labels")
+    @patch("trigger_workflow.execution.log_error")
+    @patch("trigger_workflow.execution.tag_issue_needs_human")
+    @patch("trigger_workflow.orchestration.execute_tiferet_specification_phase", side_effect=SystemExit("phase failed"))
+    @patch("trigger_workflow.context.fetch_issue_data")
+    @patch("trigger_workflow.context.read_microagent_for_label")
+    @patch("trigger_workflow.context.ensure_phase_labels")
     def test_trigger_agent_tags_needs_human_when_pre_netzach_phase_fails(
         self,
         ensure_phase_labels_mock,
@@ -223,10 +219,10 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         self.assertIn("phase failed", str(exc.exception))
         tag_issue_needs_human_mock.assert_called_once_with("owner/repo", 55)
 
-    @patch("trigger_workflow.router.log_error")
-    @patch("trigger_workflow.router.fetch_issue_data")
-    @patch("trigger_workflow.router.read_microagent_for_label")
-    @patch("trigger_workflow.router.ensure_phase_labels")
+    @patch("trigger_workflow.context.log_error")
+    @patch("trigger_workflow.context.fetch_issue_data")
+    @patch("trigger_workflow.context.read_microagent_for_label")
+    @patch("trigger_workflow.context.ensure_phase_labels")
     def test_trigger_agent_errors_when_issue_lacks_requested_label(
         self,
         ensure_phase_labels_mock,
@@ -249,13 +245,13 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         log_error_mock.assert_called_once()
         self.assertIn("is not labeled 'phase:chesed'", log_error_mock.call_args.args[0])
 
-    @patch("trigger_workflow.router.preview_phase_execution_plan")
-    @patch("trigger_workflow.router.execute_implementation_phase_task")
-    @patch("trigger_workflow.router.execute_tiferet_specification_phase")
-    @patch("trigger_workflow.router.execute_comment_phase_handoff")
-    @patch("trigger_workflow.router.fetch_issue_data")
-    @patch("trigger_workflow.router.read_microagent_for_label")
-    @patch("trigger_workflow.router.ensure_phase_labels")
+    @patch("trigger_workflow.orchestration.preview_phase_execution_plan")
+    @patch("trigger_workflow.orchestration.execute_implementation_phase_task")
+    @patch("trigger_workflow.orchestration.execute_tiferet_specification_phase")
+    @patch("trigger_workflow.orchestration.execute_comment_phase_handoff")
+    @patch("trigger_workflow.context.fetch_issue_data")
+    @patch("trigger_workflow.context.read_microagent_for_label")
+    @patch("trigger_workflow.context.ensure_phase_labels")
     def test_manual_mode_routes_to_preview_only_without_execution_or_label_sync(
         self,
         ensure_phase_labels_mock,
@@ -281,10 +277,10 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         execute_tiferet_specification_phase_mock.assert_not_called()
         execute_implementation_phase_task_mock.assert_not_called()
 
-    @patch("trigger_workflow.router.preview_phase_execution_plan")
-    @patch("trigger_workflow.router.fetch_issue_data")
-    @patch("trigger_workflow.router.read_microagent_for_label")
-    @patch("trigger_workflow.router.ensure_phase_labels")
+    @patch("trigger_workflow.orchestration.preview_phase_execution_plan")
+    @patch("trigger_workflow.context.fetch_issue_data")
+    @patch("trigger_workflow.context.read_microagent_for_label")
+    @patch("trigger_workflow.context.ensure_phase_labels")
     def test_manual_mode_forces_requested_label_even_if_issue_labels_do_not_match(
         self,
         ensure_phase_labels_mock,
@@ -304,9 +300,9 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         ensure_phase_labels_mock.assert_not_called()
         preview_phase_execution_plan_mock.assert_called_once()
 
-    @patch("trigger_workflow.router.log_multiline")
-    @patch("trigger_workflow.router.log_info")
-    @patch("trigger_workflow.router.build_phase_execution_prompt", return_value=("PROMPT-CONTENT", ""))
+    @patch("trigger_workflow.preview.log_multiline")
+    @patch("trigger_workflow.preview.log_info")
+    @patch("trigger_workflow.preview.build_phase_execution_prompt", return_value=("PROMPT-CONTENT", ""))
     def test_manual_preview_logs_prompt_and_planned_actions_for_implementation(
         self,
         build_phase_execution_prompt_mock,
@@ -323,12 +319,11 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             issue_data={"title": "Issue", "body": "Body", "comments": []},
         )
 
-        from trigger_workflow.router import preview_phase_execution_plan
+        from trigger_workflow.preview import preview_phase_execution_plan
 
         preview_phase_execution_plan(request)
 
         build_phase_execution_prompt_mock.assert_called_once()
-        # RUNNER_TYPE defaults to gemini
         self.assertEqual(log_multiline_mock.call_args_list[0].args[0], "Manual mode prompt for gemini (implementation)")
         self.assertEqual(log_multiline_mock.call_args_list[0].args[1], "PROMPT-CONTENT")
         self.assertEqual(log_multiline_mock.call_args_list[1].args[0], "Manual mode planned actions")
@@ -367,8 +362,8 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         self.assertIn("Prepare a commit message", rendered)
         self.assertIn("Generate the gh command to post the comment", rendered)
 
-    @patch("trigger_workflow.router.fetch_issue_data")
-    @patch("trigger_workflow.router.read_microagent_for_label")
+    @patch("trigger_workflow.context.fetch_issue_data")
+    @patch("trigger_workflow.context.read_microagent_for_label")
     def test_resolve_phase_execution_request_can_include_or_exclude_base_persona(
         self,
         read_microagent_for_label_mock,

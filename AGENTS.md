@@ -51,15 +51,32 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 
 ## Module Map
 
+- `trigger_workflow/cli.py`
+  - CLI entry point and argument parsing (`run_trigger_cli`)
+  - Maps phase IDs to canonical labels
+
+- `trigger_workflow/orchestration.py`
+  - Top-level workflow routing and phase dispatch
+  - Coordinates between context resolution and execution logic
+
+- `trigger_workflow/context.py`
+  - Runtime context resolution (issue, label, repo)
+  - Manages session scope policies
+
+- `trigger_workflow/execution.py`
+  - Phase-specific execution logic (comment, JSON, implementation)
+  - Manages phase-comment wrappers and handoffs
+
+- `trigger_workflow/preview.py`
+  - Manual mode behavior and prompt-only previews
+
+- `trigger_workflow/router.py`
+  - Compatibility layer exporting key orchestration symbols
+  - Deprecated as a primary logic container
+
 - `trigger_workflow/config.py`
   - Canonical phase/label maps
   - Successor mapping (`NEXT_LABEL_MAP`)
-
-- `trigger_workflow/router.py`
-  - Top-level orchestration + phase dispatch
-  - Manual preview mode behavior
-  - Needs-human tagging for pre-implementation failures
-  - Local repository detection
 
 - `trigger_workflow/prompts.py`
   - Prompt construction and context shaping
