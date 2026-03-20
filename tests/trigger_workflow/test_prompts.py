@@ -247,6 +247,30 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("ARTIFACT DISCOVERY PROCEDURE (MANDATORY)", content)
         self.assertIn("Completion gate: do not stop after analysis", content)
 
+    def test_phase_6_prompt_enforces_pseudocode_discovery_and_readiness(self) -> None:
+        prompt = build_implementation_phase_prompt(
+            "phase:hod",
+            12,
+            "owner/repo",
+            "Hod microagent_persona",
+            "6",
+            {"title": "Example", "body": "Body", "comments": []},
+        )
+        self.assertIn("This is Phase 6 (Hod Pseudocode)", prompt)
+        self.assertIn("procedural structure and bodyless logic placeholders", prompt)
+        
+    def test_phase_10_prompt_enforces_refactoring_boundaries(self) -> None:
+        prompt = build_implementation_phase_prompt(
+            "phase:hod-refactoring",
+            12,
+            "owner/repo",
+            "Hod Refactoring microagent_persona",
+            "10",
+            {"title": "Example", "body": "Body", "comments": []},
+        )
+        self.assertIn("This is Phase 10 (Hod Refactoring)", prompt)
+        self.assertIn("Expose the system's architecture clearly", prompt)
+
     def test_phase_7_prompt_enforces_code_level_artifacts_not_analysis_only(self) -> None:
         prompt = build_implementation_phase_prompt(
             "phase:yesod-orchestration",
