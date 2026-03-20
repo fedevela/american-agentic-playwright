@@ -83,10 +83,10 @@ swarm/
 │   ├── router.py           # Top-level orchestration and phase dispatch
 │   ├── config.py           # Canonical phase and label configuration
 │   ├── gemini_runner.py    # Gemini CLI runner integration
-│   ├── prompts.py          # Persona and microagent prompt construction
+│   ├── prompts.py          # Persona and microagent_persona prompt construction
 │   ├── github_ops.py       # GitHub CLI wrappers and issue management
 │   └── runner_utils.py     # Current directory branch management
-├── microagents/            # Functional phase prompt templates
+├── microagent_personas/            # Functional phase prompt templates
 ├── personas/               # Philosophical persona templates
 ├── workspace/              # (Deprecated)
 └── .swarm/                 # Local state and logs
@@ -114,7 +114,7 @@ python /path/to/swarm/trigger.py --label phase:keter --issue 53 --manual
 ### Orchestrator (`orchestration.py`, `context.py`)
 - Resolves GitHub issue context and determines the active phase into a `SfiratPhaseSignal`.
 - Auto-detects repository name from local git remote.
-- Composes the system prompt from base personas and phase-specific microagents.
+- Composes the system prompt from base personas and phase-specific microagent_personas.
 - Dispatches execution (`route_labeled_signal`) to the Gemini runner in the current directory.
 - Manages the state machine transitions by advancing labels on success.
 

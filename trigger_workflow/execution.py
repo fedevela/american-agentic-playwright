@@ -29,7 +29,7 @@ from .prompts import (
     build_tiferet_specification_prompt,
     format_phase_comment,
 )
-from .runner_utils import create_issue_branches_for_child_issues
+from .git_client import create_issue_branches_for_child_issues
 from .validation import validate_tiferet_specification_payload_structure
 
 
@@ -101,7 +101,7 @@ def build_phase_execution_prompt(
         signal.label,
         signal.issue,
         signal.repo,
-        signal.microagent_content,
+        signal.microagent_persona_content,
         signal.phase,
         signal.issue_data,
     )

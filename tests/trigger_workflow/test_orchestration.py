@@ -24,7 +24,7 @@ from trigger_workflow.context import resolve_phase_signal
 from trigger_workflow.preview import render_prompt_only_output
 
 
-class RouterPhaseExecutionTests(unittest.TestCase):
+class OrchestrationPhaseExecutionTests(unittest.TestCase):
     """Cover dispatch behavior for discussion, specification, and agent phases.
 
     The router is small, but mistakes here are high impact: the wrong handler,
@@ -50,7 +50,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
                 label="phase:keter",
                 issue=55,
                 repo="owner/repo",
-                microagent_content="prompt",
+                microagent_persona_content="prompt",
                 phase="1",
                 issue_data={"title": "Issue", "body": "Body", "comments": []},
             )
@@ -116,7 +116,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
                 label="phase:tiferet",
                 issue=55,
                 repo="owner/repo",
-                microagent_content="prompt",
+                microagent_persona_content="prompt",
                 phase="4",
                 issue_data=issue_data,
             )
@@ -142,7 +142,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
                 label="phase:netzach",
                 issue=55,
                 repo="owner/repo",
-                microagent_content="prompt",
+                microagent_persona_content="prompt",
                 phase="5",
                 issue_data={"title": "Issue", "body": "Body", "comments": []},
             )
@@ -163,12 +163,12 @@ class RouterPhaseExecutionTests(unittest.TestCase):
     @patch("trigger_workflow.orchestration.manifest_specification_decomposition")
     @patch("trigger_workflow.orchestration.execute_comment_phase_handoff")
     @patch("trigger_workflow.context.fetch_issue_data")
-    @patch("trigger_workflow.context.read_microagent_for_label")
+    @patch("trigger_workflow.context.read_microagent_persona_for_label")
     @patch("trigger_workflow.context.ensure_phase_labels")
     def test_trigger_agent_routes_chesed_to_discussion_phase(
         self,
         ensure_phase_labels_mock,
-        read_microagent_for_label_mock,
+        read_microagent_persona_for_label_mock,
         fetch_issue_data_mock,
         execute_discussion_mock,
         execute_specification_mock,
@@ -178,7 +178,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         # from accidentally routing it into the specification or implementation
         # execution paths.
         del ensure_phase_labels_mock
-        read_microagent_for_label_mock.return_value = "prompt"
+        read_microagent_persona_for_label_mock.return_value = "prompt"
         fetch_issue_data_mock.return_value = {
             "title": "Issue",
             "labels": [{"name": "phase:chesed"}],
@@ -195,12 +195,12 @@ class RouterPhaseExecutionTests(unittest.TestCase):
     @patch("trigger_workflow.execution.tag_issue_needs_human")
     @patch("trigger_workflow.orchestration.manifest_specification_decomposition", side_effect=SystemExit("phase failed"))
     @patch("trigger_workflow.context.fetch_issue_data")
-    @patch("trigger_workflow.context.read_microagent_for_label")
+    @patch("trigger_workflow.context.read_microagent_persona_for_label")
     @patch("trigger_workflow.context.ensure_phase_labels")
     def test_trigger_agent_tags_needs_human_when_pre_netzach_phase_fails(
         self,
         ensure_phase_labels_mock,
-        read_microagent_for_label_mock,
+        read_microagent_persona_for_label_mock,
         fetch_issue_data_mock,
         execute_tiferet_specification_phase_mock,
         tag_issue_needs_human_mock,
@@ -209,7 +209,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         del ensure_phase_labels_mock
         del execute_tiferet_specification_phase_mock
         del log_error_mock
-        read_microagent_for_label_mock.return_value = "prompt"
+        read_microagent_persona_for_label_mock.return_value = "prompt"
         fetch_issue_data_mock.return_value = {
             "title": "Issue",
             "labels": [{"name": "phase:tiferet"}],
@@ -224,17 +224,17 @@ class RouterPhaseExecutionTests(unittest.TestCase):
 
     @patch("trigger_workflow.context.log_error")
     @patch("trigger_workflow.context.fetch_issue_data")
-    @patch("trigger_workflow.context.read_microagent_for_label")
+    @patch("trigger_workflow.context.read_microagent_persona_for_label")
     @patch("trigger_workflow.context.ensure_phase_labels")
     def test_trigger_agent_errors_when_issue_lacks_requested_label(
         self,
         ensure_phase_labels_mock,
-        read_microagent_for_label_mock,
+        read_microagent_persona_for_label_mock,
         fetch_issue_data_mock,
         log_error_mock,
     ) -> None:
         del ensure_phase_labels_mock
-        read_microagent_for_label_mock.return_value = "prompt"
+        read_microagent_persona_for_label_mock.return_value = "prompt"
         fetch_issue_data_mock.return_value = {
             "title": "Issue",
             "labels": [{"name": "phase:binah"}],
@@ -253,19 +253,19 @@ class RouterPhaseExecutionTests(unittest.TestCase):
     @patch("trigger_workflow.orchestration.manifest_specification_decomposition")
     @patch("trigger_workflow.orchestration.execute_comment_phase_handoff")
     @patch("trigger_workflow.context.fetch_issue_data")
-    @patch("trigger_workflow.context.read_microagent_for_label")
+    @patch("trigger_workflow.context.read_microagent_persona_for_label")
     @patch("trigger_workflow.context.ensure_phase_labels")
     def test_manual_mode_routes_to_preview_only_without_execution_or_label_sync(
         self,
         ensure_phase_labels_mock,
-        read_microagent_for_label_mock,
+        read_microagent_persona_for_label_mock,
         fetch_issue_data_mock,
         execute_comment_phase_handoff_mock,
         execute_tiferet_specification_phase_mock,
         execute_implementation_phase_task_mock,
         preview_phase_execution_plan_mock,
     ) -> None:
-        read_microagent_for_label_mock.return_value = "prompt"
+        read_microagent_persona_for_label_mock.return_value = "prompt"
         fetch_issue_data_mock.return_value = {
             "title": "Issue",
             "labels": [{"name": "phase:chesed"}],
@@ -282,16 +282,16 @@ class RouterPhaseExecutionTests(unittest.TestCase):
 
     @patch("trigger_workflow.orchestration.preview_phase_execution_plan")
     @patch("trigger_workflow.context.fetch_issue_data")
-    @patch("trigger_workflow.context.read_microagent_for_label")
+    @patch("trigger_workflow.context.read_microagent_persona_for_label")
     @patch("trigger_workflow.context.ensure_phase_labels")
     def test_manual_mode_forces_requested_label_even_if_issue_labels_do_not_match(
         self,
         ensure_phase_labels_mock,
-        read_microagent_for_label_mock,
+        read_microagent_persona_for_label_mock,
         fetch_issue_data_mock,
         preview_phase_execution_plan_mock,
     ) -> None:
-        read_microagent_for_label_mock.return_value = "prompt"
+        read_microagent_persona_for_label_mock.return_value = "prompt"
         fetch_issue_data_mock.return_value = {
             "title": "Issue",
             "labels": [{"name": "phase:hod"}],
@@ -317,7 +317,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             label="phase:netzach",
             issue=55,
             repo="owner/repo",
-            microagent_content="prompt",
+            microagent_persona_content="prompt",
             phase="5",
             issue_data={"title": "Issue", "body": "Body", "comments": []},
         )
@@ -336,7 +336,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             label="phase:hod",
             issue=32,
             repo="owner/repo",
-            microagent_content="prompt",
+            microagent_persona_content="prompt",
             phase="6",
             issue_data={"title": "Issue", "body": "Body", "comments": []},
         )
@@ -355,7 +355,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             label="phase:keter",
             issue=10,
             repo="owner/repo",
-            microagent_content="prompt",
+            microagent_persona_content="prompt",
             phase="1",
             issue_data={"title": "Issue", "body": "Body", "comments": []},
         )
@@ -366,13 +366,13 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         self.assertIn("Generate the gh command to post the comment", rendered)
 
     @patch("trigger_workflow.context.fetch_issue_data")
-    @patch("trigger_workflow.context.read_microagent_for_label")
+    @patch("trigger_workflow.context.read_microagent_persona_for_label")
     def test_resolve_phase_execution_request_can_include_or_exclude_base_persona(
         self,
-        read_microagent_for_label_mock,
+        read_microagent_persona_for_label_mock,
         fetch_issue_data_mock,
     ) -> None:
-        read_microagent_for_label_mock.return_value = "prompt"
+        read_microagent_persona_for_label_mock.return_value = "prompt"
         fetch_issue_data_mock.return_value = {
             "title": "Issue",
             "labels": [{"name": "phase:yesod-orchestration"}],
@@ -387,13 +387,13 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             include_base_persona=False,
         )
 
-        read_microagent_for_label_mock.assert_called_once_with(
+        read_microagent_persona_for_label_mock.assert_called_once_with(
             "phase:yesod-orchestration",
             "7",
             include_base_persona=False,
         )
 
-        read_microagent_for_label_mock.reset_mock()
+        read_microagent_persona_for_label_mock.reset_mock()
         resolve_phase_signal(
             label="phase:yesod-orchestration",
             issue=32,
@@ -401,7 +401,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             manual=True,
             include_base_persona=True,
         )
-        read_microagent_for_label_mock.assert_called_once_with(
+        read_microagent_persona_for_label_mock.assert_called_once_with(
             "phase:yesod-orchestration",
             "7",
             include_base_persona=True,

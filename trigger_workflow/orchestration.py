@@ -40,7 +40,7 @@ def route_labeled_signal_with_mode(
     This function acts as the central dispatcher, resolving the runtime context 
     into a SfiratPhaseSignal and then delegating to the appropriate execution strategy.
     """
-    # Formulate the intent signal by resolving repository, issue, and microagent context.
+    # Formulate the intent signal by resolving repository, issue, and microagent_persona context.
     # This represents the "Intent Formation" (Keter) of the orchestration itself.
     signal = resolve_phase_signal(
         label=label,

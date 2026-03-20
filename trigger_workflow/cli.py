@@ -6,7 +6,7 @@ import sys
 from contextlib import redirect_stdout
 from typing import Optional
 
-from .config import LABEL_PHASE_MAP, MICROAGENTS_DIR, WORKSPACE
+from .config import LABEL_PHASE_MAP, MICROAGENT_PERSONAS_DIR, WORKSPACE
 from .context import resolve_phase_signal
 from .execution import build_phase_execution_prompt, select_phase_prompt_builder
 from .logging_utils import log_info, log_section
@@ -110,7 +110,7 @@ def run_trigger_cli() -> None:
 
     log_section("SWARM PHASE ROUTER")
     log_info(f"Working directory: {WORKSPACE}")
-    log_info(f"Microagents directory: {MICROAGENTS_DIR}")
+    log_info(f"MicroagentPersonas directory: {MICROAGENT_PERSONAS_DIR}")
 
     # Dispatch to the orchestration layer.
     route_labeled_signal_with_mode(resolved_label, args.issue, args.repo, manual=args.manual)

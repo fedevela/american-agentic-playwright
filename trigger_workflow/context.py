@@ -19,7 +19,7 @@ from .github_ops import (
 from .logging_utils import log_error, log_info, log_section, log_step
 from .prompts import (
     determine_phase_from_label,
-    read_microagent_for_label,
+    read_microagent_persona_for_label,
 )
 
 
@@ -30,13 +30,13 @@ class SfiratPhaseSignal:
     
     This 'Signal' is the primary object moving through the orchestrator.
     It encapsulates the metadata (repo, issue, label) and the prompt content 
-    (microagent + personas) required for the Malakh (agent) to act.
+    (microagent_persona + personas) required for the Malakh (agent) to act.
     """
 
     label: str
     issue: int
     repo: str
-    microagent_content: str
+    microagent_persona_content: str
     phase: str
     issue_data: dict[str, Any]
 
@@ -204,9 +204,9 @@ def resolve_phase_signal(
         log_info("Next: Final phase (no further handoff)")
 
     # Step 4: Compose the prompt for the Malakh.
-    log_step("Step 4: Reading microagent prompt")
-    microagent_content = read_microagent_for_label(label, phase, include_base_persona=include_base_persona)
-    log_info(f"Microagent prompt loaded ({len(microagent_content)} bytes)")
+    log_step("Step 4: Reading microagent_persona prompt")
+    microagent_persona_content = read_microagent_persona_for_label(label, phase, include_base_persona=include_base_persona)
+    log_info(f"MicroagentPersona prompt loaded ({len(microagent_persona_content)} bytes)")
 
     label_names = [l.get("name", "") for l in issue_data.get("labels", []) if l.get("name")]
     log_info(f"Current labels: {', '.join(label_names) if label_names else '(none)'}")
@@ -216,7 +216,7 @@ def resolve_phase_signal(
         label=label,
         issue=issue,
         repo=repo,
-        microagent_content=microagent_content,
+        microagent_persona_content=microagent_persona_content,
         phase=phase,
         issue_data=issue_data,
     )

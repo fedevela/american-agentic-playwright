@@ -5,7 +5,7 @@ This document captures the practical architecture and execution rules for workin
 ## Entry Point
 
 - `trigger.py` should be called from the target repository root.
-- It is a thin CLI shim that calls `trigger_workflow.router.run_trigger_cli()`.
+- It is a thin CLI shim that calls `trigger_workflow.cli.run_trigger_cli()`.
 
 ## Runtime Flow
 
@@ -19,7 +19,7 @@ This document captures the practical architecture and execution rules for workin
 Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 1. Ensures canonical labels exist (unless `--manual`)
 2. Resolves issue + phase label (or auto-selects oldest phased issue)
-3. Builds the persona + microagent prompt stack
+3. Builds the persona + microagent_persona prompt stack
 4. Fetches issue payload from GitHub
 5. Verifies phase-label preconditions (relaxed in manual mode)
 6. Dispatches by phase family
@@ -73,9 +73,6 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 - `trigger_workflow/preview.py`
   - Manual mode behavior and prompt-only previews
 
-- `trigger_workflow/router.py`
-  - Compatibility layer exporting key orchestration symbols
-  - Deprecated as a primary logic container
 
 - `trigger_workflow/config.py`
   - Canonical phase/label maps
@@ -83,13 +80,18 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 
 - `trigger_workflow/prompts.py`
   - Prompt construction and context shaping
-  - Persona + functional microagent composition
+  - Persona + functional microagent_persona composition
   - Phase comment wrapper formatting
 
+- `trigger_workflow/domain.py`
+  - Core types including `WorkflowPhase`, `IssueContext`
+
+- `trigger_workflow/gh_client.py`
+  - Low-level GitHub CLI execution
+
 - `trigger_workflow/github_ops.py`
-  - GitHub CLI wrappers (`gh issue/label/api`)
-  - Label handoff operations
-  - Child issue creation/linking/dependency wiring
+  - High-level issue orchestration (labels, dependencies)
+
 
 - `trigger_workflow/validation.py`
   - Tiferet JSON payload schema checks
@@ -99,10 +101,15 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
   - Gemini CLI subprocess execution.
   - Optimized for fast, single-turn or fixed-retry cycles.
 
-- `trigger_workflow/runner_utils.py`
-  - Current directory branch verification and resolution
+- `trigger_workflow/git_client.py`
+  - Version control operations and branch contexts
+
+- `trigger_workflow/validation_runner.py`
   - Validation retry loop for implementation phases
+
+- `trigger_workflow/delivery.py`
   - Delivery finalization (commit/push/PR summary)
+
 
 - `trigger_workflow/logging_utils.py`
   - Structured console logging helpers
@@ -130,7 +137,7 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 
 ## Tests Coverage
 
-- Router behavior: `tests/trigger_workflow/test_router.py`
+- Orchestration behavior: `tests/trigger_workflow/test_orchestration.py`
 - GitHub operations: `tests/trigger_workflow/test_github_ops.py`
 - Prompt contracts: `tests/trigger_workflow/test_prompts.py`
 - Tiferet validation rules: `tests/trigger_workflow/test_validation.py`

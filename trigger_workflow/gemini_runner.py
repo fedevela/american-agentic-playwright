@@ -10,17 +10,16 @@ from .config import (
     IMPLEMENTATION_PHASES,
 )
 from .logging_utils import log_error, log_info, log_multiline
-from .runner_utils import (
+from .validation_runner import (
     MAX_VALIDATION_ATTEMPTS,
     MAX_VALIDATION_RETRIES,
     VALIDATION_COMMAND_CONTRACT,
     build_single_retry_fix_task,
-    finalize_phase_delivery as utils_finalize_phase_delivery,
-    prepare_branch_context,
-    prepare_phase_execution_context,
     run_phase_tests,
     summarize_test_output,
 )
+from .delivery import finalize_phase_delivery as utils_finalize_phase_delivery
+from .git_client import prepare_branch_context, prepare_phase_execution_context
 
 VALIDATION_PHASES = set(IMPLEMENTATION_PHASES)
 
