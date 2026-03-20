@@ -111,11 +111,11 @@ python /path/to/swarm/trigger.py --label phase:keter --issue 53 --manual
 
 ## Architecture
 
-### Router (`router.py`)
-- Resolves GitHub issue context and determines the active phase.
+### Orchestrator (`orchestration.py`, `context.py`)
+- Resolves GitHub issue context and determines the active phase into a `SfiratPhaseSignal`.
 - Auto-detects repository name from local git remote.
 - Composes the system prompt from base personas and phase-specific microagents.
-- Dispatches execution to the Gemini runner in the current directory.
+- Dispatches execution (`route_labeled_signal`) to the Gemini runner in the current directory.
 - Manages the state machine transitions by advancing labels on success.
 
 ### Runner

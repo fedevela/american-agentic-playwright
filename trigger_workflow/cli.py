@@ -7,30 +7,43 @@ from contextlib import redirect_stdout
 from typing import Optional
 
 from .config import LABEL_PHASE_MAP, MICROAGENTS_DIR, WORKSPACE
-from .context import resolve_phase_execution_request
+from .context import resolve_phase_signal
 from .execution import build_phase_execution_prompt, select_phase_prompt_builder
 from .logging_utils import log_info, log_section
 from .preview import render_prompt_only_output
-from .orchestration import run_labeled_issue_phase_with_mode
+from .orchestration import route_labeled_signal_with_mode
 
 
 def label_for_phase_id(phase: str) -> str:
-    """Resolve canonical label for a canonical phase id."""
+    """
+    Resolves the canonical GitHub label for a given phase ID (e.g., '1', '2A', '10').
+    
+    This handles case-insensitive normalization for sub-phases (like 2A/2B/2C) 
+    to ensure consistent mapping.
+    """
     raw_phase = phase.strip()
+    # Normalize sub-phase casing (2a -> 2A) to match config keys.
     normalized_phase = {
         "2a": "2A",
         "2b": "2B",
         "2c": "2C",
     }.get(raw_phase.lower(), raw_phase.upper() if raw_phase.lower() in {"2a", "2b", "2c"} else raw_phase)
+    
     for label_name, phase_id in LABEL_PHASE_MAP.items():
         if phase_id == normalized_phase:
             return label_name
+            
     expected = ", ".join(sorted(set(LABEL_PHASE_MAP.values())))
     raise SystemExit(f"Unknown phase '{phase}'. Expected one of: {expected}.")
 
 
 def run_trigger_cli() -> None:
-    """Main entry point."""
+    """
+    Main CLI entry point for the swarm orchestrator.
+    
+    Parses arguments, resolves the target issue/label context, and routes
+     the resulting signal to the appropriate SPARC phase workflow.
+    """
     log_info("Starting swarm phase router CLI")
     parser = argparse.ArgumentParser(description="Trigger Swarm Phase / GitHub workflow")
     parser.add_argument("--label", help="GitHub label triggering the phase")
@@ -53,9 +66,12 @@ def run_trigger_cli() -> None:
         f"CLI arguments: label={args.label}, phase={args.phase}, issue={args.issue}, "
         f"repo={args.repo}, manual={args.manual}, prompt-only={args.prompt_only}"
     )
+    
+    # Allow users to specify either the label or the phase ID.
     resolved_label = args.label
     if args.phase:
         phase_label = label_for_phase_id(args.phase)
+        # Prevent conflicting inputs if both are provided.
         if resolved_label and resolved_label != phase_label:
             raise SystemExit(
                 f"Conflicting inputs: --label '{resolved_label}' does not match --phase '{args.phase}' "
@@ -64,26 +80,31 @@ def run_trigger_cli() -> None:
         log_info(f"Mapped phase argument '{args.phase}' to label '{phase_label}'")
         resolved_label = phase_label
 
+    # Prompt-only mode is used for debugging or manual execution of the agent 
+    # outside of the orchestrated CLI.
     if args.prompt_only:
         log_info("Prompt-only mode: generating and outputting the phase prompt without running agent or mutating GitHub.")
         captured_logs = io.StringIO()
         try:
+            # Capture logs to stderr so stdout only contains the prompt content.
             with redirect_stdout(captured_logs):
                 log_info("Resolving phase execution request for prompt generation...")
-                request = resolve_phase_execution_request(
+                signal = resolve_phase_signal(
                     label=resolved_label,
                     issue=args.issue,
                     repo=args.repo,
                     manual=True,
                     include_base_persona=True,
                 )
-                prompt, _ = build_phase_execution_prompt(request, select_phase_prompt_builder(request.phase))
+                prompt, _ = build_phase_execution_prompt(signal, select_phase_prompt_builder(signal.phase))
         except SystemExit:
+            # Preserve log visibility on failure.
             print(captured_logs.getvalue(), file=sys.stderr)
             raise
 
+        # Output prompt to stdout for piping or redirection.
         print(captured_logs.getvalue(), file=sys.stderr)
-        print(render_prompt_only_output(request, prompt))
+        print(render_prompt_only_output(signal, prompt))
         log_info("Prompt-only output generated")
         return
 
@@ -91,5 +112,6 @@ def run_trigger_cli() -> None:
     log_info(f"Working directory: {WORKSPACE}")
     log_info(f"Microagents directory: {MICROAGENTS_DIR}")
 
-    run_labeled_issue_phase_with_mode(resolved_label, args.issue, args.repo, manual=args.manual)
+    # Dispatch to the orchestration layer.
+    route_labeled_signal_with_mode(resolved_label, args.issue, args.repo, manual=args.manual)
     log_section("PHASE EXECUTION COMPLETE")

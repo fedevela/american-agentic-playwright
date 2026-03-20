@@ -1,29 +1,40 @@
 from __future__ import annotations
 
 from .orchestration import (
-    run_labeled_issue_phase,
-    run_labeled_issue_phase_with_mode,
+    route_labeled_signal,
+    route_labeled_signal_with_mode,
 )
+
+# For backward compatibility
+run_labeled_issue_phase = route_labeled_signal
+run_labeled_issue_phase_with_mode = route_labeled_signal_with_mode
 
 # For backward compatibility in tests and other modules
 from .context import (
-    PhaseExecutionRequest,
-    resolve_phase_execution_request,
+    SfiratPhaseSignal,
+    resolve_phase_signal,
     conversation_scope_for_phase,
 )
+PhaseExecutionRequest = SfiratPhaseSignal
+resolve_phase_execution_request = resolve_phase_signal
+
 from .cli import label_for_phase_id
 from .preview import render_prompt_only_output
 from .execution import (
     execute_comment_phase_handoff,
-    execute_implementation_phase_task,
+    embody_implementation_contract,
     execute_phase_with_needs_human_tagging,
-    execute_tiferet_specification_phase,
+    manifest_specification_decomposition,
     run_comment_phase,
     run_json_phase,
     run_implementation_phase,
-    finalize_delivery,
+    formalize_delivery_handoff,
     build_phase_execution_prompt,
 )
+execute_implementation_phase_task = embody_implementation_contract
+execute_tiferet_specification_phase = manifest_specification_decomposition
+finalize_delivery = formalize_delivery_handoff
+
 from .github_ops import (
     advance_issue_label,
     post_issue_comment,

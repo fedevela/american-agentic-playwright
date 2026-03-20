@@ -7,7 +7,7 @@ from .config import (
     PRE_IMPLEMENTATION_PHASES,
     SPECIFICATION_PHASE,
 )
-from .context import PhaseExecutionRequest, conversation_scope_for_phase, describe_phase_conversation_policy
+from .context import SfiratPhaseSignal, conversation_scope_for_phase, describe_phase_conversation_policy
 from .github_ops import (
     advance_issue_label,
     create_child_issues,
@@ -34,32 +34,46 @@ from .validation import validate_tiferet_specification_payload_structure
 
 
 def run_comment_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> str:
+    """Invokes the Malakh for a discussion-only phase (Keter through Chesed)."""
     return run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
 
 
 def run_json_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Invokes the Malakh for a structured-output phase (Tiferet/Specification)."""
     return run_gemini_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
 
 
 def run_implementation_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> None:
+    """Invokes the Malakh for code-modifying phases (Netzach through Yesod)."""
     run_gemini_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
 
 
-def finalize_delivery(repo: str, issue: int, phase: str, issue_title: str, issue_data: dict[str, Any] | None = None) -> str:
+def formalize_delivery_handoff(repo: str, issue: int, phase: str, issue_title: str, issue_data: dict[str, Any] | None = None) -> str:
+    """
+    Commit and push changes, formalizing the handoff to the next phase.
+    
+    This marks the transition from 'work-in-progress' to a 'verifiable artifact'
+    ready for the next Sfirat.
+    """
     return gemini_finalize_delivery(repo=repo, issue=issue, phase=phase, issue_title=issue_title, issue_data=issue_data)
 
 
-def post_phase_machine_comment(request: PhaseExecutionRequest, body: str) -> None:
-    """Post a wrapped phase comment back to the parent issue."""
+def post_phase_signal_comment(signal: SfiratPhaseSignal, body: str) -> None:
+    """
+    Posts a wrapped phase comment back to the parent issue.
+    
+    These comments serve as the 'traceability anchor' for the entire workflow, 
+    allowing humans to follow the generative logic of the system.
+    """
     post_issue_comment(
-        request.repo,
-        request.issue,
-        format_phase_comment(request.phase, request.label, body),
+        signal.repo,
+        signal.issue,
+        format_phase_comment(signal.phase, signal.label, body),
     )
 
 
 def log_prompt_size_and_conversation_policy(prompt: str, phase: str) -> str:
-    """Log the prompt size and session behavior, then return the resolved session scope."""
+    """Utility to log prompt metadata and session policy before agent invocation."""
     log_info(f"Prompt built ({len(prompt)} chars)")
     session_scope = conversation_scope_for_phase(phase)
     log_info(f"Session policy: {describe_phase_conversation_policy(phase, session_scope)}")
@@ -71,30 +85,30 @@ def build_phase_prompt_and_conversation_scope(
     builder: Callable[..., str],
     *args: Any,
 ) -> tuple[str, str]:
-    """Build a phase prompt and return it with the resolved session-scope policy."""
+    """Orchestrates prompt building and session policy resolution."""
     prompt = builder(*args)
     return prompt, log_prompt_size_and_conversation_policy(prompt, phase)
 
 
 def build_phase_execution_prompt(
-    request: PhaseExecutionRequest,
+    signal: SfiratPhaseSignal,
     prompt_builder: Callable[..., str],
 ) -> tuple[str, str]:
-    """Build a phase prompt using the common execution request payload."""
+    """Builds the final system prompt for the Malakh using the active signal."""
     return build_phase_prompt_and_conversation_scope(
-        request.phase,
+        signal.phase,
         prompt_builder,
-        request.label,
-        request.issue,
-        request.repo,
-        request.microagent_content,
-        request.phase,
-        request.issue_data,
+        signal.label,
+        signal.issue,
+        signal.repo,
+        signal.microagent_content,
+        signal.phase,
+        signal.issue_data,
     )
 
 
 def select_phase_prompt_builder(phase: str) -> Callable[..., str]:
-    """Resolve which prompt builder is used for the given phase family."""
+    """Resolves the appropriate prompt construction strategy for the phase family."""
     if phase in DISCUSSION_PHASES:
         return build_comment_phase_prompt
     if phase == SPECIFICATION_PHASE:
@@ -103,60 +117,77 @@ def select_phase_prompt_builder(phase: str) -> Callable[..., str]:
 
 
 def execute_phase_with_needs_human_tagging(
-    request: PhaseExecutionRequest,
-    executor: Callable[[PhaseExecutionRequest], None],
+    signal: SfiratPhaseSignal,
+    executor: Callable[[SfiratPhaseSignal], None],
 ) -> None:
-    """Execute a phase and mark pre-Netzach failures for explicit human intervention."""
+    """
+    Executes a phase and ensures pre-implementation failures are flagged for humans.
+    
+    Before the workflow reaches the code-validation loop (Netzach), any failure 
+    indicates a breakdown in discussion or specification that requires 
+    explicit human intervention.
+    """
     try:
-        executor(request)
+        executor(signal)
     except SystemExit:
-        if request.phase in PRE_IMPLEMENTATION_PHASES:
+        if signal.phase in PRE_IMPLEMENTATION_PHASES:
             log_error(
-                f"Phase {request.phase.upper()} failed before Netzach; tagging issue for human intervention."
+                f"Phase {signal.phase.upper()} failed before Netzach; tagging issue for human intervention."
             )
-            tag_issue_needs_human(request.repo, request.issue)
+            tag_issue_needs_human(signal.repo, signal.issue)
         raise
 
 
-def execute_comment_phase_handoff(request: PhaseExecutionRequest) -> None:
-    """Execute comment-only phases by generating and posting a phase comment."""
+def execute_comment_phase_handoff(signal: SfiratPhaseSignal) -> None:
+    """
+    Orchestrates the comment-only loop for phases 1-3.
+    
+    Generates a philosophical or generative comment and advances the 
+    issue label, signaling readiness for the next Sfirat.
+    """
     log_info("Building discussion prompt...")
-    prompt, session_scope = build_phase_execution_prompt(request, build_comment_phase_prompt)
+    prompt, session_scope = build_phase_execution_prompt(signal, build_comment_phase_prompt)
 
-    log_info(f"Running agent for phase {request.phase.upper()}...")
+    log_info(f"Running agent for phase {signal.phase.upper()}...")
     comment = run_comment_phase(
         prompt,
-        repo=request.repo,
-        issue=request.issue,
-        phase=request.phase,
+        repo=signal.repo,
+        issue=signal.issue,
+        phase=signal.phase,
         session_scope=session_scope,
-        issue_data=request.issue_data,
+        issue_data=signal.issue_data,
     )
     log_info(f"Comment generated ({len(comment)} chars)")
     log_multiline("Generated comment", comment)
 
     log_info("Posting comment to GitHub...")
-    post_phase_machine_comment(request, comment)
+    post_phase_signal_comment(signal, comment)
     log_info("Comment posted")
 
     log_info("Advancing to next phase label...")
-    advance_issue_label(request.repo, request.issue, request.label)
+    advance_issue_label(signal.repo, signal.issue, signal.label)
     log_info("Label advanced")
 
 
-def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
-    """Execute phase 4/Tiferet by generating parent/child issues and clearing the parent phase label."""
+def manifest_specification_decomposition(signal: SfiratPhaseSignal) -> None:
+    """
+    Manifests Phase 4 (Tiferet) by decomposing high-level intent into child issues.
+    
+    This is the 'Specification' phase of SPARC. It creates a hierarchy of 
+    discrete tasks, each with its own Gherkin-style requirements, and 
+    prepares the repository with implementation branches.
+    """
     log_info("Building specification prompt...")
-    prompt, session_scope = build_phase_execution_prompt(request, build_tiferet_specification_prompt)
+    prompt, session_scope = build_phase_execution_prompt(signal, build_tiferet_specification_prompt)
 
     log_info("Running agent for JSON payload...")
     payload = run_json_phase(
         prompt,
-        repo=request.repo,
-        issue=request.issue,
-        phase=request.phase,
+        repo=signal.repo,
+        issue=signal.issue,
+        phase=signal.phase,
         session_scope=session_scope,
-        issue_data=request.issue_data,
+        issue_data=signal.issue_data,
     )
     log_info("JSON payload received")
 
@@ -166,55 +197,75 @@ def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
     log_multiline("Generated parent comment", payload["comment"].strip())
 
     log_info("Posting parent comment...")
-    post_phase_machine_comment(request, payload["comment"].strip())
+    post_phase_signal_comment(signal, payload["comment"].strip())
     log_info("Parent comment posted")
 
+    # Decompose the parent intent into child issues.
     log_info(f"Creating {len(payload['sub_issues'])} ordered child issues with parent and dependency links...")
-    created = create_child_issues(request.repo, request.issue, payload["sub_issues"])
+    created = create_child_issues(signal.repo, signal.issue, payload["sub_issues"])
     log_info(f"Created and linked {len(created)} child issues")
+    
+    # Pre-emptively create branches for each child task to ensure downstream traceability.
     child_issue_numbers = [int(item["number"]) for item in created]
     log_info("Creating child issue branches for downstream implementation phases...")
-    create_issue_branches_for_child_issues(request.repo, request.issue, child_issue_numbers)
+    create_issue_branches_for_child_issues(signal.repo, signal.issue, child_issue_numbers)
     log_info(f"Created/verified {len(child_issue_numbers)} child issue branches")
 
     log_info("Posting summary comment...")
     summary_comment = build_phase_four_summary(created)
     log_multiline("Generated summary comment", summary_comment)
-    post_phase_machine_comment(request, summary_comment)
+    post_phase_signal_comment(signal, summary_comment)
     log_info("Summary comment posted")
 
+    # Clear the parent label to signal that decomposition is complete.
     log_info("Completing Tiferet handoff: removing phase:tiferet label from parent issue...")
-    remove_issue_label(request.repo, request.issue, request.label)
+    remove_issue_label(signal.repo, signal.issue, signal.label)
     log_info("Parent issue label removed (handoff complete)")
 
 
-def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
-    """Execute phases 5-9 headlessly in the configured runner."""
+def embody_implementation_contract(signal: SfiratPhaseSignal) -> None:
+    """
+    Embodies implementation phases (5-9) by translating intent into code.
+    
+    This follows the SPARC sequence: 
+    -netzch (Traceability) 
+    -hod (Pseudocode) 
+    -yesod (Architecture/Refinement) 
+    -malkhut (Completion/Validation).
+    
+    Each run includes an automated validation loop (build/test/lint).
+    """
     log_info("Building agent prompt...")
-    prompt, session_scope = build_phase_execution_prompt(request, build_implementation_phase_prompt)
+    prompt, session_scope = build_phase_execution_prompt(signal, build_implementation_phase_prompt)
 
     log_info("Running agent...")
     run_implementation_phase(
         prompt,
-        repo=request.repo,
-        issue=request.issue,
-        phase=request.phase,
+        repo=signal.repo,
+        issue=signal.issue,
+        phase=signal.phase,
         session_scope=session_scope,
-        issue_data=request.issue_data,
+        issue_data=signal.issue_data,
     )
     log_info("Agent execution complete")
-    log_info("Finalizing git delivery (commit + push)...")
-    delivery_summary = finalize_delivery(
-        repo=request.repo,
-        issue=request.issue,
-        phase=request.phase,
-        issue_title=str(request.issue_data.get("title") or ""),
-        issue_data=request.issue_data,
+    
+    # Delivery handoff formalizes the changes through a commit and push.
+    log_info("Formalizing git delivery (commit + push)...")
+    delivery_summary = formalize_delivery_handoff(
+        repo=signal.repo,
+        issue=signal.issue,
+        phase=signal.phase,
+        issue_title=str(signal.issue_data.get("title") or ""),
+        issue_data=signal.issue_data,
     )
     log_multiline("Delivery summary", delivery_summary)
+    
+    # Posting the summary back to the issue preserves the traceability of the embodiment.
     log_info("Posting delivery summary comment...")
-    post_phase_machine_comment(request, delivery_summary)
+    post_phase_signal_comment(signal, delivery_summary)
     log_info("Delivery summary comment posted")
+    
+    # Move the signal to the next phase in the sequence.
     log_info("Advancing to next phase label...")
-    advance_issue_label(request.repo, request.issue, request.label)
+    advance_issue_label(signal.repo, signal.issue, signal.label)
     log_info("Label advanced")

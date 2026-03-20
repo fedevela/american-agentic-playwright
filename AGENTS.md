@@ -56,15 +56,18 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
   - Maps phase IDs to canonical labels
 
 - `trigger_workflow/orchestration.py`
-  - Top-level workflow routing and phase dispatch
+  - Top-level workflow routing and phase dispatch (`route_labeled_signal`)
   - Coordinates between context resolution and execution logic
 
 - `trigger_workflow/context.py`
-  - Runtime context resolution (issue, label, repo)
+  - Runtime context resolution (issue, label, repo) via `SfiratPhaseSignal`
   - Manages session scope policies
 
 - `trigger_workflow/execution.py`
-  - Phase-specific execution logic (comment, JSON, implementation)
+  - Phase-specific execution logic:
+    - `execute_comment_phase_handoff`
+    - `manifest_specification_decomposition` (Tiferet)
+    - `embody_implementation_contract` (Implementation)
   - Manages phase-comment wrappers and handoffs
 
 - `trigger_workflow/preview.py`

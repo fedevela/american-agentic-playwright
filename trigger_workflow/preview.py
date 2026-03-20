@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .config import DISCUSSION_PHASES, SPECIFICATION_PHASE
-from .context import PhaseExecutionRequest, describe_phase_conversation_policy
+from .context import SfiratPhaseSignal, describe_phase_conversation_policy
 from .execution import (
     build_phase_execution_prompt,
     select_phase_prompt_builder,
@@ -14,11 +14,18 @@ from .prompts import (
 )
 
 
-def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
-    """Render manual-mode instructions without running agent or mutating GitHub."""
-    phase = request.phase
+def preview_phase_execution_plan(signal: SfiratPhaseSignal) -> None:
+    """
+    Renders manual-mode instructions for a phase without mutating GitHub.
+    
+    This provides a 'dry-run' preview of what the orchestrator would do if 
+    executed in production mode, including the prompt and planned actions.
+    """
+    phase = signal.phase
+    
+    # 1. Preview for Discussion Phases (1-3)
     if phase in DISCUSSION_PHASES:
-        prompt, session_scope = build_phase_execution_prompt(request, build_comment_phase_prompt)
+        prompt, session_scope = build_phase_execution_prompt(signal, build_comment_phase_prompt)
         log_multiline("Manual mode prompt for gemini (discussion)", prompt)
         log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
         log_multiline(
@@ -33,8 +40,9 @@ def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
         )
         return
 
+    # 2. Preview for Specification (Phase 4 / Tiferet)
     if phase == SPECIFICATION_PHASE:
-        prompt, session_scope = build_phase_execution_prompt(request, build_tiferet_specification_prompt)
+        prompt, session_scope = build_phase_execution_prompt(signal, build_tiferet_specification_prompt)
         log_multiline("Manual mode prompt for gemini (specification JSON)", prompt)
         log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
         log_multiline(
@@ -52,7 +60,8 @@ def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
         )
         return
 
-    prompt, session_scope = build_phase_execution_prompt(request, build_implementation_phase_prompt)
+    # 3. Preview for Implementation (Phases 5-9)
+    prompt, session_scope = build_phase_execution_prompt(signal, build_implementation_phase_prompt)
     log_multiline("Manual mode prompt for gemini (implementation)", prompt)
     log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
     log_multiline(
@@ -69,15 +78,22 @@ def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
     )
 
 
-def render_prompt_only_output(request: PhaseExecutionRequest, prompt: str) -> str:
-    """Return prompt-only output including next-action instructions by phase family."""
-    if request.phase in DISCUSSION_PHASES:
+def render_prompt_only_output(signal: SfiratPhaseSignal, prompt: str) -> str:
+    """
+    Returns the phase prompt and a list of instructions for manual execution.
+    
+    This is used when --prompt-only is passed. It enables users to manually 
+    execute the agent and perform the subsequent orchestration steps themselves.
+    """
+    if signal.phase in DISCUSSION_PHASES:
+        # Instruction set for comment-only phases.
         actions = [
             "1. Prepare a commit message with the above prompt.",
             "5. Generate the gh command to post the comment to the issue in md format.",
             "3. Generate the issue label to the next phase.",
         ]
-    elif request.phase == SPECIFICATION_PHASE:
+    elif signal.phase == SPECIFICATION_PHASE:
+        # Instruction set for specification/decomposition (Tiferet).
         actions = [
             "1. Prepare a commit message with the above prompt.",
             "2. Validate JSON payload structure and requirement traceability.",
@@ -88,10 +104,11 @@ def render_prompt_only_output(request: PhaseExecutionRequest, prompt: str) -> st
         ]
 
     else:
+        # Instruction set for implementation/embodiment phases.
         actions = [
             "1. Prepare a commit message with the above prompt.",
             "2. Generate a commit message and keep the trigger format: "
-            f"`phase:{request.phase} issue #{request.issue}: <short summary>`.",
+            f"`phase:{signal.phase} issue #{signal.issue}: <short summary>`.",
             "3. Generate a phase delivery comment body summarizing changes and validation.",
             "4. Commit and push the branch updates.",
             "5. Generate the gh command to post the comment to the issue in md format.",

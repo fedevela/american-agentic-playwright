@@ -282,6 +282,7 @@ def build_comment_phase_prompt(
 
 {build_phase_prompt_input_context(label, issue, repo, phase, issue_data)}
 
+## Practical Requirements
 Return only the GitHub comment body for this phase.
 
 Requirements:
@@ -302,6 +303,7 @@ def build_tiferet_specification_prompt(
 
 {build_phase_prompt_input_context(label, issue, repo, phase, issue_data)}
 
+## Practical Requirements
 Return valid JSON only. No markdown fences. No explanation outside JSON.
 
 Use this exact schema:
@@ -352,12 +354,33 @@ def build_implementation_phase_prompt(
         "- If terminal reports the previous command is still running and blocks new commands, immediately recover by interacting with the active process (`is_input=true`): first poll with empty input, then interrupt with `C-c` if needed, then continue with a narrower command.",
         "- Do not loop on blocked terminal state; recover deterministically and proceed with code edits.",
     ]
+    
+    discovery_procedure = [
+        "1. Discovery: Read canonical requirement IDs and restate each as a phase-appropriate obligation (Traceability, Pseudocode, Architecture, or Implementation).",
+        "2. Mapping: Map each obligation to an owning locus (file, module, or component).",
+        "3. Planning: For each mapped locus, define the smallest artifact delta that preserves requirement traceability.",
+        "4. Execution: Apply the smallest coherent artifact set that covers all mapped obligations.",
+        "5. Verification: Before finishing, verify there is a non-empty diff and that changed files remain requirement-traceable.",
+    ]
+
     phase_requirements: list[str] = []
-    if phase == "7":
+    if phase == "5":
+        phase_requirements = [
+            "- This is Phase 5 (Netzach Traceability). Encode contracts into durable verification names (E2E tests).",
+            "- Encode specification requirements into durable, self-describing verification names and traceable structure.",
+            "- Use explicit no-op pass bodies (e.g. `assert True` or equivalent) while preserving traceability-oriented test names.",
+            "- Do not introduce real behavioral assertions in this phase; those belong to later implementation phases.",
+        ]
+    elif phase == "6":
+        phase_requirements = [
+            "- This is Phase 6 (Hod Pseudocode). Turn the verification contract into procedural structure and bodyless logic placeholders.",
+            "- Express logic through signatures, structure, and sequencing without prematurely implementing full behavior.",
+            "- Keep the artifacts implementation-ready for the next phase.",
+        ]
+    elif phase == "7":
         phase_requirements = [
             "- This is Phase 7 (Yesod Architecture). Deliver architecture artifacts as code changes, not analysis-only notes.",
-            "- First run a deterministic artifact-discovery pass: derive requirement pressures, map ownership loci, then select artifact classes per locus.",
-            "- Then implement the smallest coherent architecture artifact set that fully covers canonical requirement IDs:",
+            "- Implement the smallest coherent architecture artifact set that fully covers canonical requirement IDs:",
             "  1) contract/type artifacts,",
             "  2) structural placement artifacts,",
             "  3) ownership-boundary artifacts,",
@@ -371,8 +394,7 @@ def build_implementation_phase_prompt(
     elif phase == "8":
         phase_requirements = [
             "- This is Phase 8 (Yesod Refinement). Deliver implementation artifacts as code changes, not analysis-only notes.",
-            "- First run a deterministic implementation-discovery pass: derive implementation obligations from canonical requirements and map ownership loci.",
-            "- Implement the smallest coherent set of contract-faithful deltas that covers all mapped obligations.",
+            "- Implement the smallest coherent set of contract-faithful deltas that covers all mapped implementation obligations.",
             "- Keep changes requirement-traceable: changed files and deltas must map to canonical requirement IDs.",
             "- Apply an explicit completion gate before finishing: if obligations are not covered or the implementation diff is empty, continue implementing.",
             "- Preserve prior contracts and boundaries; do not expand scope beyond required implementation obligations.",
@@ -384,17 +406,37 @@ def build_implementation_phase_prompt(
             "- Keep corrections requirement-traceable and scope-bounded to observed violations.",
             "- Apply an explicit completion gate before finishing: do not terminate on narrative; finish only with evidence-backed readiness status.",
         ]
+    elif phase == "10":
+        phase_requirements = [
+            "- This is Phase 10 (Hod Refactoring). Expose the system's architecture clearly and re-encode it into the code.",
+            "- Model core domain entities as stable nouns (types/modules/objects) with clear ownership boundaries.",
+            "- Model domain actions and process transitions as explicit verbs (functions/methods/use-cases).",
+            "- Preserve behavior unless the partner explicitly asks for a behavior change.",
+            "- PROPAGATE renames across production code, tests, and AGENTS.md in the same change.",
+            "- Refactor duplicated orchestration and structure using DRY and SOLID boundaries.",
+        ]
 
     requirements_block = ""
     requirement_lines = [*terminal_discipline_requirements, *phase_requirements]
-    if requirement_lines:
-        requirements_block = f"\n\nPhase-specific requirements:\n{chr(10).join(requirement_lines)}"
+    
+    requirements_block = f"""
+## Practical Context
+You are working directly in a git repository. Your changes must be committed and traceable.
+
+## Discovery and Execution Procedure
+{chr(10).join(discovery_procedure)}
+
+## Operational Constraints and Requirements
+{chr(10).join(requirement_lines)}
+"""
 
     return f"""{strip_microagent(microagent)}
 
 {build_issue_runtime_context(label, issue, repo, phase, issue_data, include_comments=phase in COMMENT_VISIBLE_PHASES)}
 
-Execute your phase logic now.{requirements_block}
+{requirements_block}
+
+Execute your phase logic now.
 """
 
 

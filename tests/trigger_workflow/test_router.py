@@ -9,18 +9,18 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from trigger_workflow.context import PhaseExecutionRequest
+from trigger_workflow.context import SfiratPhaseSignal
 from trigger_workflow.orchestration import (
-    run_labeled_issue_phase,
-    run_labeled_issue_phase_with_mode,
+    route_labeled_signal,
+    route_labeled_signal_with_mode,
 )
 from trigger_workflow.execution import (
-    execute_implementation_phase_task,
+    embody_implementation_contract,
     execute_comment_phase_handoff,
-    execute_tiferet_specification_phase,
+    manifest_specification_decomposition,
 )
 from trigger_workflow.cli import label_for_phase_id
-from trigger_workflow.context import resolve_phase_execution_request
+from trigger_workflow.context import resolve_phase_signal
 from trigger_workflow.preview import render_prompt_only_output
 
 
@@ -46,7 +46,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         del post_issue_comment_mock
         del advance_issue_label_mock
         execute_comment_phase_handoff(
-            PhaseExecutionRequest(
+            SfiratPhaseSignal(
                 label="phase:keter",
                 issue=55,
                 repo="owner/repo",
@@ -111,8 +111,8 @@ class RouterPhaseExecutionTests(unittest.TestCase):
                 }
             ],
         }
-        execute_tiferet_specification_phase(
-            PhaseExecutionRequest(
+        manifest_specification_decomposition(
+            SfiratPhaseSignal(
                 label="phase:tiferet",
                 issue=55,
                 repo="owner/repo",
@@ -128,7 +128,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
 
     @patch("trigger_workflow.execution.advance_issue_label")
     @patch("trigger_workflow.execution.post_issue_comment")
-    @patch("trigger_workflow.execution.finalize_delivery", return_value="Delivery summary")
+    @patch("trigger_workflow.execution.formalize_delivery_handoff", return_value="Delivery summary")
     @patch("trigger_workflow.execution.run_implementation_phase")
     def test_execute_agent_phase_uses_shared_issue_session_scope(
         self,
@@ -137,8 +137,8 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         post_issue_comment_mock,
         advance_issue_label_mock,
     ) -> None:
-        execute_implementation_phase_task(
-            PhaseExecutionRequest(
+        embody_implementation_contract(
+            SfiratPhaseSignal(
                 label="phase:netzach",
                 issue=55,
                 repo="owner/repo",
@@ -159,8 +159,8 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         post_issue_comment_mock.assert_called_once()
         advance_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:netzach")
 
-    @patch("trigger_workflow.orchestration.execute_implementation_phase_task")
-    @patch("trigger_workflow.orchestration.execute_tiferet_specification_phase")
+    @patch("trigger_workflow.orchestration.embody_implementation_contract")
+    @patch("trigger_workflow.orchestration.manifest_specification_decomposition")
     @patch("trigger_workflow.orchestration.execute_comment_phase_handoff")
     @patch("trigger_workflow.context.fetch_issue_data")
     @patch("trigger_workflow.context.read_microagent_for_label")
@@ -174,6 +174,9 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         execute_specification_mock,
         execute_agent_mock,
     ) -> None:
+        # Chesed is still a discussion-only phase. This test keeps the router
+        # from accidentally routing it into the specification or implementation
+        # execution paths.
         del ensure_phase_labels_mock
         read_microagent_for_label_mock.return_value = "prompt"
         fetch_issue_data_mock.return_value = {
@@ -182,7 +185,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             "comments": [],
         }
 
-        run_labeled_issue_phase(label="phase:chesed", issue=55, repo="owner/repo")
+        route_labeled_signal(label="phase:chesed", issue=55, repo="owner/repo")
 
         execute_discussion_mock.assert_called_once()
         execute_specification_mock.assert_not_called()
@@ -190,7 +193,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
 
     @patch("trigger_workflow.execution.log_error")
     @patch("trigger_workflow.execution.tag_issue_needs_human")
-    @patch("trigger_workflow.orchestration.execute_tiferet_specification_phase", side_effect=SystemExit("phase failed"))
+    @patch("trigger_workflow.orchestration.manifest_specification_decomposition", side_effect=SystemExit("phase failed"))
     @patch("trigger_workflow.context.fetch_issue_data")
     @patch("trigger_workflow.context.read_microagent_for_label")
     @patch("trigger_workflow.context.ensure_phase_labels")
@@ -214,7 +217,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         }
 
         with self.assertRaises(SystemExit) as exc:
-            run_labeled_issue_phase(label="phase:tiferet", issue=55, repo="owner/repo")
+            route_labeled_signal(label="phase:tiferet", issue=55, repo="owner/repo")
 
         self.assertIn("phase failed", str(exc.exception))
         tag_issue_needs_human_mock.assert_called_once_with("owner/repo", 55)
@@ -239,15 +242,15 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         }
 
         with self.assertRaises(SystemExit) as exc:
-            run_labeled_issue_phase(label="phase:chesed", issue=55, repo="owner/repo")
+            route_labeled_signal(label="phase:chesed", issue=55, repo="owner/repo")
 
         self.assertEqual(exc.exception.code, 1)
         log_error_mock.assert_called_once()
         self.assertIn("is not labeled 'phase:chesed'", log_error_mock.call_args.args[0])
 
     @patch("trigger_workflow.orchestration.preview_phase_execution_plan")
-    @patch("trigger_workflow.orchestration.execute_implementation_phase_task")
-    @patch("trigger_workflow.orchestration.execute_tiferet_specification_phase")
+    @patch("trigger_workflow.orchestration.embody_implementation_contract")
+    @patch("trigger_workflow.orchestration.manifest_specification_decomposition")
     @patch("trigger_workflow.orchestration.execute_comment_phase_handoff")
     @patch("trigger_workflow.context.fetch_issue_data")
     @patch("trigger_workflow.context.read_microagent_for_label")
@@ -269,7 +272,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             "comments": [],
         }
 
-        run_labeled_issue_phase_with_mode(label="phase:chesed", issue=55, repo="owner/repo", manual=True)
+        route_labeled_signal_with_mode(label="phase:chesed", issue=55, repo="owner/repo", manual=True)
 
         ensure_phase_labels_mock.assert_not_called()
         preview_phase_execution_plan_mock.assert_called_once()
@@ -295,7 +298,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             "comments": [],
         }
 
-        run_labeled_issue_phase_with_mode(label="phase:tiferet", issue=55, repo="owner/repo", manual=True)
+        route_labeled_signal_with_mode(label="phase:tiferet", issue=55, repo="owner/repo", manual=True)
 
         ensure_phase_labels_mock.assert_not_called()
         preview_phase_execution_plan_mock.assert_called_once()
@@ -310,7 +313,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         log_multiline_mock,
     ) -> None:
         del log_info_mock
-        request = PhaseExecutionRequest(
+        signal = SfiratPhaseSignal(
             label="phase:netzach",
             issue=55,
             repo="owner/repo",
@@ -321,7 +324,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
 
         from trigger_workflow.preview import preview_phase_execution_plan
 
-        preview_phase_execution_plan(request)
+        preview_phase_execution_plan(signal)
 
         build_phase_execution_prompt_mock.assert_called_once()
         self.assertEqual(log_multiline_mock.call_args_list[0].args[0], "Manual mode prompt for gemini (implementation)")
@@ -329,7 +332,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         self.assertEqual(log_multiline_mock.call_args_list[1].args[0], "Manual mode planned actions")
 
     def test_render_prompt_only_output_for_implementation_includes_delivery_steps(self) -> None:
-        request = PhaseExecutionRequest(
+        signal = SfiratPhaseSignal(
             label="phase:hod",
             issue=32,
             repo="owner/repo",
@@ -338,7 +341,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             issue_data={"title": "Issue", "body": "Body", "comments": []},
         )
 
-        rendered = render_prompt_only_output(request, "PROMPT-CONTENT")
+        rendered = render_prompt_only_output(signal, "PROMPT-CONTENT")
 
         self.assertIn("PROMPT-CONTENT", rendered)
         self.assertIn("Prompt-only planned actions:", rendered)
@@ -348,7 +351,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         self.assertIn("Commit and push the branch updates.", rendered)
 
     def test_render_prompt_only_output_for_discussion_preserves_discussion_actions(self) -> None:
-        request = PhaseExecutionRequest(
+        signal = SfiratPhaseSignal(
             label="phase:keter",
             issue=10,
             repo="owner/repo",
@@ -357,7 +360,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             issue_data={"title": "Issue", "body": "Body", "comments": []},
         )
 
-        rendered = render_prompt_only_output(request, "PROMPT-CONTENT")
+        rendered = render_prompt_only_output(signal, "PROMPT-CONTENT")
 
         self.assertIn("Prepare a commit message", rendered)
         self.assertIn("Generate the gh command to post the comment", rendered)
@@ -376,7 +379,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             "comments": [],
         }
 
-        resolve_phase_execution_request(
+        resolve_phase_signal(
             label="phase:yesod-orchestration",
             issue=32,
             repo="owner/repo",
@@ -391,7 +394,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         )
 
         read_microagent_for_label_mock.reset_mock()
-        resolve_phase_execution_request(
+        resolve_phase_signal(
             label="phase:yesod-orchestration",
             issue=32,
             repo="owner/repo",
