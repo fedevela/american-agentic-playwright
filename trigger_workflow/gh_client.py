@@ -22,6 +22,19 @@ def run_gh(args: list[str], *, capture_output: bool = False) -> subprocess.Compl
         timeout=120,
     )
 
+def run_gh_strict(
+    args: list[str],
+    *,
+    failure_message: str,
+    capture_output: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    """Run a GitHub CLI command and automatically raise a formatted SystemExit on failure."""
+    result = run_gh(args, capture_output=capture_output)
+    if result.returncode != 0:
+        raise SystemExit(f"{failure_message}: {gh_failure_details(result)}")
+    return result
+
+
 def run_gh_json(
     args: list[str],
     *,

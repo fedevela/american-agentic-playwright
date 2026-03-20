@@ -155,7 +155,7 @@ class GitHubOpsTests(unittest.TestCase):
 
         self.assertIn("Expected 'owner/repo'", str(exc.exception))
 
-    @patch("trigger_workflow.github.hierarchy.run_gh")
+    @patch("trigger_workflow.github.hierarchy.run_gh_strict")
     def test_add_sub_issue_relationship_uses_typed_field_submission(self, run_gh_mock) -> None:
         run_gh_mock.return_value = subprocess.CompletedProcess(args=["gh"], returncode=0, stdout="", stderr="")
 
@@ -173,7 +173,7 @@ class GitHubOpsTests(unittest.TestCase):
             ],
         )
 
-    @patch("trigger_workflow.github.hierarchy.run_gh")
+    @patch("trigger_workflow.github.hierarchy.run_gh_strict")
     def test_add_blocked_by_dependency_uses_typed_field_submission(self, run_gh_mock) -> None:
         run_gh_mock.return_value = subprocess.CompletedProcess(args=["gh"], returncode=0, stdout="", stderr="")
 
@@ -191,7 +191,7 @@ class GitHubOpsTests(unittest.TestCase):
             ],
         )
 
-    @patch("trigger_workflow.github.labels.run_gh")
+    @patch("trigger_workflow.github.labels.run_gh_strict")
     def test_edit_issue_labels_builds_combined_add_remove_command(self, run_gh_mock) -> None:
         run_gh_mock.return_value = subprocess.CompletedProcess(args=["gh"], returncode=0, stdout="", stderr="")
 
