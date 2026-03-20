@@ -56,46 +56,65 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
   - Maps phase IDs to canonical labels
 
 - `trigger_workflow/orchestration.py`
-  - Top-level workflow routing and phase dispatch (`route_labeled_signal`)
+  - Top-level workflow routing and phase dispatch (`route_labeled_signal_with_mode`)
   - Coordinates between context resolution and execution logic
 
 - `trigger_workflow/context.py`
-  - Runtime context resolution (issue, label, repo) via `SfiratPhaseSignal`
-  - Manages session scope policies
+  - Exposes resolving logic via `SfiratPhaseSignal`
+
+- `trigger_workflow/context_resolver/`
+  - `models.py`: Core types like `SfiratPhaseSignal`
+  - `policy.py`: Conversation scoping and repo detection
+  - `resolution.py`: Context resolution (issue, label, repo)
 
 - `trigger_workflow/execution.py`
   - Phase-specific execution logic:
     - `execute_comment_phase_handoff`
     - `manifest_specification_decomposition` (Tiferet)
     - `embody_implementation_contract` (Implementation)
-  - Manages phase-comment wrappers and handoffs
+
+- `trigger_workflow/execution_loop.py`
+  - Validation retry loop for implementation phases (`run_agent_implementation_loop`)
 
 - `trigger_workflow/preview.py`
   - Manual mode behavior and prompt-only previews
-
 
 - `trigger_workflow/config.py`
   - Canonical phase/label maps
   - Successor mapping (`NEXT_LABEL_MAP`)
 
 - `trigger_workflow/prompts.py`
-  - Prompt construction and context shaping
-  - Persona + functional microagent_persona composition
-  - Phase comment wrapper formatting
+  - Legacy facade for prompt building
+
+- `trigger_workflow/prompts_engine/`
+  - `discussion.py`: Prompts for early comment-based phases
+  - `extraction.py`: Extracting contextual bodies from issues
+  - `formatting.py`: Phase comment wrapper formatting
+  - `implementation.py`: Code-editing phase prompts
+  - `specification.py`: Phase 4 (Tiferet) spec prompts
 
 - `trigger_workflow/domain.py`
-  - Core types including `WorkflowPhase`, `IssueContext`
+  - Core types including `WorkflowPhase`
 
 - `trigger_workflow/gh_client.py`
   - Low-level GitHub CLI execution
 
-- `trigger_workflow/github_ops.py`
-  - High-level issue orchestration (labels, dependencies)
+- `trigger_workflow/github/`
+  - `comments.py`: Issue comment management
+  - `constants.py`: Constants for the GitHub API
+  - `discovery.py`: Issue lookup and label resolution
+  - `hierarchy.py`: Sub-issue and dependency relations
+  - `labels.py`: Phase label management
 
+- `trigger_workflow/github_ops.py`
+  - High-level facade for `github/` submodule operations
 
 - `trigger_workflow/validation.py`
   - Tiferet JSON payload schema checks
   - Verbatim traceability checks to Gevurah canonical requirements
+
+- `trigger_workflow/validation_runner.py`
+  - Test execution framework for implementation validation
 
 - `trigger_workflow/gemini_runner.py`
   - Gemini CLI subprocess execution.
@@ -104,12 +123,8 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 - `trigger_workflow/git_client.py`
   - Version control operations and branch contexts
 
-- `trigger_workflow/validation_runner.py`
-  - Validation retry loop for implementation phases
-
 - `trigger_workflow/delivery.py`
   - Delivery finalization (commit/push/PR summary)
-
 
 - `trigger_workflow/logging_utils.py`
   - Structured console logging helpers
@@ -137,10 +152,14 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 
 ## Tests Coverage
 
-- Orchestration behavior: `tests/trigger_workflow/test_orchestration.py`
-- GitHub operations: `tests/trigger_workflow/test_github_ops.py`
-- Prompt contracts: `tests/trigger_workflow/test_prompts.py`
-- Tiferet validation rules: `tests/trigger_workflow/test_validation.py`
+- CLI interactions: `tests/trigger_workflow/test_cli.py`
+- Core Orchestration: `tests/trigger_workflow/test_orchestration.py`
+- Github Base Ops: `tests/trigger_workflow/test_github_ops.py`, `test_github_labels.py`, `test_github_discovery.py`, `test_github_comments.py`
+- Git Operations: `tests/trigger_workflow/test_git_client.py`
+- Prompting engine: `tests/trigger_workflow/test_prompts.py`, `test_discussion_prompts.py`, `test_extraction.py`, `test_formatting.py`
+- Resolution context: `tests/trigger_workflow/test_resolution.py`, `test_policy.py`
+- Delivery & Execution: `tests/trigger_workflow/test_delivery.py`, `test_execution_loop.py`, `test_gemini_runner.py`, `test_validation_runner.py`, `test_preview.py`
+- Tiferet payload shape checks: `tests/trigger_workflow/test_validation.py`
 
 ## MCP Integration Seam (for future work)
 
