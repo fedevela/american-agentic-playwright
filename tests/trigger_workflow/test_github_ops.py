@@ -12,13 +12,16 @@ import unittest
 from unittest.mock import patch
 
 from trigger_workflow.config import TIFERET_AUTO_ISSUE_PREFIX
+from trigger_workflow.gh_client import parse_repo
+
 from trigger_workflow.github_ops import (
     add_blocked_by_dependency,
+
     add_sub_issue_relationship,
     create_child_issues,
     edit_issue_labels,
     normalize_tiferet_child_title,
-    parse_repo,
+    
     remove_issue_label,
     tag_issue_needs_human,
     advance_issue_label,
@@ -45,10 +48,10 @@ class GitHubOpsTests(unittest.TestCase):
             f"{TIFERET_AUTO_ISSUE_PREFIX}Implement Something",
         )
 
-    @patch("trigger_workflow.github_ops.fetch_parent_sub_issue_ids", return_value={1001, 1002, 1003})
-    @patch("trigger_workflow.github_ops.add_blocked_by_dependency")
-    @patch("trigger_workflow.github_ops.add_sub_issue_relationship")
-    @patch("trigger_workflow.github_ops.create_issue_via_api")
+    @patch("trigger_workflow.github.hierarchy.fetch_parent_sub_issue_ids", return_value={1001, 1002, 1003})
+    @patch("trigger_workflow.github.hierarchy.add_blocked_by_dependency")
+    @patch("trigger_workflow.github.hierarchy.add_sub_issue_relationship")
+    @patch("trigger_workflow.github.hierarchy.create_issue_via_api")
     def test_create_child_issues_creates_in_order_and_links_predecessors(
         self,
         create_issue_via_api_mock,
@@ -99,8 +102,8 @@ class GitHubOpsTests(unittest.TestCase):
         self.assertEqual(add_blocked_by_dependency_mock.call_count, 2)
         fetch_parent_sub_issue_ids_mock.assert_called_once_with("owner/repo", 77)
 
-    @patch("trigger_workflow.github_ops.time.sleep")
-    @patch("trigger_workflow.github_ops.fetch_parent_sub_issue_ids")
+    @patch("trigger_workflow.github.hierarchy.time.sleep")
+    @patch("trigger_workflow.github.hierarchy.fetch_parent_sub_issue_ids")
     def test_verify_parent_sub_issue_ids_retries_until_links_appear(
         self,
         fetch_parent_sub_issue_ids_mock,
@@ -127,8 +130,8 @@ class GitHubOpsTests(unittest.TestCase):
         self.assertEqual(fetch_parent_sub_issue_ids_mock.call_count, 3)
         self.assertEqual(sleep_mock.call_count, 2)
 
-    @patch("trigger_workflow.github_ops.time.sleep")
-    @patch("trigger_workflow.github_ops.fetch_parent_sub_issue_ids", return_value=set())
+    @patch("trigger_workflow.github.hierarchy.time.sleep")
+    @patch("trigger_workflow.github.hierarchy.fetch_parent_sub_issue_ids", return_value=set())
     def test_verify_parent_sub_issue_ids_returns_missing_after_retry_budget_exhausted(
         self,
         fetch_parent_sub_issue_ids_mock,
@@ -152,7 +155,7 @@ class GitHubOpsTests(unittest.TestCase):
 
         self.assertIn("Expected 'owner/repo'", str(exc.exception))
 
-    @patch("trigger_workflow.github_ops.run_gh")
+    @patch("trigger_workflow.github.hierarchy.run_gh_strict")
     def test_add_sub_issue_relationship_uses_typed_field_submission(self, run_gh_mock) -> None:
         run_gh_mock.return_value = subprocess.CompletedProcess(args=["gh"], returncode=0, stdout="", stderr="")
 
@@ -170,7 +173,7 @@ class GitHubOpsTests(unittest.TestCase):
             ],
         )
 
-    @patch("trigger_workflow.github_ops.run_gh")
+    @patch("trigger_workflow.github.hierarchy.run_gh_strict")
     def test_add_blocked_by_dependency_uses_typed_field_submission(self, run_gh_mock) -> None:
         run_gh_mock.return_value = subprocess.CompletedProcess(args=["gh"], returncode=0, stdout="", stderr="")
 
@@ -188,7 +191,7 @@ class GitHubOpsTests(unittest.TestCase):
             ],
         )
 
-    @patch("trigger_workflow.github_ops.run_gh")
+    @patch("trigger_workflow.github.labels.run_gh_strict")
     def test_edit_issue_labels_builds_combined_add_remove_command(self, run_gh_mock) -> None:
         run_gh_mock.return_value = subprocess.CompletedProcess(args=["gh"], returncode=0, stdout="", stderr="")
 
@@ -209,7 +212,7 @@ class GitHubOpsTests(unittest.TestCase):
             ],
         )
 
-    @patch("trigger_workflow.github_ops.edit_issue_labels")
+    @patch("trigger_workflow.github.labels.edit_issue_labels")
     def test_advance_issue_label_uses_shared_label_editor(self, edit_issue_labels_mock) -> None:
         advance_issue_label("owner/repo", 77, "phase:tiferet")
 
@@ -220,20 +223,20 @@ class GitHubOpsTests(unittest.TestCase):
             remove=["phase:tiferet"],
         )
 
-    @patch("trigger_workflow.github_ops.edit_issue_labels")
+    @patch("trigger_workflow.github.labels.edit_issue_labels")
     def test_remove_issue_label_uses_shared_label_editor(self, edit_issue_labels_mock) -> None:
         remove_issue_label("owner/repo", 77, "phase:tiferet")
         edit_issue_labels_mock.assert_called_once_with("owner/repo", 77, remove=["phase:tiferet"])
 
-    @patch("trigger_workflow.github_ops.edit_issue_labels")
+    @patch("trigger_workflow.github.labels.edit_issue_labels")
     def test_tag_issue_needs_human_uses_shared_label_editor(self, edit_issue_labels_mock) -> None:
         tag_issue_needs_human("owner/repo", 77)
         edit_issue_labels_mock.assert_called_once_with("owner/repo", 77, add=["phase:needsHuman"])
 
-    @patch("trigger_workflow.github_ops.fetch_parent_sub_issue_ids", return_value=set())
-    @patch("trigger_workflow.github_ops.add_blocked_by_dependency")
-    @patch("trigger_workflow.github_ops.add_sub_issue_relationship")
-    @patch("trigger_workflow.github_ops.create_issue_via_api")
+    @patch("trigger_workflow.github.hierarchy.fetch_parent_sub_issue_ids", return_value=set())
+    @patch("trigger_workflow.github.hierarchy.add_blocked_by_dependency")
+    @patch("trigger_workflow.github.hierarchy.add_sub_issue_relationship")
+    @patch("trigger_workflow.github.hierarchy.create_issue_via_api")
     def test_create_child_issues_errors_when_parent_sub_issue_attachment_is_missing(
         self,
         create_issue_via_api_mock,

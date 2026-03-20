@@ -14,10 +14,29 @@ REPO_ROOT = Path(__file__).resolve().parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from trigger_workflow.config import DEFAULT_REPO, LABEL_PHASE_MAP, PHASE_DISPLAY_NAME_MAP, PHASE_LABEL_METADATA
-from trigger_workflow.router import build_phase_prompt_for_issue, label_for_phase_id
+from trigger_workflow.config import LABEL_PHASE_MAP, PHASE_DISPLAY_NAME_MAP, PHASE_LABEL_METADATA
+from trigger_workflow.cli import label_for_phase_id
+from trigger_workflow.context import resolve_phase_signal
+from trigger_workflow.execution import build_phase_execution_prompt, select_phase_prompt_builder
 
-SERVER_NAME = "openhands-swarm-phase-prompt"
+def build_phase_prompt_for_issue(
+    label: str | None = None,
+    issue: int | None = None,
+    repo: str | None = None,
+    *,
+    manual: bool = True,
+) -> str:
+    """Resolve issue context and return only the generated phase prompt text."""
+    signal = resolve_phase_signal(
+        label=label,
+        issue=issue,
+        repo=repo,
+        manual=manual,
+    )
+    prompt, _ = build_phase_execution_prompt(signal, select_phase_prompt_builder(signal.phase))
+    return prompt
+
+SERVER_NAME = "swarm-phase-prompt"
 SERVER_VERSION = "0.1.0"
 PROTOCOL_VERSION = "2024-11-05"
 TOOL_NAME = "get_phase_prompt"
@@ -155,7 +174,7 @@ def _tools_list_result() -> dict[str, Any]:
         "tools": [
             {
                 "name": TOOL_NAME,
-                "description": "Build the exact OpenHands phase prompt for a GitHub issue/phase without running workflows.",
+                "description": "Build the exact agent phase prompt for a GitHub issue/phase without running workflows.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {

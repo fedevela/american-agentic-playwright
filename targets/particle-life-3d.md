@@ -7,7 +7,7 @@ This document defines how the local swarm should work GitHub issues against the 
 ## Roles
 
 - `OpenClaw`: listens for GitHub issue activity, loads issue context, invokes the swarm locally, and writes results back to GitHub.
-- `openhands-swarm`: provides the phase model, personas, and output contracts.
+- `swarm`: provides the phase model, personas, and output contracts.
 - `particle-life-3d`: the codebase where analysis, implementation, and verification happen.
 
 ## Repositories
@@ -27,8 +27,8 @@ This document defines how the local swarm should work GitHub issues against the 
 
 - Phases 1-4 run against the target repository on `main`.
 - Phases 5-9 run against an issue-specific branch named `issue/<issue-number>`.
-- If the issue branch does not already exist locally, it is created from `main` before OpenHands starts.
-- OpenHands should be launched from the target repository checkout, not from the swarm repository.
+- If the issue branch does not already exist locally, it is created from `main` before the agent starts.
+- The agent should be launched from the target repository checkout, not from the swarm repository.
 
 ## Required Repository Context
 

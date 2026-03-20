@@ -1,1 +1,1 @@
-"""Test package for OpenHands swarm."""
+"""Test package for swarm."""
