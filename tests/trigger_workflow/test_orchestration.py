@@ -162,9 +162,9 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
     @patch("trigger_workflow.orchestration.embody_implementation_contract")
     @patch("trigger_workflow.orchestration.manifest_specification_decomposition")
     @patch("trigger_workflow.orchestration.execute_comment_phase_handoff")
-    @patch("trigger_workflow.context.fetch_issue_data")
-    @patch("trigger_workflow.context.read_microagent_persona_for_label")
-    @patch("trigger_workflow.context.ensure_phase_labels")
+    @patch("trigger_workflow.context_resolver.resolution.fetch_issue_data")
+    @patch("trigger_workflow.context_resolver.resolution.read_microagent_persona_for_label")
+    @patch("trigger_workflow.context_resolver.resolution.ensure_phase_labels")
     def test_trigger_agent_routes_chesed_to_discussion_phase(
         self,
         ensure_phase_labels_mock,
@@ -194,9 +194,9 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
     @patch("trigger_workflow.execution.log_error")
     @patch("trigger_workflow.execution.tag_issue_needs_human")
     @patch("trigger_workflow.orchestration.manifest_specification_decomposition", side_effect=SystemExit("phase failed"))
-    @patch("trigger_workflow.context.fetch_issue_data")
-    @patch("trigger_workflow.context.read_microagent_persona_for_label")
-    @patch("trigger_workflow.context.ensure_phase_labels")
+    @patch("trigger_workflow.context_resolver.resolution.fetch_issue_data")
+    @patch("trigger_workflow.context_resolver.resolution.read_microagent_persona_for_label")
+    @patch("trigger_workflow.context_resolver.resolution.ensure_phase_labels")
     def test_trigger_agent_tags_needs_human_when_pre_netzach_phase_fails(
         self,
         ensure_phase_labels_mock,
@@ -222,10 +222,10 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
         self.assertIn("phase failed", str(exc.exception))
         tag_issue_needs_human_mock.assert_called_once_with("owner/repo", 55)
 
-    @patch("trigger_workflow.context.log_error")
-    @patch("trigger_workflow.context.fetch_issue_data")
-    @patch("trigger_workflow.context.read_microagent_persona_for_label")
-    @patch("trigger_workflow.context.ensure_phase_labels")
+    @patch("trigger_workflow.context_resolver.resolution.log_error")
+    @patch("trigger_workflow.context_resolver.resolution.fetch_issue_data")
+    @patch("trigger_workflow.context_resolver.resolution.read_microagent_persona_for_label")
+    @patch("trigger_workflow.context_resolver.resolution.ensure_phase_labels")
     def test_trigger_agent_errors_when_issue_lacks_requested_label(
         self,
         ensure_phase_labels_mock,
@@ -252,9 +252,9 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
     @patch("trigger_workflow.orchestration.embody_implementation_contract")
     @patch("trigger_workflow.orchestration.manifest_specification_decomposition")
     @patch("trigger_workflow.orchestration.execute_comment_phase_handoff")
-    @patch("trigger_workflow.context.fetch_issue_data")
-    @patch("trigger_workflow.context.read_microagent_persona_for_label")
-    @patch("trigger_workflow.context.ensure_phase_labels")
+    @patch("trigger_workflow.context_resolver.resolution.fetch_issue_data")
+    @patch("trigger_workflow.context_resolver.resolution.read_microagent_persona_for_label")
+    @patch("trigger_workflow.context_resolver.resolution.ensure_phase_labels")
     def test_manual_mode_routes_to_preview_only_without_execution_or_label_sync(
         self,
         ensure_phase_labels_mock,
@@ -281,9 +281,9 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
         execute_implementation_phase_task_mock.assert_not_called()
 
     @patch("trigger_workflow.orchestration.preview_phase_execution_plan")
-    @patch("trigger_workflow.context.fetch_issue_data")
-    @patch("trigger_workflow.context.read_microagent_persona_for_label")
-    @patch("trigger_workflow.context.ensure_phase_labels")
+    @patch("trigger_workflow.context_resolver.resolution.fetch_issue_data")
+    @patch("trigger_workflow.context_resolver.resolution.read_microagent_persona_for_label")
+    @patch("trigger_workflow.context_resolver.resolution.ensure_phase_labels")
     def test_manual_mode_forces_requested_label_even_if_issue_labels_do_not_match(
         self,
         ensure_phase_labels_mock,
@@ -365,8 +365,8 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
         self.assertIn("Prepare a commit message", rendered)
         self.assertIn("Generate the gh command to post the comment", rendered)
 
-    @patch("trigger_workflow.context.fetch_issue_data")
-    @patch("trigger_workflow.context.read_microagent_persona_for_label")
+    @patch("trigger_workflow.context_resolver.resolution.fetch_issue_data")
+    @patch("trigger_workflow.context_resolver.resolution.read_microagent_persona_for_label")
     def test_resolve_phase_execution_request_can_include_or_exclude_base_persona(
         self,
         read_microagent_persona_for_label_mock,
