@@ -33,11 +33,7 @@ def resolve_target_repo_config(repo: str) -> TargetRepoConfig:
 def resolve_phase_execution_branch(repo: str, phase: str, issue: int) -> str:
     """Return the branch that should back this phase run."""
     config = resolve_target_repo_config(repo)
-    if phase in PRE_IMPLEMENTATION_PHASES:
-        return config.main_branch
-    if phase in IMPLEMENTATION_PHASES:
-        return f"{config.issue_branch_prefix}{issue}"
-    raise SystemExit(f"Unknown phase '{phase}' for branch resolution.")
+    return f"{config.issue_branch_prefix}{issue}"
 
 
 def git_run(local_path: Path, args: list[str], *, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
@@ -68,7 +64,7 @@ def branch_exists(local_path: Path, branch: str) -> bool:
 
 
 def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> None:
-    """Switch to the requested branch, requiring non-base branches to exist already."""
+    """Switch to the requested branch, creating it from base_branch if it does not exist."""
     active_branch = current_branch(local_path)
     if active_branch == branch:
         log_info(f"Git branch already active: {branch}")
@@ -85,10 +81,13 @@ def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> Non
     if branch == base_branch:
         raise SystemExit(f"Base branch '{base_branch}' does not exist locally in {local_path}.")
 
-    raise SystemExit(
-        f"Required branch '{branch}' does not exist in {local_path}. "
-        "Phase 4/Tiferet must create child issue branches before downstream phase execution."
-    )
+    log_info(f"Branch '{branch}' does not exist; creating it from '{base_branch}'.")
+    result = git_run(local_path, ["switch", "-c", branch, base_branch], capture_output=True)
+    if result.returncode != 0:
+        raise SystemExit(f"Failed to create branch '{branch}' from '{base_branch}'.")
+    
+    log_info(f"Pushing new branch '{branch}' to origin...")
+    git_run(local_path, ["push", "origin", branch])
 
 
 def prepare_target_repo_checkout(repo: str) -> tuple[TargetRepoConfig, Path]:
@@ -172,28 +171,15 @@ def create_issue_branches_for_child_issues(repo: str, parent_issue: int, issue_n
     # The parent issue branch name (e.g. issue/51)
     parent_branch = f"{config.issue_branch_prefix}{parent_issue}"
     
-    if not branch_exists(local_path, parent_branch):
-        log_info(f"Parent branch '{parent_branch}' does not exist; creating it from '{config.main_branch}'.")
-        result = git_run(local_path, ["switch", "-c", parent_branch, config.main_branch], capture_output=True)
-        if result.returncode != 0:
-            raise SystemExit(f"Failed to create missing parent branch '{parent_branch}' from '{config.main_branch}'.")
-        log_info(f"Pushing new parent branch '{parent_branch}' to origin...")
-        git_run(local_path, ["push", "origin", parent_branch])
-
+    # Ensure the parent branch exists, creating it from main if necessary
     ensure_git_branch(local_path, parent_branch, base_branch=config.main_branch)
 
     for issue_number in issue_numbers:
         branch_name = f"{config.issue_branch_prefix}{issue_number}"
-        if branch_exists(local_path, branch_name):
-            log_info(f"Issue branch already exists: {branch_name}")
-            continue
-
-        log_info(f"Creating child issue branch '{branch_name}' from '{parent_branch}'")
-        result = git_run(local_path, ["switch", "-c", branch_name, parent_branch], capture_output=True)
-        if result.returncode != 0:
-            raise SystemExit(
-                f"Failed to create child issue branch '{branch_name}' from '{parent_branch}' "
-                f"in {local_path}."
-            )
-        log_info(f"Pushing new child issue branch '{branch_name}' to origin...")
-        git_run(local_path, ["push", "origin", branch_name])
+        # This will create the child branch from the parent branch if it doesn't exist
+        ensure_git_branch(local_path, branch_name, base_branch=parent_branch)
+        # Switch back to parent branch to continue the loop smoothly, though ensure_git_branch switches to the target.
+        # Actually it's fine, we can just switch back at the end or just let it be since this is Tiferet.
+        
+    # Return to the parent branch to finish Tiferet phase
+    ensure_git_branch(local_path, parent_branch, base_branch=config.main_branch)

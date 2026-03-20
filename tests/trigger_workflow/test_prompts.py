@@ -47,9 +47,9 @@ class PhaseWorkflowNamingTests(unittest.TestCase):
         self.assertEqual(determine_phase_from_label("phase:malkhut"), "9")
         self.assertEqual(determine_phase_from_label("phase:hod-refactoring"), "10")
 
-    def test_branch_name_for_phase_uses_main_before_implementation_and_issue_branch_after(self) -> None:
-        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "2B", 12), "main")
-        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "4", 12), "main")
+    def test_branch_name_for_phase_always_uses_issue_branch(self) -> None:
+        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "2B", 12), "issue/12")
+        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "4", 12), "issue/12")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "5", 12), "issue/12")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "9", 12), "issue/12")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "10", 12), "issue/12")

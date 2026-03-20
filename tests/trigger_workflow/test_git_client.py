@@ -31,16 +31,16 @@ class GitClientTests(unittest.TestCase):
         self.assertEqual(config.issue_branch_prefix, "issue/")
 
     def test_resolve_phase_execution_branch_main_for_early_phases(self) -> None:
-        self.assertEqual(resolve_phase_execution_branch("owner/repo", "1", 123), "main")
-        self.assertEqual(resolve_phase_execution_branch("owner/repo", "4", 123), "main")
+        self.assertEqual(resolve_phase_execution_branch("owner/repo", "1", 123), "issue/123")
+        self.assertEqual(resolve_phase_execution_branch("owner/repo", "4", 123), "issue/123")
 
     def test_resolve_phase_execution_branch_issue_for_late_phases(self) -> None:
         self.assertEqual(resolve_phase_execution_branch("owner/repo", "5", 123), "issue/123")
         self.assertEqual(resolve_phase_execution_branch("owner/repo", "10", 123), "issue/123")
 
     def test_resolve_phase_execution_branch_fails_for_unknown(self) -> None:
-        with self.assertRaises(SystemExit):
-            resolve_phase_execution_branch("owner/repo", "unknown", 123)
+        # Unknown phase will just return issue/123 now, as phase doesn't dictate branch logic
+        self.assertEqual(resolve_phase_execution_branch("owner/repo", "unknown", 123), "issue/123")
 
     @patch("subprocess.run")
     def test_git_run_calls_subprocess(self, run_mock) -> None:
@@ -100,10 +100,14 @@ class GitClientTests(unittest.TestCase):
 
     @patch("trigger_workflow.git_client.current_branch", return_value="other")
     @patch("trigger_workflow.git_client.branch_exists", return_value=False)
-    def test_ensure_git_branch_fails_if_feature_missing(self, exists_mock, curr_mock) -> None:
+    @patch("trigger_workflow.git_client.git_run")
+    def test_ensure_git_branch_fails_if_feature_missing(self, run_mock, exists_mock, curr_mock) -> None:
+        res = MagicMock()
+        res.returncode = 1
+        run_mock.return_value = res
         with self.assertRaises(SystemExit) as exc:
             ensure_git_branch(Path("/mock"), "feature", base_branch="main")
-        self.assertIn("Required branch 'feature' does not exist", str(exc.exception))
+        self.assertIn("Failed to create branch 'feature'", str(exc.exception))
 
     @patch("pathlib.Path.exists", return_value=False)
     def test_prepare_target_repo_checkout_fails_if_no_git(self, exists_mock) -> None:
@@ -154,27 +158,17 @@ class GitClientTests(unittest.TestCase):
         self.assertGreaterEqual(run_mock.call_count, 3)
 
     @patch("trigger_workflow.git_client.prepare_target_repo_checkout")
-    @patch("trigger_workflow.git_client.branch_exists", return_value=False)
-    @patch("trigger_workflow.git_client.git_run")
     @patch("trigger_workflow.git_client.ensure_git_branch")
-    def test_create_issue_branches_for_child_issues(self, ensure_mock, run_mock, exists_mock, prep_mock) -> None:
+    def test_create_issue_branches_for_child_issues(self, ensure_mock, prep_mock) -> None:
         config = MagicMock()
         config.main_branch = "main"
         config.issue_branch_prefix = "issue/"
         prep_mock.return_value = (config, Path("/mock"))
         
-        res = MagicMock()
-        res.returncode = 0
-        run_mock.return_value = res
-        
         create_issue_branches_for_child_issues("owner/repo", 1, [2, 3])
         
-        # Check switch and push calls
-        switch_calls = [c for c in run_mock.call_args_list if "switch" in c.args[1]]
-        push_calls = [c for c in run_mock.call_args_list if "push" in c.args[1]]
-        
-        self.assertEqual(len(switch_calls), 3) # 1 parent + 2 children
-        self.assertEqual(len(push_calls), 3)
+        # Check ensure_git_branch was called for parent and children
+        self.assertEqual(ensure_mock.call_count, 4) # 1 for parent initially, 1 for child 2, 1 for child 3, 1 for parent at end
 
 
 if __name__ == "__main__":
