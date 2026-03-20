@@ -82,12 +82,20 @@ def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> Non
         raise SystemExit(f"Base branch '{base_branch}' does not exist locally in {local_path}.")
 
     log_info(f"Branch '{branch}' does not exist; creating it from '{base_branch}'.")
+    
+    # Try creating from local base_branch first
     result = git_run(local_path, ["switch", "-c", branch, base_branch], capture_output=True)
     if result.returncode != 0:
-        raise SystemExit(f"Failed to create branch '{branch}' from '{base_branch}'.")
+        # Fallback to origin/base_branch if local doesn't exist
+        log_info(f"Failed to create from local '{base_branch}', trying 'origin/{base_branch}'...")
+        git_run(local_path, ["fetch", "origin", base_branch])
+        result = git_run(local_path, ["switch", "-c", branch, f"origin/{base_branch}"], capture_output=True)
+        if result.returncode != 0:
+            log_error(f"Failed to create branch '{branch}' from 'origin/{base_branch}': {result.stderr or result.stdout or 'no output'}")
+            raise SystemExit(f"Failed to create branch '{branch}' from '{base_branch}'.")
     
     log_info(f"Pushing new branch '{branch}' to origin...")
-    git_run(local_path, ["push", "origin", branch])
+    git_run(local_path, ["push", "-u", "origin", branch])
 
 
 def prepare_target_repo_checkout(repo: str) -> tuple[TargetRepoConfig, Path]:
