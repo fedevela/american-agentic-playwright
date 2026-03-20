@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 from .git_client import prepare_branch_context, prepare_phase_execution_context
+from .logging_utils import log_error, log_info, log_multiline
 
 
 def run_gemini(
