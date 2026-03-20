@@ -1,10 +1,11 @@
-# Agent Notes: OpenHands Swarm
+# Agent Notes: Swarm
 
 This document captures the practical architecture and execution rules for working safely in this repository.
 
 ## Entry Point
 
-- `trigger.py` is a thin CLI shim that calls `trigger_workflow.router.run_trigger_cli()`.
+- `trigger.py` should be called from the target repository root.
+- It is a thin CLI shim that calls `trigger_workflow.router.run_trigger_cli()`.
 
 ## Runtime Flow
 
@@ -13,8 +14,6 @@ This document captures the practical architecture and execution rules for workin
 - `--phase`: Canonical phase ID (alternative to --label).
 - `--issue`: Issue number to process.
 - `--repo`: Target repository (owner/repo).
-- `--runner`: Agent engine to use (`gemini` or `openhands`).
-- `--working-dir`: Local directory to use as the target repository (bypasses managed checkout).
 - `--manual`: Preview mode (no agent execution or GitHub mutations).
 
 Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
@@ -38,7 +37,6 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
     - ordered `sub_issues`
   - Validation enforces schema + Gevurah traceability contract
   - Creates child issues with parent/sub-issue + dependency links
-  - Creates child issue branches
   - Posts summary comment
   - Removes parent Tiferet label
 
@@ -56,12 +54,12 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 - `trigger_workflow/config.py`
   - Canonical phase/label maps
   - Successor mapping (`NEXT_LABEL_MAP`)
-  - Repo checkout config (`TARGET_REPO_CONFIG_MAP`)
 
 - `trigger_workflow/router.py`
   - Top-level orchestration + phase dispatch
   - Manual preview mode behavior
   - Needs-human tagging for pre-implementation failures
+  - Local repository detection
 
 - `trigger_workflow/prompts.py`
   - Prompt construction and context shaping
@@ -81,13 +79,8 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
   - Gemini CLI subprocess execution.
   - Optimized for fast, single-turn or fixed-retry cycles.
 
-- `trigger_workflow/openhands_runner.py`
-  - OpenHands subprocess execution + event extraction.
-  - Supports complex, multi-turn coding and debugging.
-
 - `trigger_workflow/runner_utils.py`
-  - Managed checkout setup under `.openhands/repos`
-  - Branch verification and phase branch resolution
+  - Current directory branch verification and resolution
   - Validation retry loop for implementation phases
   - Delivery finalization (commit/push/PR summary)
 
@@ -96,9 +89,10 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 
 ## Operational Constraints
 
-- Managed checkout policy:
-  - Agent must run in `.openhands/repos/<owner__repo>` unless `--working-dir` is provided.
-  - Refuses running in source checkout path to prevent local pollution.
+- Local execution policy:
+  - Swarm runs directly in the current working directory.
+  - The caller must ensure they are in the root of the target repository.
+  - Managed clones and isolation folders are deprecated.
 
 - Branch policy:
   - Phases before implementation run on configured main branch.
@@ -119,7 +113,6 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 - Router behavior: `tests/trigger_workflow/test_router.py`
 - GitHub operations: `tests/trigger_workflow/test_github_ops.py`
 - Prompt contracts: `tests/trigger_workflow/test_prompts.py`
-- Runner/process/branch policies: `tests/trigger_workflow/test_openhands_runner.py`
 - Tiferet validation rules: `tests/trigger_workflow/test_validation.py`
 
 ## MCP Integration Seam (for future work)

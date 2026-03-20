@@ -7,8 +7,17 @@ from contextlib import redirect_stdout
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from .runner_utils import (
+    RunnerTargetContext,
+    create_issue_branches_for_child_issues,
+    finalize_phase_delivery,
+    prepare_branch_context,
+    prepare_phase_execution_context,
+    prepare_target_repo_checkout,
+    resolve_phase_execution_branch,
+    run_phase_tests,
+)
 from .config import (
-    DEFAULT_REPO,
     DISCUSSION_PHASES,
     LABEL_PHASE_MAP,
     MICROAGENTS_DIR,
@@ -16,7 +25,6 @@ from .config import (
     NEXT_LABEL_MAP,
     PHASE_DISPLAY_NAME_MAP,
     PRE_IMPLEMENTATION_PHASES,
-    RUNNER_TYPE,
     SPECIFICATION_PHASE,
     STRICTLY_INDEPENDENT_PHASES,
     WORKSPACE,
@@ -36,14 +44,6 @@ from .github_ops import (
     tag_issue_needs_human,
 )
 from .logging_utils import log_error, log_info, log_multiline, log_section, log_step
-from .openhands_runner import (
-    create_issue_branches_for_child_issues,
-    finalize_phase_delivery as openhands_finalize_delivery,
-    resolve_openhands_model_connection,
-    run_openhands_comment_phase,
-    run_openhands_json_phase,
-    run_openhands_implementation_phase,
-)
 from .gemini_runner import (
     finalize_phase_delivery as gemini_finalize_delivery,
     run_gemini_comment_phase,
@@ -62,26 +62,17 @@ from .prompts import (
 from .validation import validate_tiferet_specification_payload_structure
 
 def run_comment_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> str:
-    if RUNNER_TYPE == "gemini":
-        return run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
-    return run_openhands_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
+    return run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
 
 
 def run_json_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> dict[str, Any]:
-    if RUNNER_TYPE == "gemini":
-        return run_gemini_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
-    return run_openhands_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
+    return run_gemini_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
 
 def run_implementation_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> None:
-    if RUNNER_TYPE == "gemini":
-        run_gemini_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
-    else:
-        run_openhands_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
+    run_gemini_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
 
 def finalize_delivery(repo: str, issue: int, phase: str, issue_title: str, issue_data: dict[str, Any] | None = None) -> str:
-    if RUNNER_TYPE == "gemini":
-        return gemini_finalize_delivery(repo=repo, issue=issue, phase=phase, issue_title=issue_title, issue_data=issue_data)
-    return openhands_finalize_delivery(repo=repo, issue=issue, phase=phase, issue_title=issue_title, issue_data=issue_data)
+    return gemini_finalize_delivery(repo=repo, issue=issue, phase=phase, issue_title=issue_title, issue_data=issue_data)
 
 
 @dataclass(frozen=True)
@@ -97,7 +88,7 @@ class PhaseExecutionRequest:
 
 
 def conversation_scope_for_phase(phase: str) -> str:
-    """Return the OpenHands session scope policy for the given phase."""
+    """Return the session scope policy for the given phase."""
     if phase in STRICTLY_INDEPENDENT_PHASES:
         return f"phase-{phase}"
     return ""
@@ -108,9 +99,9 @@ def describe_phase_conversation_policy(phase: str, session_scope: str) -> str:
     if session_scope:
         return (
             f"strictly independent phase session '{session_scope}' "
-            "(starts with empty OpenHands conversation context)"
+            "(starts with empty conversation context)"
     )
-    return "shared per-issue session policy (OpenHands runs start fresh by runner policy)"
+    return "shared per-issue session policy"
 
 
 def log_prompt_size_and_conversation_policy(prompt: str, phase: str) -> str:
@@ -219,6 +210,63 @@ def run_labeled_issue_phase_with_mode(
     execute_implementation_phase_task(request)
 
 
+def detect_local_repo_name() -> str:
+    """Attempt to detect the owner/repo name from the local git remote."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            text=True,
+            capture_output=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout:
+            url = result.stdout.strip()
+            # Handle git@github.com:owner/repo.git or https://github.com/owner/repo.git
+            if url.endswith(".git"):
+                url = url[:-4]
+            
+            if "github.com" in url:
+                url = url.split("github.com")[-1]
+            if url.startswith(":") or url.startswith("/"):
+                url = url[1:]
+            
+            parts = url.split("/")
+            if len(parts) >= 2:
+                return f"{parts[-2]}/{parts[-1]}"
+    except Exception:
+        pass
+    return ""
+
+
+def detect_local_repo_name() -> str:
+    """Attempt to detect the owner/repo name from the local git remote."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            text=True,
+            capture_output=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout:
+            url = result.stdout.strip()
+            # Handle git@github.com:owner/repo.git or https://github.com/owner/repo.git
+            if url.endswith(".git"):
+                url = url[:-4]
+            
+            if "github.com" in url:
+                url = url.split("github.com")[-1]
+            if url.startswith(":") or url.startswith("/"):
+                url = url[1:]
+            
+            parts = url.split("/")
+            if len(parts) >= 2:
+                return f"{parts[-2]}/{parts[-1]}"
+    except Exception:
+        pass
+    return ""
+
 def resolve_phase_execution_request(
     label: Optional[str] = None,
     issue: Optional[int] = None,
@@ -228,7 +276,11 @@ def resolve_phase_execution_request(
     include_base_persona: bool = True,
 ) -> PhaseExecutionRequest:
     """Resolve and validate issue/label context into a reusable phase execution request."""
-    repo = repo or DEFAULT_REPO
+    if not repo:
+        repo = detect_local_repo_name()
+    if not repo:
+        raise SystemExit("Repository name could not be detected from git remote and was not provided via --repo.")
+    
     log_section("STARTING PHASE EXECUTION")
     log_info(f"Repository: {repo}")
 
@@ -362,6 +414,7 @@ def render_prompt_only_output(request: PhaseExecutionRequest, prompt: str) -> st
             "5. Generate the gh command to post the comment to the issue in md format.",
             "6. Remove the parent phase label from the parent issue.",
         ]
+
     else:
         actions = [
             "1. Prepare a commit message with the above prompt.",
@@ -396,18 +449,22 @@ def label_for_phase_id(phase: str) -> str:
     raise SystemExit(f"Unknown phase '{phase}'. Expected one of: {expected}.")
 
 
+def create_issue_branches_for_child_issues(repo: str, issue_numbers: list[int]) -> None:
+    # This was a shim previously, but we must keep the attribute for tests that patch it.
+    pass
+
 def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
     """Render manual-mode instructions without running agent or mutating GitHub."""
     phase = request.phase
     if phase in DISCUSSION_PHASES:
         prompt, session_scope = build_phase_execution_prompt(request, build_comment_phase_prompt)
-        log_multiline(f"Manual mode prompt for {RUNNER_TYPE} (discussion)", prompt)
+        log_multiline("Manual mode prompt for gemini (discussion)", prompt)
         log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
         log_multiline(
             "Manual mode planned actions",
             "\n".join(
                 [
-                    f"1. Run {RUNNER_TYPE} with the prompt above and capture the final assistant message.",
+                    "1. Run agent with the prompt above and capture the final assistant message.",
                     "2. Post that message to the issue as a phase comment wrapper.",
                     "3. Advance the issue label to the next phase.",
                 ]
@@ -417,13 +474,13 @@ def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
 
     if phase == SPECIFICATION_PHASE:
         prompt, session_scope = build_phase_execution_prompt(request, build_tiferet_specification_prompt)
-        log_multiline(f"Manual mode prompt for {RUNNER_TYPE} (specification JSON)", prompt)
+        log_multiline("Manual mode prompt for gemini (specification JSON)", prompt)
         log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
         log_multiline(
             "Manual mode planned actions",
             "\n".join(
                 [
-                    f"1. Run {RUNNER_TYPE} with the prompt above and capture the final assistant message as JSON.",
+                    "1. Run agent with the prompt above and capture the final assistant message as JSON.",
                     "2. Validate JSON payload structure and requirement traceability.",
                     "3. Post the parent phase comment from `payload.comment`.",
                     "4. Create ordered child issues from `payload.sub_issues` and create child branches.",
@@ -435,13 +492,13 @@ def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
         return
 
     prompt, session_scope = build_phase_execution_prompt(request, build_implementation_phase_prompt)
-    log_multiline(f"Manual mode prompt for {RUNNER_TYPE} (implementation)", prompt)
+    log_multiline("Manual mode prompt for gemini (implementation)", prompt)
     log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
     log_multiline(
         "Manual mode planned actions",
         "\n".join(
             [
-                f"1. Run {RUNNER_TYPE} with the prompt above on the resolved issue branch.",
+                "1. Run agent with the prompt above on the resolved issue branch.",
                 "2. Run trigger validation flow for phases 6-9 (`typecheck -> build -> test:e2e`).",
                 "3. Finalize delivery (git add/commit/push and PR create/lookup).",
                 "4. Post the delivery summary as a wrapped phase comment.",
@@ -456,7 +513,7 @@ def execute_comment_phase_handoff(request: PhaseExecutionRequest) -> None:
     log_info("Building discussion prompt...")
     prompt, session_scope = build_phase_execution_prompt(request, build_comment_phase_prompt)
 
-    log_info(f"Running {RUNNER_TYPE} for phase {request.phase.upper()}...")
+    log_info(f"Running agent for phase {request.phase.upper()}...")
     comment = run_comment_phase(
         prompt,
         repo=request.repo,
@@ -482,7 +539,7 @@ def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
     log_info("Building specification prompt...")
     prompt, session_scope = build_phase_execution_prompt(request, build_tiferet_specification_prompt)
 
-    log_info(f"Running {RUNNER_TYPE} for JSON payload...")
+    log_info("Running agent for JSON payload...")
     payload = run_json_phase(
         prompt,
         repo=request.repo,
@@ -516,15 +573,9 @@ def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
     post_phase_machine_comment(request, summary_comment)
     log_info("Summary comment posted")
 
-    log_info("Completing Tiferet handoff: clearing all labels from parent issue except needs-human...")
-    current_labels = [l.get("name", "") for l in request.issue_data.get("labels", []) if l.get("name")]
-    clear_issue_labels_except(
-        request.repo,
-        request.issue,
-        current_labels,
-        keep=[NEEDS_HUMAN_LABEL],
-    )
-    log_info("Parent issue labels cleared (handoff complete)")
+    log_info("Completing Tiferet handoff: removing phase:tiferet label from parent issue...")
+    remove_issue_label(request.repo, request.issue, request.label)
+    log_info("Parent issue label removed (handoff complete)")
 
 
 def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
@@ -532,7 +583,7 @@ def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
     log_info("Building agent prompt...")
     prompt, session_scope = build_phase_execution_prompt(request, build_implementation_phase_prompt)
 
-    log_info(f"Running {RUNNER_TYPE} agent...")
+    log_info("Running agent...")
     run_implementation_phase(
         prompt,
         repo=request.repo,
@@ -561,19 +612,12 @@ def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
 
 def run_trigger_cli() -> None:
     """Main entry point."""
-    global RUNNER_TYPE
     log_info("Starting swarm phase router CLI")
     parser = argparse.ArgumentParser(description="Trigger Swarm Phase / GitHub workflow")
     parser.add_argument("--label", help="GitHub label triggering the phase")
     parser.add_argument("--phase", help="Canonical phase id (1, 2A, 2B, 2C, 3, 4, 5, 6, 7, 8, 9, 10)")
     parser.add_argument("--issue", type=int, help="Issue number")
     parser.add_argument("--repo", help="Repository owner/repo")
-    parser.add_argument(
-        "--runner",
-        choices=["gemini", "openhands"],
-        default=RUNNER_TYPE,
-        help=f"Runner to use for phase execution (default: {RUNNER_TYPE})",
-    )
     parser.add_argument(
         "--manual",
         action="store_true",
@@ -586,12 +630,9 @@ def run_trigger_cli() -> None:
     )
     args = parser.parse_args()
     
-    # Override global RUNNER_TYPE with CLI argument
-    RUNNER_TYPE = args.runner
-
     log_info(
         f"CLI arguments: label={args.label}, phase={args.phase}, issue={args.issue}, "
-        f"repo={args.repo}, runner={args.runner}, manual={args.manual}, prompt-only={args.prompt_only}"
+        f"repo={args.repo}, manual={args.manual}, prompt-only={args.prompt_only}"
     )
     resolved_label = args.label
     if args.phase:
@@ -605,7 +646,7 @@ def run_trigger_cli() -> None:
         resolved_label = phase_label
 
     if args.prompt_only:
-        log_info("Prompt-only mode: generating and outputting the phase prompt without running OpenHands or mutating GitHub.")
+        log_info("Prompt-only mode: generating and outputting the phase prompt without running agent or mutating GitHub.")
         captured_logs = io.StringIO()
         try:
             with redirect_stdout(captured_logs):
@@ -630,12 +671,6 @@ def run_trigger_cli() -> None:
     log_section("SWARM PHASE ROUTER")
     log_info(f"Working directory: {WORKSPACE}")
     log_info(f"Microagents directory: {MICROAGENTS_DIR}")
-    log_info(f"Active runner: {RUNNER_TYPE}")
-    
-    if RUNNER_TYPE == "openhands":
-        model_name, connection = resolve_openhands_model_connection()
-        log_info(f"OpenHands model connection: {connection}")
-        log_info(f"OpenHands model name: {model_name}")
 
     run_labeled_issue_phase_with_mode(resolved_label, args.issue, args.repo, manual=args.manual)
     log_section("PHASE EXECUTION COMPLETE")

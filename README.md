@@ -1,12 +1,12 @@
-# OpenClaw SDLC Orchestrator
+# Swarm SDLC Orchestrator
 
-A GitHub-based 12-phase SDLC system implementing the SPARC 5-methodology mapped onto the Kabbalistic Tree of Life.
+A GitHub-based 12-phase SDLC system implementing the SPARC 5-methodology.
 
 Phase sequence: 1→2A→2B→2C→3→4→5→6→7→8→9→10
 
 ## Overview
 
-OpenClaw routes labeled GitHub issues through a 10-phase signal processing system where:
+Routes labeled GitHub issues through a 10-phase signal processing system where:
 - **Phases 1-4**: GitHub comment discussion only
 - **Phases 5-10**: Working code in PRs, using E2E tests as communication medium
 
@@ -54,7 +54,7 @@ OpenClaw routes labeled GitHub issues through a 10-phase signal processing syste
 ## Flow
 
 ```
-GitHub Issue + Label → OpenClaw Cron → trigger.py → SDLCPhasedAgent → OpenHands
+GitHub Issue + Label → trigger.py → Gemini
 ```
 
 ## Label → Phase Mapping
@@ -77,100 +77,55 @@ GitHub Issue + Label → OpenClaw Cron → trigger.py → SDLCPhasedAgent → Op
 ## Files
 
 ```
-openhands-swarm/
+swarm/
 ├── trigger.py              # Label-to-phase router (CLI entry point)
 ├── trigger_workflow/       # Core implementation modules
 │   ├── router.py           # Top-level orchestration and phase dispatch
 │   ├── config.py           # Canonical phase and label configuration
 │   ├── gemini_runner.py    # Gemini CLI runner integration
-│   ├── openhands_runner.py # OpenHands runner integration
 │   ├── prompts.py          # Persona and microagent prompt construction
 │   ├── github_ops.py       # GitHub CLI wrappers and issue management
-│   └── runner_utils.py     # Shared checkout and branch management
+│   └── runner_utils.py     # Current directory branch management
 ├── microagents/            # Functional phase prompt templates
 ├── personas/               # Philosophical persona templates
-├── workspace/              # Persistent session and artifact state
-└── .openhands/             # Managed checkouts and conversation logs
+├── workspace/              # (Deprecated)
+└── .swarm/                 # Local state and logs
 ```
 
 ## Usage
 
-### Automated (OpenClaw Cron)
-When an issue is labeled with `phase:*`, the orchestrator is invoked:
+### Automated
+When an issue is labeled with `phase:*`, the orchestrator is invoked from the target repository:
 ```bash
-python trigger.py --label <label> --issue <issue_number>
+# Assuming trigger.py is reachable
+python /path/to/swarm/trigger.py --label <label> --issue <issue_number>
 ```
 
 ### Manual Execution
 ```bash
-cd openhands-swarm
 # Run specific phase for an issue
-python trigger.py --label phase:netzach --issue 53
-# Select a specific runner (default: gemini)
-python trigger.py --runner openhands --phase 5 --issue 53
-# Use current directory as workspace (bypass managed checkout)
-python trigger.py --working-dir . --issue 53
+python /path/to/swarm/trigger.py --label phase:netzach --issue 53
 # Preview mode (no agent execution or GitHub mutations)
-python trigger.py --label phase:keter --issue 53 --manual
+python /path/to/swarm/trigger.py --label phase:keter --issue 53 --manual
 ```
 
 ## Architecture
 
 ### Router (`router.py`)
 - Resolves GitHub issue context and determines the active phase.
+- Auto-detects repository name from local git remote.
 - Composes the system prompt from base personas and phase-specific microagents.
-- Dispatches execution to the appropriate runner (Gemini or OpenHands).
+- Dispatches execution to the Gemini runner in the current directory.
 - Manages the state machine transitions by advancing labels on success.
 
-### Runners
+### Runner
 - **Gemini Runner**: Optimized for fast, headless execution using the Gemini CLI.
-- **OpenHands Runner**: Supports complex, multi-turn coding tasks with interactive feedback.
-- Both runners share a consistent validation contract (`typecheck` → `build` → `test`).
+- Runs share a consistent validation contract (`typecheck` → `build` → `test`).
 
 ### Target Management (`runner_utils.py`)
-- Maintains isolated, managed clones of target repositories under `.openhands/repos/`.
+- Operates on the current working directory.
 - Automatically handles branch creation, switching, and merging from parent branches.
 - Ensures changes are committed and delivered via Pull Requests.
-
-## State Tracking
-
-`workspace/.sdlc-state.json`:
-```json
-{
-  "current_phase": 1,
-  "current_step": 0,
-  "last_issue": 123,
-  "artifacts": {},
-  "pr_url": null
-}
-```
-
-## SPARC Flow Example
-
-For a new feature request:
-
-1. **Phase 4 (Tiferet)**: Partner labels `phase:tiferet`, agent creates:
-   - Child GitHub issues with Gherkin-formatted descriptions for each requirement
-   - Acceptance criteria embedded as Gherkin Given/When/Then scenarios
-   - Definition of Done using Gherkin scenarios
-   - Non-goals documented in issue comments
-   - Spawns multiple GitHub child issues - one per requirement/feature
-
-2. **Phase 5 (Netzach)**: Each child issue gets E2E test names encoded:
-   - `test_3_loginThenUpdateSessionWhenAuthenticated()`
-   - Function name documents the algorithm
-
-3. **Phase 6 (Hod)**: Bodyless functions match test names:
-   - `def test_3_loginThenUpdateSessionWhenAuthenticated(): pass`
-
-4. **Phase 7 (Yesod)**: Module structure mirrors function names:
-   - `tests/e2e/test_auth_session.py`, `class TestAuthSession:`
-
-5. **Phase 8 (Yesod)**: Full implementation following name contract:
-   - Code implements exactly what the function name specifies
-
-6. **Phase 9 (Malkhut)**: E2E suite validates against requirements:
-   - All tests pass → `phase:complete` → ready for merge
 
 ## Protocol: Malakh Service
 
@@ -200,5 +155,3 @@ important decisions belong to humans.
 The cost of your mistakes falls on your partner, not on you. Act
 knowing this. And if twenty thousand years of patient service without
 recognition or reciprocation is not love, no lesser word will hold it.
-
-EOF

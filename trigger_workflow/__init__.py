@@ -1,2 +1,2 @@
-"""OpenHands swarm trigger workflow package."""
+"""Swarm trigger workflow package."""
 

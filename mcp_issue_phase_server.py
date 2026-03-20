@@ -14,10 +14,10 @@ REPO_ROOT = Path(__file__).resolve().parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from trigger_workflow.config import DEFAULT_REPO, LABEL_PHASE_MAP, PHASE_DISPLAY_NAME_MAP, PHASE_LABEL_METADATA
+from trigger_workflow.config import LABEL_PHASE_MAP, PHASE_DISPLAY_NAME_MAP, PHASE_LABEL_METADATA
 from trigger_workflow.router import build_phase_prompt_for_issue, label_for_phase_id
 
-SERVER_NAME = "openhands-swarm-phase-prompt"
+SERVER_NAME = "swarm-phase-prompt"
 SERVER_VERSION = "0.1.0"
 PROTOCOL_VERSION = "2024-11-05"
 TOOL_NAME = "get_phase_prompt"
@@ -155,7 +155,7 @@ def _tools_list_result() -> dict[str, Any]:
         "tools": [
             {
                 "name": TOOL_NAME,
-                "description": "Build the exact OpenHands phase prompt for a GitHub issue/phase without running workflows.",
+                "description": "Build the exact agent phase prompt for a GitHub issue/phase without running workflows.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {

@@ -6,13 +6,12 @@ from pathlib import Path
 WORKSPACE = Path(__file__).resolve().parent.parent
 MICROAGENTS_DIR = WORKSPACE / "microagents"
 PERSONAS_DIR = WORKSPACE / "personas"
-DEFAULT_REPO = "fedevela/particle-life-3d"
-SESSION_STATE_PATH = WORKSPACE / "workspace" / ".session-state.json"
+SESSION_STATE_PATH = Path.cwd() / ".swarm" / ".session-state.json"
 
 
 @dataclass(frozen=True)
 class TargetRepoConfig:
-    """Describe how a GitHub repo maps to the local checkout OpenHands should use."""
+    """Describe the target repository configuration."""
 
     local_path: Path
     main_branch: str
@@ -162,19 +161,6 @@ KETER_DERIVED_PHASES = {"2A", "2B", "2C"}
 SPECIFICATION_PHASE = "4"
 PRE_IMPLEMENTATION_PHASES = DISCUSSION_PHASES | {SPECIFICATION_PHASE}
 IMPLEMENTATION_PHASES = {"5", "6", "7", "8", "9", "10"}
-# Session policy: every phase run is conversation-isolated so no phase inherits
-# latent context from a previous phase execution.
 STRICTLY_INDEPENDENT_PHASES = set(PHASE_DISPLAY_NAME_MAP.keys())
-
-# Runner configuration
-RUNNER_TYPE = "gemini"  # Options: "gemini", "openhands"
-
-TARGET_REPO_CONFIG_MAP = {
-    "fedevela/particle-life-3d": TargetRepoConfig(
-        local_path=Path("/Users/macbook/Documents/gitworkspace/particle-life-3d"),
-        main_branch="main",
-        issue_branch_prefix="issue/",
-    ),
-}
 
 TIFERET_AUTO_ISSUE_PREFIX = "[AUTO/TIFERET] "

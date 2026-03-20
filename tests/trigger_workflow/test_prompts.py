@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import patch
 
 from trigger_workflow.config import TIFERET_AUTO_ISSUE_PREFIX
-from trigger_workflow.openhands_runner import resolve_phase_execution_branch
+from trigger_workflow.runner_utils import resolve_phase_execution_branch
 from trigger_workflow.prompts import (
     build_implementation_phase_prompt,
     build_comment_phase_prompt,
@@ -30,7 +30,7 @@ class PhaseWorkflowNamingTests(unittest.TestCase):
     """Guard canonical phase identifiers and session/branch policy helpers.
 
     These checks pin the stable IDs used throughout routing, branch selection,
-    and OpenHands session scoping. If these mappings drift, downstream
+    and agent session scoping. If these mappings drift, downstream
     orchestration can silently run the right phase logic against the wrong
     branch or conversation scope.
     """

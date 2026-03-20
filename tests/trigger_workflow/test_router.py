@@ -124,7 +124,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         )
 
         self.assertEqual(run_json_phase_mock.call_args.kwargs["session_scope"], "phase-4")
-        create_issue_branches_for_child_issues_mock.assert_called_once_with("owner/repo", [101])
+        create_issue_branches_for_child_issues_mock.assert_called_once_with("owner/repo", 55, [101])
         remove_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:tiferet")
 
     @patch("trigger_workflow.router.advance_issue_label")
@@ -155,6 +155,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
             issue=55,
             phase="5",
             issue_title="Issue",
+            issue_data={"title": "Issue", "body": "Body", "comments": []},
         )
         post_issue_comment_mock.assert_called_once()
         advance_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:netzach")

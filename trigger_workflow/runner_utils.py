@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import json
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .config import (
     IMPLEMENTATION_PHASES,
     PHASE_DISPLAY_NAME_MAP,
     PRE_IMPLEMENTATION_PHASES,
     TIFERET_AUTO_ISSUE_PREFIX,
-    TARGET_REPO_CONFIG_MAP,
-    WORKSPACE,
     TargetRepoConfig,
 )
 from .logging_utils import log_error, log_info
@@ -23,81 +20,13 @@ class RunnerTargetContext:
     local_path: Path
     branch: str
 
-def managed_repo_root() -> Path:
-    """Return the directory that stores isolated OpenHands-managed repository checkouts."""
-    # Keeping the same path for now to avoid confusion, though it's now shared
-    return WORKSPACE / ".openhands" / "repos"
-
-def managed_repo_slug(repo: str) -> str:
-    """Normalize owner/repo into a filesystem-safe stable directory name."""
-    return repo.replace("/", "__")
-
-def managed_repo_path(repo: str) -> Path:
-    """Return the isolated checkout path for a repository."""
-    return managed_repo_root() / managed_repo_slug(repo)
-
 def resolve_target_repo_config(repo: str) -> TargetRepoConfig:
-    """Resolve the configured local checkout and branch policy for a GitHub repository."""
-    config = TARGET_REPO_CONFIG_MAP.get(repo)
-    if config is None:
-        raise SystemExit(
-            f"No local target repository config exists for {repo}. "
-            "Add it to TARGET_REPO_CONFIG_MAP before running this phase."
-        )
-    return config
-
-def ensure_managed_repo_checkout(repo: str, source_path: Path) -> Path:
-    """Create or reuse an isolated managed clone used exclusively by runner runs."""
-    managed_path = managed_repo_path(repo)
-    if (managed_path / ".git").exists():
-        log_info(f"Using existing managed checkout: {managed_path}")
-        return managed_path
-
-    if managed_path.exists():
-        raise SystemExit(f"Managed checkout path exists but is not a git checkout: {managed_path}")
-
-    managed_path.parent.mkdir(parents=True, exist_ok=True)
-    log_info(f"Creating managed checkout from source: {source_path} -> {managed_path}")
-    clone_result = subprocess.run(
-        ["git", "clone", "--no-hardlinks", str(source_path), str(managed_path)],
-        text=True,
-        capture_output=True,
-        timeout=300,
+    """Return a TargetRepoConfig for the current working directory."""
+    return TargetRepoConfig(
+        local_path=Path.cwd(),
+        main_branch="main",
+        issue_branch_prefix="issue/",
     )
-    if clone_result.returncode != 0:
-        raise SystemExit(
-            "Failed to create managed checkout for "
-            f"{repo}.\nstdout:\n{clone_result.stdout}\nstderr:\n{clone_result.stderr}"
-        )
-
-    source_origin_result = subprocess.run(
-        ["git", "remote", "get-url", "origin"],
-        cwd=source_path,
-        text=True,
-        capture_output=True,
-        timeout=60,
-    )
-    source_origin = (source_origin_result.stdout or "").strip()
-    if source_origin_result.returncode == 0 and source_origin:
-        set_origin_result = subprocess.run(
-            ["git", "remote", "set-url", "origin", source_origin],
-            cwd=managed_path,
-            text=True,
-            capture_output=True,
-            timeout=60,
-        )
-        if set_origin_result.returncode != 0:
-            raise SystemExit(
-                "Failed to set managed checkout origin URL from source repository.\n"
-                f"stdout:\n{set_origin_result.stdout}\nstderr:\n{set_origin_result.stderr}"
-            )
-    else:
-        raise SystemExit(
-            "Failed to read source repository origin URL; cannot initialize managed checkout deterministically.\n"
-            f"stdout:\n{source_origin_result.stdout}\nstderr:\n{source_origin_result.stderr}"
-        )
-
-    return managed_path
 
 def resolve_phase_execution_branch(repo: str, phase: str, issue: int) -> str:
     """Return the branch that should back this phase run."""
@@ -143,15 +72,8 @@ def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> Non
         log_info(f"Switching target repository to existing branch '{branch}'")
         result = git_run(local_path, ["switch", branch], capture_output=True)
         if result.returncode != 0:
-            # If switch failed due to local changes, perform a reset and clean in the managed repo.
-            log_info(f"Initial switch to '{branch}' failed (dirty state); attempting reset and clean to recover.")
-            git_run(local_path, ["reset", "--hard", "HEAD"], capture_output=True)
-            git_run(local_path, ["clean", "-fd"], capture_output=True)
-            # Second attempt to switch after cleanup.
-            result = git_run(local_path, ["switch", branch], capture_output=True)
-            if result.returncode != 0:
-                log_error(f"Failed to switch {local_path} to branch '{branch}' even after cleanup: {result.stderr or result.stdout or 'no output'}")
-                raise SystemExit(f"Failed to switch {local_path} to branch '{branch}'.")
+            log_error(f"Failed to switch {local_path} to branch '{branch}': {result.stderr or result.stdout or 'no output'}")
+            raise SystemExit(f"Failed to switch {local_path} to branch '{branch}'.")
         return
 
     if branch == base_branch:
@@ -163,37 +85,47 @@ def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> Non
     )
 
 def prepare_target_repo_checkout(repo: str) -> tuple[TargetRepoConfig, Path]:
-    """Resolve the configured source checkout and return the isolated managed checkout path."""
+    """Resolve the current directory as the target repository."""
     config = resolve_target_repo_config(repo)
-    log_info(
-        "Loaded target repository config: "
-        f"repo={repo}, path={config.local_path}, main_branch={config.main_branch}, "
-        f"issue_branch_prefix={config.issue_branch_prefix}"
-    )
     local_path = config.local_path
-    if not local_path.exists():
-        raise SystemExit(f"Configured target repository path does not exist for {repo}: {local_path}")
     if not (local_path / ".git").exists():
-        raise SystemExit(f"Configured target repository path is not a git checkout: {local_path}")
-    log_info(f"Verified source repository path exists: {local_path}")
+        raise SystemExit(f"Current directory is not a git checkout: {local_path}")
+    log_info(f"Using current directory as target repository: {local_path}")
+    return config, local_path
 
-    managed_path = ensure_managed_repo_checkout(repo, local_path)
-    expected_managed_path = managed_repo_path(repo)
-    if managed_path.resolve() != expected_managed_path.resolve():
-        raise SystemExit(
-            "Managed checkout path mismatch. "
-            f"Expected managed clone at {expected_managed_path}, got {managed_path}. "
-            "Refusing to run phases outside the managed checkout."
-        )
-    if managed_path.resolve() == local_path.resolve():
-        raise SystemExit(
-            "Managed checkout resolved to source repository path. "
-            "Refusing to run phases in the source checkout."
-        )
-    if not managed_path.exists() or not (managed_path / ".git").exists():
-        raise SystemExit(f"Managed checkout is missing or invalid after setup: {managed_path}")
-    log_info(f"Verified managed repository path exists: {managed_path}")
-    return config, managed_path
+def create_issue_branches_for_child_issues(repo: str, parent_issue: int, issue_numbers: list[int]) -> None:
+    """Create missing issue branches for Tiferet-created child issues, branching from the parent issue branch."""
+    config = resolve_target_repo_config(repo)
+    _, local_path = prepare_target_repo_checkout(repo)
+    
+    # The parent issue branch name (e.g. issue/51)
+    parent_branch = f"{config.issue_branch_prefix}{parent_issue}"
+    
+    if not branch_exists(local_path, parent_branch):
+        log_info(f"Parent branch '{parent_branch}' does not exist; creating it from '{config.main_branch}'.")
+        result = git_run(local_path, ["switch", "-c", parent_branch, config.main_branch], capture_output=True)
+        if result.returncode != 0:
+            raise SystemExit(f"Failed to create missing parent branch '{parent_branch}' from '{config.main_branch}'.")
+        log_info(f"Pushing new parent branch '{parent_branch}' to origin...")
+        git_run(local_path, ["push", "origin", parent_branch])
+
+    ensure_git_branch(local_path, parent_branch, base_branch=config.main_branch)
+
+    for issue_number in issue_numbers:
+        branch_name = f"{config.issue_branch_prefix}{issue_number}"
+        if branch_exists(local_path, branch_name):
+            log_info(f"Issue branch already exists: {branch_name}")
+            continue
+
+        log_info(f"Creating child issue branch '{branch_name}' from '{parent_branch}'")
+        result = git_run(local_path, ["switch", "-c", branch_name, parent_branch], capture_output=True)
+        if result.returncode != 0:
+            raise SystemExit(
+                f"Failed to create child issue branch '{branch_name}' from '{parent_branch}' "
+                f"in {local_path}."
+            )
+        log_info(f"Pushing new child issue branch '{branch_name}' to origin...")
+        git_run(local_path, ["push", "origin", branch_name])
 
 def prepare_branch_context(
     repo: str,
@@ -227,7 +159,7 @@ def prepare_branch_context(
         check_base = git_run(local_path, ["rev-parse", "--verify", origin_branch], capture_output=True)
         if check_base.returncode != 0:
             log_error(f"Base branch '{base_branch}' does not exist on origin. Cannot merge.")
-            raise SystemExit(f"Missing required base branch '{base_branch}' for issue #{issue}.")
+            raise SystemExit(f"Missing required base branch '{base_branch}' for issue.")
 
         merge_result = git_run(local_path, ["merge", origin_branch], capture_output=True)
         if merge_result.returncode != 0:
@@ -267,9 +199,9 @@ def finalize_phase_delivery(
 ) -> str:
     """Commit and push phase changes, then return a summary suitable for a GitHub issue comment."""
     context = (
-        prepare_phase_execution_context(repo, phase, issue)
+        prepare_phase_execution_context(repo, phase, issue, issue_data=issue_data)
         if branch_override is None
-        else prepare_branch_context(repo, branch=branch_override, branch_log_label="Resolved explicit target branch")
+        else prepare_branch_context(repo, branch=branch_override, branch_log_label="Resolved explicit target branch", issue_data=issue_data)
     )
     branch = context.branch
     local_path = context.local_path
@@ -299,6 +231,7 @@ def finalize_phase_delivery(
              log_error("Merge conflicts detected during delivery auto-merge.")
         raise SystemExit(f"Failed to auto-merge '{pr_base}' into '{branch}' before delivery. Check for conflicts.")
 
+    import json
     status_result = subprocess.run(
         ["git", "status", "--short"],
         cwd=local_path,
