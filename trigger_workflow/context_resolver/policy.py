@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from ..config import STRICTLY_INDEPENDENT_PHASES
 import subprocess
+import uuid
+from ..config import STRICTLY_INDEPENDENT_PHASES
 
 def conversation_scope_for_phase(phase: str) -> str:
     """
@@ -11,7 +12,9 @@ def conversation_scope_for_phase(phase: str) -> str:
     Others share a persistent per-issue conversation.
     """
     if phase in STRICTLY_INDEPENDENT_PHASES:
-        return f"phase-{phase}"
+        # Guarantee a fresh session across multiple executions of the same phase.
+        run_id = uuid.uuid4().hex[:8]
+        return f"phase-{phase}-{run_id}"
     return ""
 
 

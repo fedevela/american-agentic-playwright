@@ -17,9 +17,9 @@ class PolicyTests(unittest.TestCase):
     """Test policy resolution functions."""
 
     def test_conversation_scope_for_phase_returns_scope_for_strictly_independent(self) -> None:
-        self.assertEqual(conversation_scope_for_phase("1"), "phase-1")
-        self.assertEqual(conversation_scope_for_phase("4"), "phase-4")
-        self.assertEqual(conversation_scope_for_phase("7"), "phase-7")
+        self.assertTrue(conversation_scope_for_phase("1").startswith("phase-1"))
+        self.assertTrue(conversation_scope_for_phase("4").startswith("phase-4"))
+        self.assertTrue(conversation_scope_for_phase("7").startswith("phase-7"))
 
     def test_conversation_scope_for_phase_returns_empty_for_shared_phases(self) -> None:
         self.assertEqual(conversation_scope_for_phase("shared-phase"), "")

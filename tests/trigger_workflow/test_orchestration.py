@@ -57,7 +57,7 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
         )
 
         log_multiline_mock.assert_called_once_with("Generated comment", "Line one\nLine two")
-        self.assertEqual(run_comment_phase_mock.call_args.kwargs["session_scope"], "phase-1")
+        self.assertTrue(run_comment_phase_mock.call_args.kwargs["session_scope"].startswith("phase-1"))
 
     @patch("trigger_workflow.execution.post_issue_comment")
     @patch("trigger_workflow.execution.remove_issue_label")
@@ -122,7 +122,7 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(run_json_phase_mock.call_args.kwargs["session_scope"], "phase-4")
+        self.assertTrue(run_json_phase_mock.call_args.kwargs["session_scope"].startswith("phase-4"))
         create_issue_branches_for_child_issues_mock.assert_called_once_with("owner/repo", 55, [101])
         remove_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:tiferet")
 
@@ -148,7 +148,7 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(run_implementation_phase_mock.call_args.kwargs["session_scope"], "phase-5")
+        self.assertTrue(run_implementation_phase_mock.call_args.kwargs["session_scope"].startswith("phase-5"))
         finalize_delivery_mock.assert_called_once_with(
             repo="owner/repo",
             issue=55,

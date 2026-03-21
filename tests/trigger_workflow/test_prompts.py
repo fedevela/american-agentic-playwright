@@ -55,14 +55,14 @@ class PhaseWorkflowNamingTests(unittest.TestCase):
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "10", 12), "issue/12")
 
     def test_session_scope_for_phase_isolated_for_all_phases(self) -> None:
-        self.assertEqual(conversation_scope_for_phase("1"), "phase-1")
-        self.assertEqual(conversation_scope_for_phase("2A"), "phase-2A")
-        self.assertEqual(conversation_scope_for_phase("2B"), "phase-2B")
-        self.assertEqual(conversation_scope_for_phase("2C"), "phase-2C")
-        self.assertEqual(conversation_scope_for_phase("4"), "phase-4")
-        self.assertEqual(conversation_scope_for_phase("5"), "phase-5")
-        self.assertEqual(conversation_scope_for_phase("9"), "phase-9")
-        self.assertEqual(conversation_scope_for_phase("10"), "phase-10")
+        self.assertTrue(conversation_scope_for_phase("1").startswith("phase-1"))
+        self.assertTrue(conversation_scope_for_phase("2A").startswith("phase-2A"))
+        self.assertTrue(conversation_scope_for_phase("2B").startswith("phase-2B"))
+        self.assertTrue(conversation_scope_for_phase("2C").startswith("phase-2C"))
+        self.assertTrue(conversation_scope_for_phase("4").startswith("phase-4"))
+        self.assertTrue(conversation_scope_for_phase("5").startswith("phase-5"))
+        self.assertTrue(conversation_scope_for_phase("9").startswith("phase-9"))
+        self.assertTrue(conversation_scope_for_phase("10").startswith("phase-10"))
 
 
 class PromptBuilderTests(unittest.TestCase):
