@@ -8,11 +8,10 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run trigger.py N times")
     parser.add_argument("-n", "--count", type=int, default=5, help="Number of times to run")
-    parser.add_argument("args", nargs=argparse.REMAINDER, help="Arguments to pass to trigger.py")
     
-    parsed = parser.parse_args()
+    parsed, unknown = parser.parse_known_args()
     
-    cmd = [sys.executable, "trigger.py"] + parsed.args
+    cmd = [sys.executable, "trigger.py"] + unknown
     
     for i in range(1, parsed.count + 1):
         print(f"\n{'='*80}")
