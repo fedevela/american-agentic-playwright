@@ -58,13 +58,28 @@ def run_gemini(
             log_multiline("Gemini stderr", result.stderr)
     else:
         log_info(f"Gemini execution succeeded (exit code: {result.returncode})")
+        if result.stdout:
+            log_multiline("Gemini stdout", result.stdout)
             
     return result
 
 def extract_gemini_response(stdout: str) -> str:
     """Extract the response text from Gemini JSON output."""
     try:
-        # Gemini might output some lines before the JSON
+        # First try: Find the first '{' and the last '}'
+        start = stdout.find("{")
+        end = stdout.rfind("}")
+        
+        if start != -1 and end != -1 and end > start:
+            json_str = stdout[start:end+1]
+            try:
+                data = json.loads(json_str)
+                if "response" in data:
+                    return str(data["response"]).strip()
+            except json.JSONDecodeError:
+                pass # Fall through to line-by-line approach
+
+        # Second try: Original line-by-line fallback
         lines = stdout.strip().splitlines()
         json_str = ""
         for i in range(len(lines)):

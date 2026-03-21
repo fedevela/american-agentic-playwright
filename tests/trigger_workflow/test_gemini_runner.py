@@ -76,6 +76,10 @@ class GeminiRunnerTests(unittest.TestCase):
         stdout = "Some random logs\n{\"response\": \"Hello World\", \"other\": 1}"
         self.assertEqual(extract_gemini_response(stdout), "Hello World")
 
+    def test_extract_gemini_response_with_prefix_and_suffix(self) -> None:
+        stdout = "MCP issues detected.{ \"response\": \"Hello World\", \"other\": 1 }ClearcutLogger"
+        self.assertEqual(extract_gemini_response(stdout), "Hello World")
+
     def test_extract_gemini_response_no_json(self) -> None:
         stdout = "Some random logs\nWithout any json"
         self.assertEqual(extract_gemini_response(stdout), "")
