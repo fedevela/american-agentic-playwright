@@ -8,7 +8,7 @@ from .extraction import COMMENT_VISIBLE_PHASES
 def build_diff_summary_prompt(diff_text: str) -> str:
     """Build a prompt asking the LLM to summarize a set of code changes."""
     return (
-        "@codebase_investigator You are an expert software engineer.\n"
+        "You are an expert software engineer.\n"
         "Please provide a concise, high-level summary of the following code changes.\n"
         "Focus on the 'why' and 'what', not line-by-line details. Keep it under 5 sentences if possible.\n\n"
         f"```diff\n{diff_text}\n```\n"

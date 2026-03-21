@@ -33,13 +33,12 @@ class GeminiRunnerTests(unittest.TestCase):
         run_mock.return_value = result_mock
         
         run_gemini("Do the thing", repo="owner/repo", issue=1, phase="5")
-        
+
         run_mock.assert_called_once()
         args = run_mock.call_args.args[0]
         self.assertIn("gemini", args)
         self.assertIn("-p", args)
-        self.assertIn("@. Do the thing", args) # Prefix added
-
+        self.assertIn("@. @codebase_investigator\n\nDo the thing", args) # Prefix added
     @patch("trigger_workflow.gemini_runner.prepare_phase_execution_context")
     @patch("subprocess.run")
     def test_run_gemini_handles_failure(self, run_mock, prep_mock) -> None:

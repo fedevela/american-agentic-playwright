@@ -29,8 +29,8 @@ def run_gemini(
     log_info(f"Gemini target branch loaded: {context.branch}")
 
     # Use the requested "yolo" and "non-interactive" style
-    # Prepend '@. ' to ensure Gemini reads the current folder context
-    full_prompt = prompt if prompt.startswith("@.") else f"@. {prompt}"
+    # Always prepend local directory context and force the codebase_investigator tool
+    full_prompt = f"@. @codebase_investigator\n\n{prompt}"
 
     command = [
         "gemini",
