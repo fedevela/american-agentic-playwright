@@ -16,6 +16,7 @@ def run_gemini(
     issue: int,
     phase: str,
     branch_override: str | None = None,
+    session_scope: str = "",
     issue_data: dict[str, Any] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run Gemini CLI headlessly and capture output in the configured target repository."""
@@ -39,6 +40,9 @@ def run_gemini(
         "--approval-mode", "yolo",
         "-o", "json"
     ]
+    
+    if session_scope:
+        command.extend(["--session", session_scope])
 
     log_info(f"Launching Gemini headless run in {context.local_path}")
     log_info(f"Command: {' '.join(command)}")
@@ -111,12 +115,12 @@ def run_gemini_comment_phase(
     repo: str,
     issue: int,
     phase: str,
-    session_scope: str = "", # Gemini CLI handles sessions differently, ignoring for now
+    session_scope: str = "",
     issue_data: dict[str, Any] | None = None,
 ) -> str:
     """Run Gemini and return the assistant reply text."""
     log_info("Requesting comment response from Gemini")
-    result = run_gemini(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data)
+    result = run_gemini(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
     if result.returncode != 0:
         raise SystemExit(f"Gemini execution failed with exit code: {result.returncode}")
 
@@ -138,7 +142,7 @@ def run_gemini_json_phase(
 ) -> dict[str, Any]:
     """Run Gemini and parse the final assistant reply as JSON."""
     log_info("Requesting JSON response from Gemini")
-    content = run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data)
+    content = run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
     log_info("Parsing JSON from assistant reply")
     json_content = extract_json_from_markdown(content)
     try:

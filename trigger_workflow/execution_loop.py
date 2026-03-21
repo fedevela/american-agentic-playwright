@@ -43,6 +43,7 @@ def run_agent_implementation_loop(
             issue=issue,
             phase=phase,
             branch_override=branch_override,
+            session_scope=session_scope,
             issue_data=issue_data,
         )
         if result.returncode != 0:

@@ -56,6 +56,25 @@ class GeminiRunnerTests(unittest.TestCase):
         result = run_gemini("Failing task", repo="owner/repo", issue=1, phase="5")
         self.assertEqual(result.returncode, 1)
 
+    @patch("trigger_workflow.gemini_runner.prepare_phase_execution_context")
+    @patch("subprocess.run")
+    def test_run_gemini_uses_session_scope_flag(self, run_mock, prep_mock) -> None:
+        context_mock = MagicMock()
+        context_mock.local_path = Path("/mock/path")
+        context_mock.branch = "branch"
+        prep_mock.return_value = context_mock
+        
+        result_mock = MagicMock()
+        result_mock.returncode = 0
+        run_mock.return_value = result_mock
+        
+        run_gemini("Do the thing", repo="owner/repo", issue=1, phase="5", session_scope="phase-5")
+
+        run_mock.assert_called_once()
+        args = run_mock.call_args.args[0]
+        self.assertIn("--session", args)
+        self.assertIn("phase-5", args)
+
     @patch("trigger_workflow.gemini_runner.prepare_branch_context")
     @patch("subprocess.run")
     def test_run_gemini_uses_branch_override(self, run_mock, prep_mock) -> None:
