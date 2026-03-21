@@ -124,7 +124,7 @@ class GitClientTests(unittest.TestCase):
     @patch("trigger_workflow.git_client.branch_exists", return_value=False)
     @patch("trigger_workflow.git_client.git_run")
     def test_ensure_git_branch_fails_if_feature_missing_both_local_and_origin(self, run_mock, exists_mock, curr_mock) -> None:
-        # All git runs fail (local switch, fetch, origin switch)
+        # All git runs fail (local switch main, fetch main, origin switch main, local switch master, fetch master, origin switch master)
         res = MagicMock()
         res.returncode = 1
         res.stderr = "error output"
@@ -133,7 +133,28 @@ class GitClientTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as exc:
             ensure_git_branch(Path("/mock"), "feature", base_branch="main")
         self.assertIn("Failed to create branch 'feature'", str(exc.exception))
-        self.assertEqual(run_mock.call_count, 3) # switch local, fetch, switch origin
+        self.assertEqual(run_mock.call_count, 6) # 3 for main, 3 for master
+
+    @patch("trigger_workflow.git_client.current_branch", return_value="other")
+    @patch("trigger_workflow.git_client.branch_exists", return_value=False)
+    @patch("trigger_workflow.git_client.git_run")
+    def test_ensure_git_branch_creates_from_master_fallback(self, run_mock, exists_mock, curr_mock) -> None:
+        fail_res = MagicMock()
+        fail_res.returncode = 1
+        success_res = MagicMock()
+        success_res.returncode = 0
+        
+        # main local switch, main fetch, main origin switch fail
+        # master local switch succeeds, push succeeds
+        run_mock.side_effect = [fail_res, fail_res, fail_res, success_res, success_res]
+        
+        ensure_git_branch(Path("/mock"), "feature", base_branch="main")
+        
+        self.assertEqual(run_mock.call_count, 5)
+        # 4th call should be switching to master
+        self.assertIn("master", run_mock.call_args_list[3].args[1])
+        # 5th call should be pushing feature
+        self.assertIn("push", run_mock.call_args_list[4].args[1])
 
     @patch("trigger_workflow.git_client.current_branch", return_value="other")
     @patch("trigger_workflow.git_client.branch_exists", return_value=False)
