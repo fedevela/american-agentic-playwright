@@ -26,8 +26,8 @@ def run_agent_implementation_loop(
     branch_override: str | None = None,
     session_scope: str = "",
     issue_data: dict[str, Any] | None = None,
-) -> None:
-    """Run an implementation phase loop with automated validation/retry cycles."""
+) -> str:
+    """Run an implementation phase loop with automated validation/retry cycles and return the final agent summary."""
     print("=" * 60)
     print("Agent Execution Loop")
     print("=" * 60)
@@ -35,6 +35,7 @@ def run_agent_implementation_loop(
     print("=" * 60)
 
     pending_task = task
+    final_response = ""
     for attempt in range(1, MAX_VALIDATION_ATTEMPTS + 1):
         result = run_gemini(
             pending_task,
@@ -50,6 +51,7 @@ def run_agent_implementation_loop(
         response = extract_gemini_response(result.stdout)
         if response:
             log_multiline("Assistant response", response)
+            final_response = response
         else:
             log_info("Agent run completed with no parsed response.")
 
@@ -58,7 +60,7 @@ def run_agent_implementation_loop(
                 f"Skipping automated validation for phase {phase}; validation is reserved for phases 5 through 9."
             )
             print("\nAgent execution complete.")
-            return
+            return final_response or "Implementation phase completed without generating a summary response."
 
         test_result = run_phase_tests(repo=repo, issue=issue, phase=phase, branch_override=branch_override, issue_data=issue_data)
         if test_result.stdout:
@@ -68,7 +70,7 @@ def run_agent_implementation_loop(
 
         if test_result.returncode == 0:
             print("\nAgent execution complete.")
-            return
+            return final_response or "Implementation phase completed without generating a summary response."
 
         if attempt >= MAX_VALIDATION_ATTEMPTS:
             raise SystemExit(f"Validation command contract failed ({VALIDATION_COMMAND_CONTRACT}).")
@@ -79,3 +81,5 @@ def run_agent_implementation_loop(
             f"(retry {retry_number}/{MAX_VALIDATION_RETRIES})."
         )
         pending_task = build_single_retry_fix_task(summarize_test_output(test_result), retry_number=retry_number)
+        
+    return final_response or "Implementation phase completed without generating a summary response."

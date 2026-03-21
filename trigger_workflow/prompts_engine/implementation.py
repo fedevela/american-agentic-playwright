@@ -5,15 +5,6 @@ from .extraction import build_issue_runtime_context, strip_microagent_persona_pe
 from .extraction import COMMENT_VISIBLE_PHASES
 
 
-def build_diff_summary_prompt(diff_text: str) -> str:
-    """Build a prompt asking the LLM to summarize a set of code changes."""
-    return (
-        "You are an expert software engineer.\n"
-        "Please provide a concise, high-level summary of the following code changes.\n"
-        "Focus on the 'why' and 'what', not line-by-line details. Keep it under 5 sentences if possible.\n\n"
-        f"```diff\n{diff_text}\n```\n"
-    )
-
 def build_implementation_phase_prompt(
     label: str,
     issue: int,
@@ -29,6 +20,7 @@ def build_implementation_phase_prompt(
         "- Always constrain potentially long-running commands (path filters and/or explicit command timeouts).",
         "- If terminal reports the previous command is still running and blocks new commands, immediately recover by interacting with the active process (`is_input=true`): first poll with empty input, then interrupt with `C-c` if needed, then continue with a narrower command.",
         "- Do not loop on blocked terminal state; recover deterministically and proceed with code edits.",
+        "- When you have completed all validation and code changes, your final text response MUST be a clear, high-level semantic summary of the implementation you just performed (what files were touched, what logic was added/changed). This summary will be posted directly to the GitHub issue.",
     ]
     
     discovery_procedure = [

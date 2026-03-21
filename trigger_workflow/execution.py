@@ -28,7 +28,6 @@ from .prompts import (
     build_phase_four_summary,
     build_tiferet_specification_prompt,
     format_phase_comment,
-    build_diff_summary_prompt,
 )
 from .git_client import create_issue_branches_for_child_issues
 from .validation import validate_tiferet_specification_payload_structure
@@ -44,12 +43,12 @@ def run_json_phase(prompt: str, repo: str, issue: int, phase: str, session_scope
     return run_gemini_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
 
 
-def run_implementation_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> None:
-    """Invokes the Malakh for code-modifying phases (Netzach through Yesod)."""
-    run_gemini_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
+def run_implementation_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> str:
+    """Invokes the Malakh for code-modifying phases (Netzach through Yesod) and returns its generated summary."""
+    return run_gemini_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
 
 
-def formalize_delivery_handoff(repo: str, issue: int, phase: str, issue_title: str, issue_data: dict[str, Any] | None = None) -> tuple[str, str]:
+def formalize_delivery_handoff(repo: str, issue: int, phase: str, issue_title: str, issue_data: dict[str, Any] | None = None) -> str:
     """
     Commit and push changes, formalizing the handoff to the next phase.
     
@@ -240,7 +239,7 @@ def embody_implementation_contract(signal: SfiratPhaseSignal) -> None:
     prompt, session_scope = build_phase_execution_prompt(signal, build_implementation_phase_prompt)
 
     log_info("Running agent...")
-    run_implementation_phase(
+    agent_summary = run_implementation_phase(
         prompt,
         repo=signal.repo,
         issue=signal.issue,
@@ -252,7 +251,7 @@ def embody_implementation_contract(signal: SfiratPhaseSignal) -> None:
     
     # Delivery handoff formalizes the changes through a commit and push.
     log_info("Formalizing git delivery (commit + push)...")
-    delivery_summary, diff_text = formalize_delivery_handoff(
+    delivery_summary = formalize_delivery_handoff(
         repo=signal.repo,
         issue=signal.issue,
         phase=signal.phase,
@@ -260,24 +259,7 @@ def embody_implementation_contract(signal: SfiratPhaseSignal) -> None:
         issue_data=signal.issue_data,
     )
     
-    final_comment_body = delivery_summary
-    if diff_text:
-        log_info("Requesting LLM summary of committed code changes...")
-        diff_prompt = build_diff_summary_prompt(diff_text)
-        try:
-            llm_summary = run_comment_phase(
-                prompt=diff_prompt,
-                repo=signal.repo,
-                issue=signal.issue,
-                phase=signal.phase,
-                session_scope="Code summary pass",
-                issue_data=None, # Keep context small
-            )
-            final_comment_body = f"{llm_summary}\n\n---\n\n{delivery_summary}"
-        except SystemExit as e:
-            log_error(f"Failed to generate LLM diff summary: {e}")
-            # Fall back to just the delivery summary if the LLM fails here
-
+    final_comment_body = f"{agent_summary}\n\n---\n\n{delivery_summary}"
     log_multiline("Final delivery summary", final_comment_body)
     
     # Posting the summary back to the issue preserves the traceability of the embodiment.

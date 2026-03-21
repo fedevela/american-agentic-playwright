@@ -4,7 +4,7 @@ from .config import LABEL_PHASE_MAP
 from .prompts_engine.extraction import build_phase_prompt_input_context
 from .prompts_engine.discussion import build_comment_phase_prompt, build_phase_2_story_requirements
 from .prompts_engine.specification import build_tiferet_specification_prompt
-from .prompts_engine.implementation import build_implementation_phase_prompt, build_diff_summary_prompt
+from .prompts_engine.implementation import build_implementation_phase_prompt
 from .prompts_engine.formatting import format_phase_comment, build_phase_four_summary
 
 def determine_phase_from_label(label: str) -> str | None:
@@ -18,7 +18,6 @@ __all__ = [
     "build_phase_2_story_requirements",
     "build_tiferet_specification_prompt",
     "build_implementation_phase_prompt",
-    "build_diff_summary_prompt",
     "format_phase_comment",
     "build_phase_four_summary",
 ]

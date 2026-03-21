@@ -11,23 +11,26 @@ from trigger_workflow.execution_loop import run_agent_implementation_loop
 class ExecutionLoopTests(unittest.TestCase):
     """Test the agent execution and validation loop."""
 
+    @patch("trigger_workflow.execution_loop.extract_gemini_response")
     @patch("trigger_workflow.execution_loop.run_gemini")
     @patch("trigger_workflow.execution_loop.run_phase_tests")
-    def test_run_agent_implementation_loop_success_first_try(self, run_tests_mock, run_gemini_mock) -> None:
+    def test_run_agent_implementation_loop_success_first_try(self, run_tests_mock, run_gemini_mock, extract_mock) -> None:
         gemini_result = MagicMock()
         gemini_result.returncode = 0
-        gemini_result.stdout = "I did it"
+        gemini_result.stdout = '{"response": "Mocked JSON"}'
         run_gemini_mock.return_value = gemini_result
+        extract_mock.return_value = "Mocked JSON"
         
         test_result = MagicMock()
         test_result.returncode = 0
         test_result.stdout = "Tests passed"
         run_tests_mock.return_value = test_result
         
-        run_agent_implementation_loop("Task", repo="owner/repo", issue=1, phase="5")
+        result = run_agent_implementation_loop("Task", repo="owner/repo", issue=1, phase="5")
         
         run_gemini_mock.assert_called_once()
         run_tests_mock.assert_called_once()
+        self.assertEqual(result, "Mocked JSON")
 
     @patch("trigger_workflow.execution_loop.run_gemini")
     def test_run_agent_implementation_loop_exits_on_gemini_error(self, run_gemini_mock) -> None:
