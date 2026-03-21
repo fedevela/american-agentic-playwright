@@ -24,7 +24,7 @@ def run_agent_implementation_loop(
     issue: int,
     phase: str,
     branch_override: str | None = None,
-    session_scope: str = "",
+    session_scope: str = "", # Ignored for attempt 1, overridden by Gemini's internal ID
     issue_data: dict[str, Any] | None = None,
 ) -> str:
     """Run an implementation phase loop with automated validation/retry cycles and return the final agent summary."""
@@ -36,7 +36,7 @@ def run_agent_implementation_loop(
 
     pending_task = task
     final_response = ""
-    active_session_id = session_scope  # Initially passed scope
+    active_session_id = ""  # Start fresh on attempt 1 without resuming
     
     for attempt in range(1, MAX_VALIDATION_ATTEMPTS + 1):
         result = run_gemini(
