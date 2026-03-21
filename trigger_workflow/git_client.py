@@ -165,9 +165,9 @@ def prepare_branch_context(
 
     # Auto-merge from base branch as requested for phases after Tiferet
     parent_issue = extract_parent_issue(str(issue_data.get("body") or "")) if issue_data else None
-    base_branch = f"{config.issue_branch_prefix}{parent_issue}" if parent_issue else config.main_branch
+    base_branch = f"{config.issue_branch_prefix}{parent_issue}" if parent_issue else None
 
-    if branch != base_branch:
+    if base_branch and branch != base_branch:
         log_info(f"Checking for updates from base branch '{base_branch}' to merge into '{branch}'")
         git_run(local_path, ["fetch", "origin"])
         
