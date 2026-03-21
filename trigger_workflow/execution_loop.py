@@ -36,6 +36,8 @@ def run_agent_implementation_loop(
 
     pending_task = task
     final_response = ""
+    active_session_id = session_scope  # Initially passed scope
+    
     for attempt in range(1, MAX_VALIDATION_ATTEMPTS + 1):
         result = run_gemini(
             pending_task,
@@ -43,13 +45,18 @@ def run_agent_implementation_loop(
             issue=issue,
             phase=phase,
             branch_override=branch_override,
-            session_scope=session_scope,
+            session_scope=active_session_id,
             issue_data=issue_data,
         )
         if result.returncode != 0:
             raise SystemExit(f"Agent execution failed with exit code: {result.returncode}")
 
-        response = extract_gemini_response(result.stdout)
+        response, returned_session_id = extract_gemini_response(result.stdout)
+        
+        # If Gemini returned a specific internal session_id, we adopt it for all retries in this loop
+        if returned_session_id:
+            active_session_id = returned_session_id
+            
         if response:
             log_multiline("Assistant response", response)
             final_response = response

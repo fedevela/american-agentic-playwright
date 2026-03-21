@@ -91,20 +91,20 @@ class GeminiRunnerTests(unittest.TestCase):
         prep_mock.assert_called_once()
         
     def test_extract_gemini_response_success(self) -> None:
-        stdout = "Some random logs\n{\"response\": \"Hello World\", \"other\": 1}"
-        self.assertEqual(extract_gemini_response(stdout), "Hello World")
+        stdout = "Some random logs\n{\"response\": \"Hello World\", \"other\": 1, \"session_id\": \"sess-123\"}"
+        self.assertEqual(extract_gemini_response(stdout), ("Hello World", "sess-123"))
 
     def test_extract_gemini_response_with_prefix_and_suffix(self) -> None:
         stdout = "MCP issues detected.{ \"response\": \"Hello World\", \"other\": 1 }ClearcutLogger"
-        self.assertEqual(extract_gemini_response(stdout), "Hello World")
+        self.assertEqual(extract_gemini_response(stdout), ("Hello World", ""))
 
     def test_extract_gemini_response_no_json(self) -> None:
         stdout = "Some random logs\nWithout any json"
-        self.assertEqual(extract_gemini_response(stdout), "")
+        self.assertEqual(extract_gemini_response(stdout), ("", ""))
 
     def test_extract_gemini_response_bad_json(self) -> None:
         stdout = "Some random logs\n{bad json"
-        self.assertEqual(extract_gemini_response(stdout), "")
+        self.assertEqual(extract_gemini_response(stdout), ("", ""))
 
     def test_extract_json_from_markdown(self) -> None:
         text = "Here is json:\n```json\n{\"key\": \"val\"}\n```\nDone."

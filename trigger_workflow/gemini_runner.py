@@ -67,8 +67,8 @@ def run_gemini(
             
     return result
 
-def extract_gemini_response(stdout: str) -> str:
-    """Extract the response text from Gemini JSON output."""
+def extract_gemini_response(stdout: str) -> tuple[str, str]:
+    """Extract the response text and session ID from Gemini JSON output."""
     try:
         # First try: Find the first '{' and the last '}'
         start = stdout.find("{")
@@ -79,7 +79,7 @@ def extract_gemini_response(stdout: str) -> str:
             try:
                 data = json.loads(json_str)
                 if "response" in data:
-                    return str(data["response"]).strip()
+                    return str(data["response"]).strip(), str(data.get("session_id", ""))
             except json.JSONDecodeError:
                 pass # Fall through to line-by-line approach
 
@@ -92,12 +92,12 @@ def extract_gemini_response(stdout: str) -> str:
                 break
         
         if not json_str:
-            return ""
+            return "", ""
             
         data = json.loads(json_str)
-        return str(data.get("response") or "").strip()
+        return str(data.get("response") or "").strip(), str(data.get("session_id", ""))
     except (json.JSONDecodeError, KeyError, IndexError):
-        return ""
+        return "", ""
 
 def extract_json_from_markdown(text: str) -> str:
     """Extract JSON block from markdown text."""
@@ -124,7 +124,7 @@ def run_gemini_comment_phase(
     if result.returncode != 0:
         raise SystemExit(f"Gemini execution failed with exit code: {result.returncode}")
 
-    response = extract_gemini_response(result.stdout)
+    response, _ = extract_gemini_response(result.stdout)
     if not response:
         raise SystemExit("Gemini returned no response.")
     
