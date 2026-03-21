@@ -32,5 +32,5 @@ def build_phase_four_summary(created: list[dict[str, Any]]) -> str:
     log_info("Building child-issue summary comment")
     lines = [f"Spawned {len(created)} auto-created child issues in implementation order:"]
     for item in created:
-        lines.append(f"- {item['title']}: {item['url']}")
+        lines.append(f"- {item['title']}: {item.get('html_url', item.get('url'))}")
     return "\n".join(lines)

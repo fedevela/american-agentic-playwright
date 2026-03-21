@@ -69,7 +69,7 @@ def preview_phase_execution_plan(signal: SfiratPhaseSignal) -> None:
         "\n".join(
             [
                 "1. Run agent with the prompt above on the resolved issue branch.",
-                "2. Run trigger validation flow for phases 6-9 (`typecheck -> build -> test:e2e`).",
+                "2. Run trigger validation flow for phases 6-9 (`make build -> make test`).",
                 "3. Finalize delivery (git add/commit/push and PR create/lookup).",
                 "4. Post the delivery summary as a wrapped phase comment.",
                 "5. Advance the issue label to the next phase.",

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 from typing import Any
 
 from .git_client import prepare_branch_context, prepare_phase_execution_context
@@ -10,12 +9,10 @@ from .logging_utils import log_info
 MAX_VALIDATION_RETRIES = 3
 MAX_VALIDATION_ATTEMPTS = 1 + MAX_VALIDATION_RETRIES
 TEST_OUTPUT_MAX_CHARS = 12000
-VALIDATION_COMMAND_CONTRACT = "`npm run typecheck` -> `npm run build` -> `npm run test` -> `npm run tests:e2e`"
+VALIDATION_COMMAND_CONTRACT = "`make build` -> `make test`"
 VALIDATION_COMMANDS = (
-    ["npm", "run", "typecheck"],
-    ["npm", "run", "build"],
-    ["npm", "run", "test"],
-    ["npm", "run", "tests:e2e"],
+    ["make", "build"],
+    ["make", "test"],
 )
 
 def run_phase_tests(
@@ -32,7 +29,6 @@ def run_phase_tests(
         if branch_override is None
         else prepare_branch_context(repo, branch=branch_override, branch_log_label="Resolved explicit target branch", issue_data=issue_data)
     )
-    ensure_playwright_test_prerequisites(context.local_path)
     combined_stdout: list[str] = []
     combined_stderr: list[str] = []
 
@@ -91,38 +87,3 @@ def build_single_retry_fix_task(test_output: str, *, retry_number: int) -> str:
         "Do not expand scope beyond fixing these validation failures.\n"
         f"Apply minimal code changes to make {VALIDATION_COMMAND_CONTRACT} pass, then finish."
     )
-
-def ensure_playwright_test_prerequisites(local_path: Path) -> None:
-    """Ensure the repository has local dependencies installed for Playwright test runs."""
-    local_playwright = local_path / "node_modules" / ".bin" / "playwright"
-    if local_playwright.exists():
-        return
-
-    log_info("Playwright CLI unavailable; running npm ci to install test dependencies")
-    install_result = subprocess.run(
-        ["npm", "ci"],
-        cwd=local_path,
-        text=True,
-        capture_output=True,
-        timeout=1200,
-    )
-    if install_result.returncode != 0:
-        raise SystemExit(
-            "Failed to install npm dependencies required for tests.\n"
-            f"stdout:\n{install_result.stdout}\n"
-            f"stderr:\n{install_result.stderr}"
-        )
-
-    if not local_playwright.exists():
-        playwright_version_result = subprocess.run(
-            ["npx", "playwright", "--version"],
-            cwd=local_path,
-            text=True,
-            capture_output=True,
-            timeout=120,
-        )
-        raise SystemExit(
-            "Playwright CLI is still unavailable in node_modules after `npm ci`.\n"
-            f"stdout:\n{playwright_version_result.stdout}\n"
-            f"stderr:\n{playwright_version_result.stderr}"
-        )
