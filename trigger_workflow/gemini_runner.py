@@ -42,7 +42,7 @@ def run_gemini(
     ]
     
     if session_scope:
-        command.extend(["--session", session_scope])
+        command.extend(["--resume", session_scope])
 
     log_info(f"Launching Gemini headless run in {context.local_path}")
     log_info(f"Command: {' '.join(command)}")

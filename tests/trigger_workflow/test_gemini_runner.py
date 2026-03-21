@@ -72,7 +72,7 @@ class GeminiRunnerTests(unittest.TestCase):
 
         run_mock.assert_called_once()
         args = run_mock.call_args.args[0]
-        self.assertIn("--session", args)
+        self.assertIn("--resume", args)
         self.assertIn("phase-5", args)
 
     @patch("trigger_workflow.gemini_runner.prepare_branch_context")
