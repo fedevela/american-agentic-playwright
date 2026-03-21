@@ -76,6 +76,7 @@ class DeliveryTests(unittest.TestCase):
             self.make_result(stdout="abc123sha\trefs/heads/issue/123\n"), # remote sha matches
             self.make_result(stdout="abc123\n"), # short sha
             self.make_result(stdout="file.py\nother.py\n"), # show
+            self.make_result(stdout="diff content\n"), # show diff
         ]
         
         self.mock_run.side_effect = [
@@ -83,7 +84,7 @@ class DeliveryTests(unittest.TestCase):
             self.make_result(stdout="https://github.com/owner/repo/pull/1\n"), # gh pr create
         ]
 
-        summary = finalize_phase_delivery(
+        summary, diff = finalize_phase_delivery(
             repo="owner/repo",
             issue=123,
             phase="5",
@@ -95,6 +96,7 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn("PR base: `main`", summary)
         self.assertIn("https://github.com/owner/repo/pull/1", summary)
         self.assertIn("`file.py`", summary)
+        self.assertEqual(diff, "diff content")
 
     def test_finalize_phase_delivery_fails_if_no_changes(self) -> None:
         self.mock_git_run.side_effect = [
@@ -126,13 +128,14 @@ class DeliveryTests(unittest.TestCase):
             self.make_result(stdout="abc123sha\trefs/heads/issue/123\n"), # remote sha
             self.make_result(stdout="abc123\n"), # short sha
             self.make_result(stdout="file.py\n"), # show files
+            self.make_result(stdout="diff content\n"), # show diff
         ]
         
         self.mock_run.side_effect = [
             self.make_result(stdout='[{"url": "https://github.com/owner/repo/pull/99"}]\n'), # gh pr list
         ]
 
-        summary = finalize_phase_delivery(
+        summary, diff = finalize_phase_delivery(
             repo="owner/repo",
             issue=123,
             phase="5",
@@ -140,6 +143,7 @@ class DeliveryTests(unittest.TestCase):
         )
         
         self.assertIn("https://github.com/owner/repo/pull/99", summary)
+        self.assertEqual(diff, "diff content")
         
     def test_finalize_phase_delivery_detects_parent_issue(self) -> None:
         self.mock_git_run.side_effect = [
@@ -153,7 +157,8 @@ class DeliveryTests(unittest.TestCase):
             self.make_result(stdout="abc123sha\n"), # local sha
             self.make_result(stdout="abc123sha\trefs/heads/issue/123\n"), # remote sha matches
             self.make_result(stdout="abc123\n"), # short sha
-            self.make_result(stdout="file.py\n"), # show
+            self.make_result(stdout="file.py\n"), # show files
+            self.make_result(stdout="diff content\n"), # show diff
         ]
         
         self.mock_run.side_effect = [
@@ -161,7 +166,7 @@ class DeliveryTests(unittest.TestCase):
             self.make_result(stdout="https://github.com/owner/repo/pull/1\n"), # gh pr create
         ]
 
-        summary = finalize_phase_delivery(
+        summary, diff = finalize_phase_delivery(
             repo="owner/repo",
             issue=123,
             phase="5",
@@ -171,6 +176,7 @@ class DeliveryTests(unittest.TestCase):
         
         # PR base should be issue/42, not main
         self.assertIn("PR base: `issue/42`", summary)
+        self.assertEqual(diff, "diff content")
         
     def test_finalize_phase_delivery_fails_on_push_mismatch(self) -> None:
         self.mock_git_run.side_effect = [

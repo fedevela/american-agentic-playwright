@@ -128,7 +128,7 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
 
     @patch("trigger_workflow.execution.advance_issue_label")
     @patch("trigger_workflow.execution.post_issue_comment")
-    @patch("trigger_workflow.execution.formalize_delivery_handoff", return_value="Delivery summary")
+    @patch("trigger_workflow.execution.formalize_delivery_handoff", return_value=("Delivery summary", "diff"))
     @patch("trigger_workflow.execution.run_implementation_phase")
     def test_execute_agent_phase_uses_shared_issue_session_scope(
         self,

@@ -27,8 +27,8 @@ def finalize_phase_delivery(
     issue_title: str = "",
     branch_override: str | None = None,
     issue_data: dict[str, Any] | None = None,
-) -> str:
-    """Commit and push phase changes, then return a summary suitable for a GitHub issue comment."""
+) -> tuple[str, str]:
+    """Commit and push phase changes, then return a summary suitable for a GitHub issue comment, plus the git diff."""
     context = (
         prepare_phase_execution_context(repo, phase, issue, issue_data=issue_data)
         if branch_override is None
@@ -214,7 +214,8 @@ def finalize_phase_delivery(
 
     files_block = "\n".join(f"- `{path}`" for path in changed_files) if changed_files else "- `(no file list available)`"
     file_count = len(changed_files)
-    return (
+    
+    summary_str = (
         "Implementation delivery summary:\n\n"
         f"- Phase: `{phase}`\n"
         f"- Phase name: `{phase_display}`\n"
@@ -227,3 +228,13 @@ def finalize_phase_delivery(
         "Changed files:\n"
         f"{files_block}"
     )
+
+    diff_result = git_run_strict(
+        local_path,
+        ["show", "--format=", "HEAD"],
+        failure_message="Failed to extract commit diff for delivery summary",
+        capture_output=True
+    )
+    commit_diff = (diff_result.stdout or "").strip()
+
+    return summary_str, commit_diff

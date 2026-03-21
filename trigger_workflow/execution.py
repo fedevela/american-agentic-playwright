@@ -28,6 +28,7 @@ from .prompts import (
     build_phase_four_summary,
     build_tiferet_specification_prompt,
     format_phase_comment,
+    build_diff_summary_prompt,
 )
 from .git_client import create_issue_branches_for_child_issues
 from .validation import validate_tiferet_specification_payload_structure
@@ -48,7 +49,7 @@ def run_implementation_phase(prompt: str, repo: str, issue: int, phase: str, ses
     run_gemini_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
 
 
-def formalize_delivery_handoff(repo: str, issue: int, phase: str, issue_title: str, issue_data: dict[str, Any] | None = None) -> str:
+def formalize_delivery_handoff(repo: str, issue: int, phase: str, issue_title: str, issue_data: dict[str, Any] | None = None) -> tuple[str, str]:
     """
     Commit and push changes, formalizing the handoff to the next phase.
     
@@ -251,18 +252,37 @@ def embody_implementation_contract(signal: SfiratPhaseSignal) -> None:
     
     # Delivery handoff formalizes the changes through a commit and push.
     log_info("Formalizing git delivery (commit + push)...")
-    delivery_summary = formalize_delivery_handoff(
+    delivery_summary, diff_text = formalize_delivery_handoff(
         repo=signal.repo,
         issue=signal.issue,
         phase=signal.phase,
         issue_title=str(signal.issue_data.get("title") or ""),
         issue_data=signal.issue_data,
     )
-    log_multiline("Delivery summary", delivery_summary)
+    
+    final_comment_body = delivery_summary
+    if diff_text:
+        log_info("Requesting LLM summary of committed code changes...")
+        diff_prompt = build_diff_summary_prompt(diff_text)
+        try:
+            llm_summary = run_comment_phase(
+                prompt=diff_prompt,
+                repo=signal.repo,
+                issue=signal.issue,
+                phase=signal.phase,
+                session_scope="Code summary pass",
+                issue_data=None, # Keep context small
+            )
+            final_comment_body = f"{llm_summary}\n\n---\n\n{delivery_summary}"
+        except SystemExit as e:
+            log_error(f"Failed to generate LLM diff summary: {e}")
+            # Fall back to just the delivery summary if the LLM fails here
+
+    log_multiline("Final delivery summary", final_comment_body)
     
     # Posting the summary back to the issue preserves the traceability of the embodiment.
     log_info("Posting delivery summary comment...")
-    post_phase_signal_comment(signal, delivery_summary)
+    post_phase_signal_comment(signal, final_comment_body)
     log_info("Delivery summary comment posted")
     
     # Move the signal to the next phase in the sequence.
