@@ -16,22 +16,15 @@ from trigger_workflow.context_resolver.policy import (
 class PolicyTests(unittest.TestCase):
     """Test policy resolution functions."""
 
-    def test_conversation_scope_for_phase_returns_scope_for_strictly_independent(self) -> None:
-        self.assertTrue(conversation_scope_for_phase("1").startswith("phase-1"))
-        self.assertTrue(conversation_scope_for_phase("4").startswith("phase-4"))
-        self.assertTrue(conversation_scope_for_phase("7").startswith("phase-7"))
+    def test_conversation_scope_for_phase_returns_unique_scope(self) -> None:
+        self.assertTrue(conversation_scope_for_phase("1").startswith("phase-1-"))
+        self.assertTrue(conversation_scope_for_phase("4").startswith("phase-4-"))
+        self.assertTrue(conversation_scope_for_phase("7").startswith("phase-7-"))
 
-    def test_conversation_scope_for_phase_returns_empty_for_shared_phases(self) -> None:
-        self.assertEqual(conversation_scope_for_phase("shared-phase"), "")
-        
-    def test_describe_phase_conversation_policy_for_independent(self) -> None:
-        desc = describe_phase_conversation_policy("1", "phase-1")
-        self.assertIn("strictly independent phase session", desc)
-        self.assertIn("'phase-1'", desc)
-        
-    def test_describe_phase_conversation_policy_for_shared(self) -> None:
-        desc = describe_phase_conversation_policy("shared-phase", "")
-        self.assertIn("shared per-issue session policy", desc)
+    def test_describe_phase_conversation_policy(self) -> None:
+        desc = describe_phase_conversation_policy("1", "phase-1-abcd")
+        self.assertIn("independent phase session", desc)
+        self.assertIn("'phase-1-abcd'", desc)
 
     @patch("subprocess.run")
     def test_detect_local_repo_name_handles_ssh_url(self, run_mock) -> None:
