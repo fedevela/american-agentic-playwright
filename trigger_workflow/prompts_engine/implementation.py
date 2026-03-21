@@ -53,7 +53,7 @@ def build_implementation_phase_prompt(
             "  4) dependency-direction artifacts,",
             "  5) integration-seam artifacts.",
             "- Keep artifacts requirement-traceable: each artifact must map to one or more canonical requirement IDs in the issue.",
-            "- Do not stop at read-only analysis; leave a non-empty git diff with concrete architectural edits suitable for commit.",
+            "- Do not stop at read-only analysis; leave a non-empty git diff with concrete architectural edits. DO NOT commit these changes.",
             "- Apply an explicit completion gate before finishing: if canonical requirement coverage or non-empty diff conditions are not met, continue implementing artifacts.",
             "- Do not fully implement end-user behavior; focus on placement, boundaries, contracts, and dependency direction.",
         ]
@@ -87,7 +87,8 @@ def build_implementation_phase_prompt(
     
     requirements_block = f"""
 ## Practical Context
-You are working directly in a git repository. Your changes must be committed and traceable.
+You are working directly in a git repository. Your changes must be traceable.
+**DO NOT RUN `git commit` OR `git push`.** The automated workflow will commit and push your changes after you finish.
 
 ## Discovery and Execution Procedure
 {chr(10).join(discovery_procedure)}
