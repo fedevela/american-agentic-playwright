@@ -53,7 +53,7 @@ class GeminiRunnerTests(unittest.TestCase):
         run_mock.return_value = result_mock
         
         # Should not raise, just return result
-        result = run_gemini("@. Already prefixed", repo="owner/repo", issue=1, phase="5")
+        result = run_gemini("Failing task", repo="owner/repo", issue=1, phase="5")
         self.assertEqual(result.returncode, 1)
 
     @patch("trigger_workflow.gemini_runner.prepare_branch_context")
