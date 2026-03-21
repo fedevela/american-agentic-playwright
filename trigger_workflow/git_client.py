@@ -93,23 +93,34 @@ def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> Non
         git_run_strict(local_path, ["switch", branch], failure_message=f"Failed to switch {local_path} to branch '{branch}'", capture_output=True)
         return
 
+    def _try_create_branch(target_base: str) -> bool:
+        log_info(f"Branch '{branch}' does not exist; creating it from '{target_base}'.")
+        # Try creating from local base first
+        result = git_run(local_path, ["switch", "-c", branch, target_base], capture_output=True)
+        if result.returncode == 0:
+            return True
+            
+        # Fallback to origin/base if local doesn't exist
+        log_info(f"Failed to create from local '{target_base}', trying 'origin/{target_base}'...")
+        git_run(local_path, ["fetch", "origin", target_base])
+        result = git_run(
+            local_path, 
+            ["switch", "-c", branch, f"origin/{target_base}"], 
+            capture_output=True
+        )
+        return result.returncode == 0
+
     if branch == base_branch:
         raise SystemExit(f"Base branch '{base_branch}' does not exist locally in {local_path}.")
 
-    log_info(f"Branch '{branch}' does not exist; creating it from '{base_branch}'.")
+    success = _try_create_branch(base_branch)
     
-    # Try creating from local base_branch first
-    result = git_run(local_path, ["switch", "-c", branch, base_branch], capture_output=True)
-    if result.returncode != 0:
-        # Fallback to origin/base_branch if local doesn't exist
-        log_info(f"Failed to create from local '{base_branch}', trying 'origin/{base_branch}'...")
-        git_run(local_path, ["fetch", "origin", base_branch])
-        git_run_strict(
-            local_path, 
-            ["switch", "-c", branch, f"origin/{base_branch}"], 
-            failure_message=f"Failed to create branch '{branch}' from '{base_branch}'", 
-            capture_output=True
-        )
+    if not success and base_branch == "main":
+        log_info("Failed to create branch from 'main', falling back to 'master'...")
+        success = _try_create_branch("master")
+        
+    if not success:
+        raise SystemExit(f"Failed to create branch '{branch}' from '{base_branch}' (and 'master' fallback if applicable).")
     
     log_info(f"Pushing new branch '{branch}' to origin...")
     git_run_strict(local_path, ["push", "-u", "origin", branch], failure_message=f"Failed to push new branch '{branch}'")
