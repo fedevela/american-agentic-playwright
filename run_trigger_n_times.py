@@ -2,6 +2,7 @@
 """Wrapper to run trigger.py N times in sequence."""
 
 import argparse
+import os
 import subprocess
 import sys
 
@@ -11,7 +12,11 @@ def main() -> int:
     
     parsed, unknown = parser.parse_known_args()
     
-    cmd = [sys.executable, "trigger.py"] + unknown
+    # Resolve absolute path to trigger.py based on this script's location
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    trigger_path = os.path.join(script_dir, "trigger.py")
+    
+    cmd = [sys.executable, trigger_path] + unknown
     
     for i in range(1, parsed.count + 1):
         print(f"\n{'='*80}")
