@@ -44,9 +44,9 @@ def run_json_phase(prompt: str, repo: str, issue: int, phase: str, issue_data: d
     return run_gemini_json_phase(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data)
 
 
-def run_implementation_phase(prompt: str, repo: str, issue: int, phase: str, issue_data: dict[str, Any] | None = None) -> str:
+def run_implementation_phase(prompt: str, repo: str, issue: int, phase: str, issue_data: dict[str, Any] | None = None, resume_latest: bool = False) -> str:
     """Invokes the Malakh for code-modifying phases (Netzach through Yesod) and returns its generated summary."""
-    return run_gemini_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data)
+    return run_gemini_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data, resume_latest=resume_latest)
 
 
 def formalize_delivery_handoff(repo: str, issue: int, phase: str, issue_title: str, issue_data: dict[str, Any] | None = None) -> str:
@@ -249,6 +249,7 @@ def embody_implementation_contract(signal: SfiratPhaseSignal) -> None:
                 issue=signal.issue,
                 phase=signal.phase,
                 issue_data=signal.issue_data,
+                resume_latest=(i > 1),
             )
             agent_summaries.append(f"### Pass {i}: {pass_instruction[0]}\n\n{summary}")
 

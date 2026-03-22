@@ -26,6 +26,7 @@ def run_agent_implementation_loop(
     phase: str,
     branch_override: str | None = None,
     issue_data: dict[str, Any] | None = None,
+    resume_latest: bool = False,
 ) -> str:
     """Run an implementation phase loop with automated validation/retry cycles and return the final agent summary."""
     print("=" * 60)
@@ -59,7 +60,7 @@ def run_agent_implementation_loop(
             issue=issue,
             phase=phase,
             branch_override=branch_override,
-            resume_latest=(attempt > 1),
+            resume_latest=resume_latest or (attempt > 1),
             issue_data=issue_data,
         )
         if result.returncode != 0:
