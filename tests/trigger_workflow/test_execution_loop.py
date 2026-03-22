@@ -19,7 +19,7 @@ class ExecutionLoopTests(unittest.TestCase):
         gemini_result.returncode = 0
         gemini_result.stdout = '{"response": "Mocked JSON"}'
         run_gemini_mock.return_value = gemini_result
-        extract_mock.return_value = ("Mocked JSON", "sess-123")
+        extract_mock.return_value = "Mocked JSON"
         
         test_result = MagicMock()
         test_result.returncode = 0

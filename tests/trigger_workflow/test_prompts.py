@@ -25,7 +25,6 @@ from trigger_workflow.prompts import (
     build_tiferet_specification_prompt,
     determine_phase_from_label,
 )
-from trigger_workflow.context import conversation_scope_for_phase
 
 
 class PhaseWorkflowNamingTests(unittest.TestCase):
@@ -53,16 +52,6 @@ class PhaseWorkflowNamingTests(unittest.TestCase):
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "5", 12), "issue/12")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "9", 12), "issue/12")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "10", 12), "issue/12")
-
-    def test_session_scope_for_phase_isolated_for_all_phases(self) -> None:
-        self.assertTrue(conversation_scope_for_phase("1").startswith("phase-1"))
-        self.assertTrue(conversation_scope_for_phase("2A").startswith("phase-2A"))
-        self.assertTrue(conversation_scope_for_phase("2B").startswith("phase-2B"))
-        self.assertTrue(conversation_scope_for_phase("2C").startswith("phase-2C"))
-        self.assertTrue(conversation_scope_for_phase("4").startswith("phase-4"))
-        self.assertTrue(conversation_scope_for_phase("5").startswith("phase-5"))
-        self.assertTrue(conversation_scope_for_phase("9").startswith("phase-9"))
-        self.assertTrue(conversation_scope_for_phase("10").startswith("phase-10"))
 
 
 class PromptBuilderTests(unittest.TestCase):
@@ -320,8 +309,9 @@ class PromptBuilderTests(unittest.TestCase):
             {"title": "Example", "body": "Original body", "comments": []},
         )
         self.assertIn("This is Phase 9 (Malkhut Completion)", prompt)
-        self.assertIn("deterministic validation-discovery pass", prompt)
-        self.assertIn("evidence-backed readiness status", prompt)
+        self.assertIn("Actively complete the implementation", prompt)
+        self.assertIn("expand testing coverage", prompt)
+        self.assertIn("readiness status", prompt)
 
     def test_build_agent_prompt_preserves_canonical_requirements_in_child_issue_body_for_downstream_phases(self) -> None:
         # This fixture models a real Tiferet child issue body. Downstream

@@ -15,6 +15,50 @@ VALIDATION_COMMANDS = (
     ["make", "test"],
 )
 
+def get_coverage_context(
+    *,
+    repo: str,
+    issue: int,
+    phase: str,
+    branch_override: str | None = None,
+    issue_data: dict[str, Any] | None = None,
+) -> str:
+    """Run `make cov` and return the coverage report filtered of 100% covered lines."""
+    context = (
+        prepare_phase_execution_context(repo, phase, issue, issue_data=issue_data)
+        if branch_override is None
+        else prepare_branch_context(repo, branch=branch_override, branch_log_label="Resolved explicit target branch", issue_data=issue_data)
+    )
+
+    log_info("Running pre-phase coverage command: make cov")
+    result = subprocess.run(
+        ["make", "cov"],
+        cwd=context.local_path,
+        text=True,
+        capture_output=True,
+        timeout=1200,
+    )
+    
+    if result.returncode != 0:
+        log_info(f"`make cov` returned non-zero exit code {result.returncode}")
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr)
+        raise SystemExit("Pre-phase coverage command failed.")
+        
+    lines = result.stdout.splitlines()
+    filtered_lines = []
+    for line in lines:
+        if "100%" not in line:
+            filtered_lines.append(line)
+            
+    if not filtered_lines:
+        return "(No coverage data or all files are 100% covered)"
+        
+    return "\n".join(filtered_lines)
+
+
 def run_phase_tests(
     *,
     repo: str,

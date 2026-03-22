@@ -7,7 +7,7 @@ from .config import (
     PRE_IMPLEMENTATION_PHASES,
     SPECIFICATION_PHASE,
 )
-from .context import SfiratPhaseSignal, conversation_scope_for_phase, describe_phase_conversation_policy
+from .context import SfiratPhaseSignal
 from .github_ops import (
     advance_issue_label,
     create_child_issues,
@@ -33,19 +33,19 @@ from .git_client import create_issue_branches_for_child_issues
 from .validation import validate_tiferet_specification_payload_structure
 
 
-def run_comment_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> str:
+def run_comment_phase(prompt: str, repo: str, issue: int, phase: str, issue_data: dict[str, Any] | None = None) -> str:
     """Invokes the Malakh for a discussion-only phase (Keter through Chesed)."""
-    return run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
+    return run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data)
 
 
-def run_json_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> dict[str, Any]:
+def run_json_phase(prompt: str, repo: str, issue: int, phase: str, issue_data: dict[str, Any] | None = None) -> dict[str, Any]:
     """Invokes the Malakh for a structured-output phase (Tiferet/Specification)."""
-    return run_gemini_json_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
+    return run_gemini_json_phase(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data)
 
 
-def run_implementation_phase(prompt: str, repo: str, issue: int, phase: str, session_scope: str, issue_data: dict[str, Any] | None = None) -> str:
+def run_implementation_phase(prompt: str, repo: str, issue: int, phase: str, issue_data: dict[str, Any] | None = None) -> str:
     """Invokes the Malakh for code-modifying phases (Netzach through Yesod) and returns its generated summary."""
-    return run_gemini_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
+    return run_gemini_implementation_phase(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data)
 
 
 def formalize_delivery_handoff(repo: str, issue: int, phase: str, issue_title: str, issue_data: dict[str, Any] | None = None) -> str:
@@ -72,31 +72,27 @@ def post_phase_signal_comment(signal: SfiratPhaseSignal, body: str) -> None:
     )
 
 
-def log_prompt_size_and_conversation_policy(prompt: str, phase: str) -> str:
-    """Utility to log prompt metadata and session policy before agent invocation."""
+def log_prompt_size(prompt: str) -> None:
+    """Utility to log prompt metadata before agent invocation."""
     log_info(f"Prompt built ({len(prompt)} chars)")
-    session_scope = conversation_scope_for_phase(phase)
-    log_info(f"Session policy: {describe_phase_conversation_policy(phase, session_scope)}")
-    return session_scope
 
 
-def build_phase_prompt_and_conversation_scope(
-    phase: str,
+def build_phase_prompt(
     builder: Callable[..., str],
     *args: Any,
-) -> tuple[str, str]:
-    """Orchestrates prompt building and session policy resolution."""
+) -> str:
+    """Orchestrates prompt building and logs size."""
     prompt = builder(*args)
-    return prompt, log_prompt_size_and_conversation_policy(prompt, phase)
+    log_prompt_size(prompt)
+    return prompt
 
 
 def build_phase_execution_prompt(
     signal: SfiratPhaseSignal,
     prompt_builder: Callable[..., str],
-) -> tuple[str, str]:
+) -> str:
     """Builds the final system prompt for the Malakh using the active signal."""
-    return build_phase_prompt_and_conversation_scope(
-        signal.phase,
+    return build_phase_prompt(
         prompt_builder,
         signal.label,
         signal.issue,
@@ -146,7 +142,7 @@ def execute_comment_phase_handoff(signal: SfiratPhaseSignal) -> None:
     issue label, signaling readiness for the next Sfirat.
     """
     log_info("Building discussion prompt...")
-    prompt, session_scope = build_phase_execution_prompt(signal, build_comment_phase_prompt)
+    prompt = build_phase_execution_prompt(signal, build_comment_phase_prompt)
 
     log_info(f"Running agent for phase {signal.phase.upper()}...")
     comment = run_comment_phase(
@@ -154,7 +150,6 @@ def execute_comment_phase_handoff(signal: SfiratPhaseSignal) -> None:
         repo=signal.repo,
         issue=signal.issue,
         phase=signal.phase,
-        session_scope=session_scope,
         issue_data=signal.issue_data,
     )
     log_info(f"Comment generated ({len(comment)} chars)")
@@ -178,7 +173,7 @@ def manifest_specification_decomposition(signal: SfiratPhaseSignal) -> None:
     prepares the repository with implementation branches.
     """
     log_info("Building specification prompt...")
-    prompt, session_scope = build_phase_execution_prompt(signal, build_tiferet_specification_prompt)
+    prompt = build_phase_execution_prompt(signal, build_tiferet_specification_prompt)
 
     log_info("Running agent for JSON payload...")
     payload = run_json_phase(
@@ -186,7 +181,6 @@ def manifest_specification_decomposition(signal: SfiratPhaseSignal) -> None:
         repo=signal.repo,
         issue=signal.issue,
         phase=signal.phase,
-        session_scope=session_scope,
         issue_data=signal.issue_data,
     )
     log_info("JSON payload received")
@@ -236,7 +230,7 @@ def embody_implementation_contract(signal: SfiratPhaseSignal) -> None:
     Each run includes an automated validation loop (build/test/lint).
     """
     log_info("Building agent prompt...")
-    prompt, session_scope = build_phase_execution_prompt(signal, build_implementation_phase_prompt)
+    prompt = build_phase_execution_prompt(signal, build_implementation_phase_prompt)
 
     log_info("Running agent...")
     agent_summary = run_implementation_phase(
@@ -244,7 +238,6 @@ def embody_implementation_contract(signal: SfiratPhaseSignal) -> None:
         repo=signal.repo,
         issue=signal.issue,
         phase=signal.phase,
-        session_scope=session_scope,
         issue_data=signal.issue_data,
     )
     log_info("Agent execution complete")

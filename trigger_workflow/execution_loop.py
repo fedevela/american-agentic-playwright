@@ -11,6 +11,7 @@ from .validation_runner import (
     MAX_VALIDATION_RETRIES,
     VALIDATION_COMMAND_CONTRACT,
     build_single_retry_fix_task,
+    get_coverage_context,
     run_phase_tests,
     summarize_test_output,
 )
@@ -24,7 +25,6 @@ def run_agent_implementation_loop(
     issue: int,
     phase: str,
     branch_override: str | None = None,
-    session_scope: str = "", # Ignored for attempt 1, overridden by Gemini's internal ID
     issue_data: dict[str, Any] | None = None,
 ) -> str:
     """Run an implementation phase loop with automated validation/retry cycles and return the final agent summary."""
@@ -36,26 +36,36 @@ def run_agent_implementation_loop(
 
     pending_task = task
     final_response = ""
-    active_session_id = ""  # Start fresh on attempt 1 without resuming
     
     for attempt in range(1, MAX_VALIDATION_ATTEMPTS + 1):
+        if phase == "9" and attempt == 1:
+            cov_text = get_coverage_context(
+                repo=repo,
+                issue=issue,
+                phase=phase,
+                branch_override=branch_override,
+                issue_data=issue_data,
+            )
+            pending_task += (
+                "\n\n### Pre-Phase Coverage Report (Lines with 100% coverage omitted)\n"
+                "Use this coverage report to identify unhandled edge cases and unexplored logic branches. "
+                "Your primary goal is to expand test coverage to cover these additional situations and complete any missing implementation.\n\n"
+                f"```text\n{cov_text}\n```"
+            )
+
         result = run_gemini(
             pending_task,
             repo=repo,
             issue=issue,
             phase=phase,
             branch_override=branch_override,
-            session_scope=active_session_id,
+            resume_latest=(attempt > 1),
             issue_data=issue_data,
         )
         if result.returncode != 0:
             raise SystemExit(f"Agent execution failed with exit code: {result.returncode}")
 
-        response, returned_session_id = extract_gemini_response(result.stdout)
-        
-        # If Gemini returned a specific internal session_id, we adopt it for all retries in this loop
-        if returned_session_id:
-            active_session_id = returned_session_id
+        response = extract_gemini_response(result.stdout)
             
         if response:
             log_multiline("Assistant response", response)

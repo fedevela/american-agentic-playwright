@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .config import DISCUSSION_PHASES, SPECIFICATION_PHASE
-from .context import SfiratPhaseSignal, describe_phase_conversation_policy
+from .context import SfiratPhaseSignal
 from .execution import (
     build_phase_execution_prompt,
     select_phase_prompt_builder,
@@ -25,9 +25,8 @@ def preview_phase_execution_plan(signal: SfiratPhaseSignal) -> None:
     
     # 1. Preview for Discussion Phases (1-3)
     if phase in DISCUSSION_PHASES:
-        prompt, session_scope = build_phase_execution_prompt(signal, build_comment_phase_prompt)
+        prompt = build_phase_execution_prompt(signal, build_comment_phase_prompt)
         log_multiline("Manual mode prompt for gemini (discussion)", prompt)
-        log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
         log_multiline(
             "Manual mode planned actions",
             "\n".join(
@@ -42,9 +41,8 @@ def preview_phase_execution_plan(signal: SfiratPhaseSignal) -> None:
 
     # 2. Preview for Specification (Phase 4 / Tiferet)
     if phase == SPECIFICATION_PHASE:
-        prompt, session_scope = build_phase_execution_prompt(signal, build_tiferet_specification_prompt)
+        prompt = build_phase_execution_prompt(signal, build_tiferet_specification_prompt)
         log_multiline("Manual mode prompt for gemini (specification JSON)", prompt)
-        log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
         log_multiline(
             "Manual mode planned actions",
             "\n".join(
@@ -61,9 +59,8 @@ def preview_phase_execution_plan(signal: SfiratPhaseSignal) -> None:
         return
 
     # 3. Preview for Implementation (Phases 5-9)
-    prompt, session_scope = build_phase_execution_prompt(signal, build_implementation_phase_prompt)
+    prompt = build_phase_execution_prompt(signal, build_implementation_phase_prompt)
     log_multiline("Manual mode prompt for gemini (implementation)", prompt)
-    log_info(f"Session scope metadata: '{session_scope or '(shared issue scope)'}'")
     log_multiline(
         "Manual mode planned actions",
         "\n".join(

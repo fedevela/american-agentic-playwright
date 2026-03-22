@@ -16,7 +16,7 @@ def run_gemini(
     issue: int,
     phase: str,
     branch_override: str | None = None,
-    session_scope: str = "",
+    resume_latest: bool = False,
     issue_data: dict[str, Any] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run Gemini CLI headlessly and capture output in the configured target repository."""
@@ -41,8 +41,8 @@ def run_gemini(
         "-o", "json"
     ]
     
-    if session_scope:
-        command.extend(["--resume", session_scope])
+    if resume_latest:
+        command.extend(["--resume", "latest"])
 
     log_info(f"Launching Gemini headless run in {context.local_path}")
     log_info(f"Command: {' '.join(command)}")
@@ -67,8 +67,8 @@ def run_gemini(
             
     return result
 
-def extract_gemini_response(stdout: str) -> tuple[str, str]:
-    """Extract the response text and session ID from Gemini JSON output."""
+def extract_gemini_response(stdout: str) -> str:
+    """Extract the response text from Gemini JSON output."""
     try:
         # First try: Find the first '{' and the last '}'
         start = stdout.find("{")
@@ -79,7 +79,7 @@ def extract_gemini_response(stdout: str) -> tuple[str, str]:
             try:
                 data = json.loads(json_str)
                 if "response" in data:
-                    return str(data["response"]).strip(), str(data.get("session_id", ""))
+                    return str(data["response"]).strip()
             except json.JSONDecodeError:
                 pass # Fall through to line-by-line approach
 
@@ -92,12 +92,12 @@ def extract_gemini_response(stdout: str) -> tuple[str, str]:
                 break
         
         if not json_str:
-            return "", ""
+            return ""
             
         data = json.loads(json_str)
-        return str(data.get("response") or "").strip(), str(data.get("session_id", ""))
+        return str(data.get("response") or "").strip()
     except (json.JSONDecodeError, KeyError, IndexError):
-        return "", ""
+        return ""
 
 def extract_json_from_markdown(text: str) -> str:
     """Extract JSON block from markdown text."""
@@ -115,19 +115,18 @@ def run_gemini_comment_phase(
     repo: str,
     issue: int,
     phase: str,
-    session_scope: str = "",
     issue_data: dict[str, Any] | None = None,
 ) -> str:
     """Run Gemini and return the assistant reply text."""
     log_info("Requesting comment response from Gemini")
-    result = run_gemini(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
+    result = run_gemini(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data)
     if result.returncode != 0:
         raise SystemExit(f"Gemini execution failed with exit code: {result.returncode}")
 
-    response, _ = extract_gemini_response(result.stdout)
+    response = extract_gemini_response(result.stdout)
     if not response:
         raise SystemExit("Gemini returned no response.")
-    
+
     log_info(f"Assistant response extracted ({len(response)} chars)")
     return response
 
@@ -137,12 +136,11 @@ def run_gemini_json_phase(
     repo: str,
     issue: int,
     phase: str,
-    session_scope: str = "",
     issue_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run Gemini and parse the final assistant reply as JSON."""
     log_info("Requesting JSON response from Gemini")
-    content = run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, session_scope=session_scope, issue_data=issue_data)
+    content = run_gemini_comment_phase(prompt, repo=repo, issue=issue, phase=phase, issue_data=issue_data)
     log_info("Parsing JSON from assistant reply")
     json_content = extract_json_from_markdown(content)
     try:
@@ -151,5 +149,4 @@ def run_gemini_json_phase(
         log_error("Assistant reply was not valid JSON")
         print(content)
         raise SystemExit(f"Gemini did not return valid JSON: {exc}") from exc
-
 

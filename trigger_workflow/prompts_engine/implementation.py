@@ -69,10 +69,11 @@ def build_implementation_phase_prompt(
         ]
     elif phase == "9":
         phase_requirements = [
-            "- This is Phase 9 (Malkhut Completion). Execute validation with evidence-first discipline.",
-            "- Run a deterministic validation-discovery pass: collect failing evidence, map each failure to violated requirement IDs and ownership loci, then apply minimal corrective deltas.",
-            "- Keep corrections requirement-traceable and scope-bounded to observed violations.",
-            "- Apply an explicit completion gate before finishing: do not terminate on narrative; finish only with evidence-backed readiness status.",
+            "- This is Phase 9 (Malkhut Completion). The system must cease to be a model and become a fact.",
+            "- Actively complete the implementation: find what is missing and make it exist.",
+            "- Expand verification boundaries: you must actively expand testing coverage where possible, especially for edge cases.",
+            "- Truth is derived from observable outcomes: run the tests, fix the implementation, and repeat until the work lives in the world as intended.",
+            "- ALWAYS produce a final text message summarizing the completed implementation, expanded tests, and readiness status.",
         ]
     elif phase == "10":
         phase_requirements = [

@@ -57,7 +57,6 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
         )
 
         log_multiline_mock.assert_called_once_with("Generated comment", "Line one\nLine two")
-        self.assertTrue(run_comment_phase_mock.call_args.kwargs["session_scope"].startswith("phase-1"))
 
     @patch("trigger_workflow.execution.post_issue_comment")
     @patch("trigger_workflow.execution.remove_issue_label")
@@ -73,7 +72,7 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
         "trigger_workflow.execution.run_json_phase",
         return_value={"comment": "Parent body", "sub_issues": []},
     )
-    def test_execute_specification_phase_uses_shared_issue_session_scope(
+    def test_execute_specification_phase_creates_child_issues(
         self,
         run_json_phase_mock,
         validate_phase_four_payload_mock,
@@ -122,7 +121,6 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
             )
         )
 
-        self.assertTrue(run_json_phase_mock.call_args.kwargs["session_scope"].startswith("phase-4"))
         create_issue_branches_for_child_issues_mock.assert_called_once_with("owner/repo", 55, [101])
         remove_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:tiferet")
 
@@ -130,7 +128,7 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
     @patch("trigger_workflow.execution.post_issue_comment")
     @patch("trigger_workflow.execution.formalize_delivery_handoff", return_value=("Delivery summary", "diff"))
     @patch("trigger_workflow.execution.run_implementation_phase")
-    def test_execute_agent_phase_uses_shared_issue_session_scope(
+    def test_execute_agent_phase_finalizes_delivery(
         self,
         run_implementation_phase_mock,
         finalize_delivery_mock,
@@ -148,7 +146,6 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
             )
         )
 
-        self.assertTrue(run_implementation_phase_mock.call_args.kwargs["session_scope"].startswith("phase-5"))
         finalize_delivery_mock.assert_called_once_with(
             repo="owner/repo",
             issue=55,
@@ -305,7 +302,7 @@ class OrchestrationPhaseExecutionTests(unittest.TestCase):
 
     @patch("trigger_workflow.preview.log_multiline")
     @patch("trigger_workflow.preview.log_info")
-    @patch("trigger_workflow.preview.build_phase_execution_prompt", return_value=("PROMPT-CONTENT", ""))
+    @patch("trigger_workflow.preview.build_phase_execution_prompt", return_value="PROMPT-CONTENT")
     def test_manual_preview_logs_prompt_and_planned_actions_for_implementation(
         self,
         build_phase_execution_prompt_mock,

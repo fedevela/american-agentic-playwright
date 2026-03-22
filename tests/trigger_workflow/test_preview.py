@@ -14,7 +14,7 @@ class PreviewTests(unittest.TestCase):
 
     @patch("trigger_workflow.preview.log_multiline")
     @patch("trigger_workflow.preview.log_info")
-    @patch("trigger_workflow.preview.build_phase_execution_prompt", return_value=("PROMPT-CONTENT", ""))
+    @patch("trigger_workflow.preview.build_phase_execution_prompt", return_value="PROMPT-CONTENT")
     def test_preview_phase_execution_plan_for_discussion(self, build_mock, log_info_mock, log_multiline_mock) -> None:
         signal = SfiratPhaseSignal(
             label="phase:keter",
@@ -35,7 +35,7 @@ class PreviewTests(unittest.TestCase):
 
     @patch("trigger_workflow.preview.log_multiline")
     @patch("trigger_workflow.preview.log_info")
-    @patch("trigger_workflow.preview.build_phase_execution_prompt", return_value=("PROMPT-CONTENT", ""))
+    @patch("trigger_workflow.preview.build_phase_execution_prompt", return_value="PROMPT-CONTENT")
     def test_preview_phase_execution_plan_for_specification(self, build_mock, log_info_mock, log_multiline_mock) -> None:
         signal = SfiratPhaseSignal(
             label="phase:tiferet",
