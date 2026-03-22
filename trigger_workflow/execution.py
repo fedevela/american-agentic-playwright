@@ -28,6 +28,7 @@ from .prompts import (
     build_phase_four_summary,
     build_tiferet_specification_prompt,
     format_phase_comment,
+    PHASE_10_PASSES,
 )
 from .git_client import create_issue_branches_for_child_issues
 from .validation import validate_tiferet_specification_payload_structure
@@ -219,29 +220,54 @@ def manifest_specification_decomposition(signal: SfiratPhaseSignal) -> None:
 
 def embody_implementation_contract(signal: SfiratPhaseSignal) -> None:
     """
-    Embodies implementation phases (5-9) by translating intent into code.
-    
+    Embodies implementation phases (5-10) by translating intent into code.
+
     This follows the SPARC sequence: 
     -netzch (Traceability) 
     -hod (Pseudocode) 
     -yesod (Architecture/Refinement) 
-    -malkhut (Completion/Validation).
-    
+    -malkhut (Completion/Validation)
+    -hod-refactoring (Refactoring passes).
+
     Each run includes an automated validation loop (build/test/lint).
     """
-    log_info("Building agent prompt...")
-    prompt = build_phase_execution_prompt(signal, build_implementation_phase_prompt)
+    agent_summaries = []
 
-    log_info("Running agent...")
-    agent_summary = run_implementation_phase(
-        prompt,
-        repo=signal.repo,
-        issue=signal.issue,
-        phase=signal.phase,
-        issue_data=signal.issue_data,
-    )
-    log_info("Agent execution complete")
-    
+    if signal.phase == "10":
+        log_info(f"Executing {len(PHASE_10_PASSES)} sequential refactoring passes for Phase 10...")
+        for i, pass_instruction in enumerate(PHASE_10_PASSES, 1):
+            log_info(f"Building agent prompt for Phase 10 pass {i}: {pass_instruction[0]}...")
+            prompt = build_phase_execution_prompt(
+                signal, 
+                lambda *args: build_implementation_phase_prompt(*args, pass_instruction=pass_instruction)
+            )
+
+            log_info(f"Running agent for Phase 10 pass {i}...")
+            summary = run_implementation_phase(
+                prompt,
+                repo=signal.repo,
+                issue=signal.issue,
+                phase=signal.phase,
+                issue_data=signal.issue_data,
+            )
+            agent_summaries.append(f"### Pass {i}: {pass_instruction[0]}\n\n{summary}")
+
+        agent_summary = "\n\n".join(agent_summaries)
+        log_info("All Phase 10 refactoring passes complete")
+    else:
+        log_info("Building agent prompt...")
+        prompt = build_phase_execution_prompt(signal, build_implementation_phase_prompt)
+
+        log_info("Running agent...")
+        agent_summary = run_implementation_phase(
+            prompt,
+            repo=signal.repo,
+            issue=signal.issue,
+            phase=signal.phase,
+            issue_data=signal.issue_data,
+        )
+        log_info("Agent execution complete")
+
     # Delivery handoff formalizes the changes through a commit and push.
     log_info("Formalizing git delivery (commit + push)...")
     delivery_summary = formalize_delivery_handoff(

@@ -5,6 +5,38 @@ from .extraction import build_issue_runtime_context, strip_microagent_persona_pe
 from .extraction import COMMENT_VISIBLE_PHASES
 
 
+PHASE_10_PASSES = [
+    (
+        "Purging Transient Scaffolding",
+        "Remove leftover temporary traceability markers (like MRCO-003, MRCO-006, 'Phase 5 - Netzach', and 'Phase 8 - Yesod') or other phases (or names of phases) leftovers or user stories guids... while leaving the useful comments.",
+    ),
+    (
+        "Pruning Superfluous & Unused Code",
+        "Prune any superfluous/redundant/unused/unnecessarily complex code or unnecessary fallbacks or retries where we can fail fast, also check imports we can safely remove. use ruff. Simplify test names that sounded overly academic (e.g., changing contract and domain_payload to more literal domain names).",
+    ),
+    (
+        "Removing Clutter & Assessing Bloat",
+        "Identify and purge all leftover execution/phase/llm artifacts, such as @patch_ensure.py files and transient session shims, to ensure a clean environment. Audit the codebase for files exceeding a ~500-line threshold or those conflating multiple concerns; these must be aggressively modularized. When splitting these 'bloated' files, extract secondary logic into shared .py seams to enforce single-responsibility boundaries and eliminate redundant complexity.",
+    ),
+    (
+        "Applying DRY & SOLID Principles",
+        "Enforce strict SOLID and DRY principles by extracting duplicated validation and configuration logic into shared, centralized seams. Prioritize the Dependency Inversion Principle by injecting providers for environmental configurations rather than relying on hardcoded strings or internal constants. Identify and resolve handler collisions or hidden race conditions within the logic.",
+    ),
+    (
+        "Updating Operational Maps (AGENTS.md & README.md)",
+        "Update all AGENTS.md and README.md files with the relevant information from changes that have been done in this branch. Also, create agents files where source folders are lacking them and fill them up with relevant info.",
+    ),
+    (
+        "Encoding Architecture into Executable Names",
+        "Update the codebase's names (e.g. functions, variables, tests) to reflect the domain language from agents and readmes.",
+    ),
+    (
+        "Updating Documentation",
+        "Update the codebase's documentation (e.g. functions headers, variables comments, tests, inline 'why' comments) to reflect the domain language from agents and readmes.",
+    ),
+]
+
+
 def build_implementation_phase_prompt(
     label: str,
     issue: int,
@@ -12,8 +44,9 @@ def build_implementation_phase_prompt(
     microagent_persona_persona: str,
     phase: str,
     issue_data: dict[str, Any],
+    pass_instruction: tuple[str, str] | None = None,
 ) -> str:
-    """Build the prompt for phases 5-9 implementation and validation work."""
+    """Build the prompt for phases 5-9 implementation and validation work, and phase 10 passes."""
     terminal_discipline_requirements = [
         "- Terminal discipline (mandatory): favor bounded, deterministic commands (`rg`, targeted paths) and avoid broad recursive scans from repo root.",
         "- Exclude heavy/generated trees when searching (for example `node_modules`, `build`, `.git`) unless explicitly needed.",
@@ -76,13 +109,24 @@ def build_implementation_phase_prompt(
             "- ALWAYS produce a final text message summarizing the completed implementation, expanded tests, and readiness status.",
         ]
     elif phase == "10":
+        if not pass_instruction:
+            raise ValueError("Phase 10 requires a pass_instruction to be provided.")
+        
+        # Override the standard discovery procedure for Phase 10
+        discovery_procedure = [
+            "1. Discovery: Search the codebase to identify areas relevant to your current pass instruction.",
+            "2. Planning: Define the exact refactoring edits required to satisfy the instruction.",
+            "3. Execution: Apply the refactoring changes.",
+            "4. Verification: Run the test suite and resolve any breakages caused by your refactoring.",
+        ]
+        
         phase_requirements = [
             "- This is Phase 10 (Hod Refactoring). Expose the system's architecture clearly and re-encode it into the code.",
-            "- Model core domain entities as stable nouns (types/modules/objects) with clear ownership boundaries.",
-            "- Model domain actions and process transitions as explicit verbs (functions/methods/use-cases).",
-            "- Preserve behavior unless the partner explicitly asks for a behavior change.",
-            "- PROPAGATE renames across production code, tests, and AGENTS.md in the same change.",
-            "- Refactor duplicated orchestration and structure using DRY and SOLID boundaries.",
+            f"- CURRENT PASS: {pass_instruction[0]}",
+            f"- INSTRUCTION: {pass_instruction[1]}",
+            "- ONLY execute the logic required for this current pass. DO NOT expand scope into other refactoring tasks.",
+            "- Run the validation tests (`make test` or equivalent) to ensure your refactoring did not break the system.",
+            "- Return a final text message summarizing the refactoring work you completed.",
         ]
 
     requirements_block = ""
@@ -100,9 +144,14 @@ You are working directly in a git repository. Your changes must be traceable.
 {chr(10).join(requirement_lines)}
 """
 
+    runtime_context = (
+        "" if phase == "10"
+        else build_issue_runtime_context(label, issue, repo, phase, issue_data, include_comments=phase in COMMENT_VISIBLE_PHASES)
+    )
+
     return f"""{strip_microagent_persona_persona(microagent_persona_persona)}
 
-{build_issue_runtime_context(label, issue, repo, phase, issue_data, include_comments=phase in COMMENT_VISIBLE_PHASES)}
+{runtime_context}
 
 {requirements_block}
 

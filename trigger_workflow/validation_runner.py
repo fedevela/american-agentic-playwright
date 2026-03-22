@@ -30,9 +30,9 @@ def get_coverage_context(
         else prepare_branch_context(repo, branch=branch_override, branch_log_label="Resolved explicit target branch", issue_data=issue_data)
     )
 
-    log_info("Running pre-phase coverage command: make cov")
+    log_info("Running pre-phase coverage command: make coverage")
     result = subprocess.run(
-        ["make", "cov"],
+        ["make", "coverage"],
         cwd=context.local_path,
         text=True,
         capture_output=True,
@@ -40,7 +40,7 @@ def get_coverage_context(
     )
     
     if result.returncode != 0:
-        log_info(f"`make cov` returned non-zero exit code {result.returncode}")
+        log_info(f"`make coverage` returned non-zero exit code {result.returncode}")
         if result.stdout:
             print(result.stdout)
         if result.stderr:

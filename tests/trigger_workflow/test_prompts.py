@@ -256,9 +256,13 @@ class PromptBuilderTests(unittest.TestCase):
             "Hod Refactoring microagent_persona",
             "10",
             {"title": "Example", "body": "Body", "comments": []},
+            pass_instruction=("Mock Pass", "Do the mock thing"),
         )
         self.assertIn("This is Phase 10 (Hod Refactoring)", prompt)
         self.assertIn("Expose the system's architecture clearly", prompt)
+        self.assertIn("Mock Pass", prompt)
+        self.assertIn("Do the mock thing", prompt)
+        self.assertNotIn("## Runtime Context", prompt)
 
     def test_phase_7_prompt_enforces_code_level_artifacts_not_analysis_only(self) -> None:
         prompt = build_implementation_phase_prompt(
