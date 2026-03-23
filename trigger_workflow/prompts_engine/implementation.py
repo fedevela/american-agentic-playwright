@@ -12,7 +12,7 @@ PHASE_10_PASSES = [
     ),
     (
         "Pruning Superfluous & Unused Code",
-        "Prune any superfluous/redundant/unused/unnecessarily complex code or unnecessary fallbacks or retries where we can fail fast, also check imports we can safely remove. use ruff. Simplify test names that sounded overly academic (e.g., changing contract and domain_payload to more literal domain names).",
+        "Use Ruff. Prune any superfluous/redundant/unused/unnecessarily complex code, also check imports we can safely remove. Its important that before remove any existing artifacts make sure they are notgenuinely needed for robustness should be preserved, only prune if irrelevant.",
     ),
     (
         "Removing Clutter & Assessing Bloat",

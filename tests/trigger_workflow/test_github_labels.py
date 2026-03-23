@@ -73,10 +73,10 @@ class GitHubLabelsTests(unittest.TestCase):
         run_gh_mock.assert_not_called()
 
     @patch("trigger_workflow.github.labels.edit_issue_labels")
-    def test_advance_issue_label_skips_final_phase(self, edit_mock) -> None:
-        # phase:malkhut is usually the final phase
-        advance_issue_label("owner/repo", 1, "phase:malkhut")
-        edit_mock.assert_not_called()
+    def test_advance_issue_label_removes_current_if_final_phase(self, edit_mock) -> None:
+        # phase:hod-refactoring is the final phase
+        advance_issue_label("owner/repo", 1, "phase:hod-refactoring")
+        edit_mock.assert_called_once_with("owner/repo", 1, remove=["phase:hod-refactoring"])
 
     @patch("trigger_workflow.github.labels.edit_issue_labels")
     def test_clear_issue_labels_except_removes_unkept(self, edit_mock) -> None:

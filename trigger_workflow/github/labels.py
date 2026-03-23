@@ -125,10 +125,12 @@ def edit_issue_labels(
 
 
 def advance_issue_label(repo: str, issue_number: int, current_label: str) -> None:
-    """Advance the issue from its current phase label to the configured next label."""
+    """Advance the issue from its current phase label to the configured next label.
+    If there is no next label (final phase), remove the current label."""
     next_label = NEXT_LABEL_MAP.get(current_label)
     if not next_label:
-        log_info("No next label defined (final phase)")
+        log_info("No next label defined (final phase), removing current label")
+        edit_issue_labels(repo, issue_number, remove=[current_label])
         return
 
     log_info(f"Advancing label: '{current_label}' -> '{next_label}'")

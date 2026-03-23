@@ -33,7 +33,7 @@ _phases = [
     WorkflowPhase("6", "phase:hod", "Hod", "Phase 6 Hod: SPARC Pseudocode", "0969DA", "hod_analyticalarticulation.md", "phase_6_hod.md", "phase:yesod-orchestration"),
     WorkflowPhase("7", "phase:yesod-orchestration", "Yesod-Orchestration", "Phase 7 Yesod-Orchestration: SPARC Architecture", "5319E7", "yesod_integrationfoundation.md", "phase_7_yesod_orchestration.md", "phase:yesod-embodiment"),
     WorkflowPhase("8", "phase:yesod-embodiment", "Yesod-Embodiment", "Phase 8 Yesod-Embodiment: SPARC Refinement", "8250DF", "yesod_transmissionembodiment.md", "phase_8_yesod_embodiment.md", "phase:malkhut"),
-    WorkflowPhase("9", "phase:malkhut", "Malkhut", "Phase 9 Malkhut: SPARC Completion", "D1242F", "malkhut_completionsovereignty.md", "phase_9_malkhut.md", None),
+    WorkflowPhase("9", "phase:malkhut", "Malkhut", "Phase 9 Malkhut: SPARC Completion", "D1242F", "malkhut_completionsovereignty.md", "phase_9_malkhut.md", "phase:hod-refactoring"),
     WorkflowPhase("10", "phase:hod-refactoring", "Hod-Refactoring", "Phase 10 Hod Refactoring: Structural Clarity", "1F6FEB", "hod_refactoringstructuralclarity.md", "phase_10_hod_refactoring.md", None),
 ]
 
