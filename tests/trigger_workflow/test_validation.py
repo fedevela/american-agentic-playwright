@@ -56,6 +56,55 @@ class PhaseFourPayloadValidationTests(unittest.TestCase):
 
         self.assertIn("must begin with a `Requirement IDs:` line", str(exc.exception))
 
+    def test_validate_tiferet_specification_payload_rejects_non_dict(self) -> None:
+        with self.assertRaises(SystemExit) as exc:
+            validate_tiferet_specification_payload_structure([])  # type: ignore
+        self.assertIn("must be a JSON object", str(exc.exception))
+
+    def test_validate_tiferet_specification_payload_rejects_missing_comment(self) -> None:
+        with self.assertRaises(SystemExit) as exc:
+            validate_tiferet_specification_payload_structure({"comment": " "})
+        self.assertIn("must include a non-empty `comment`", str(exc.exception))
+
+    def test_validate_tiferet_specification_payload_rejects_missing_sub_issues(self) -> None:
+        with self.assertRaises(SystemExit) as exc:
+            validate_tiferet_specification_payload_structure({"comment": "Valid"})
+        self.assertIn("must include at least one `sub_issues` entry", str(exc.exception))
+        
+    def test_validate_tiferet_specification_payload_rejects_empty_sub_issues(self) -> None:
+        with self.assertRaises(SystemExit) as exc:
+            validate_tiferet_specification_payload_structure({"comment": "Valid", "sub_issues": []})
+        self.assertIn("must include at least one `sub_issues` entry", str(exc.exception))
+
+    def test_validate_tiferet_specification_payload_rejects_invalid_sub_issue_type(self) -> None:
+        with self.assertRaises(SystemExit) as exc:
+            validate_tiferet_specification_payload_structure({"comment": "Valid", "sub_issues": ["not a dict"]})
+        self.assertIn("must be an object", str(exc.exception))
+        
+    def test_validate_tiferet_specification_payload_rejects_sub_issue_missing_title(self) -> None:
+        with self.assertRaises(SystemExit) as exc:
+            validate_tiferet_specification_payload_structure({
+                "comment": "Valid",
+                "sub_issues": [{"title": "", "body": "Requirement IDs: X\nBody"}]
+            })
+        self.assertIn("must include a non-empty `title`", str(exc.exception))
+
+    def test_validate_tiferet_specification_payload_rejects_sub_issue_missing_body(self) -> None:
+        with self.assertRaises(SystemExit) as exc:
+            validate_tiferet_specification_payload_structure({
+                "comment": "Valid",
+                "sub_issues": [{"title": "Title", "body": "   "}]
+            })
+        self.assertIn("must include a non-empty `body`", str(exc.exception))
+        
+    def test_validate_tiferet_specification_payload_rejects_sub_issue_no_guids_in_requirement_ids(self) -> None:
+        with self.assertRaises(SystemExit) as exc:
+            validate_tiferet_specification_payload_structure({
+                "comment": "Valid",
+                "sub_issues": [{"title": "Title", "body": "Requirement IDs: none\nBody"}]
+            })
+        self.assertIn("must list at least one Gevurah GUID in `Requirement IDs:`", str(exc.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,10 +1,11 @@
-# Agent Notes: OpenHands Swarm
+# Agent Notes: Swarm
 
 This document captures the practical architecture and execution rules for working safely in this repository.
 
 ## Entry Point
 
-- `trigger.py` is a thin CLI shim that calls `trigger_workflow.router.run_trigger_cli()`.
+- `trigger.py` should be called from the target repository root.
+- It is a thin CLI shim that calls `trigger_workflow.cli.run_trigger_cli()`.
 
 ## Runtime Flow
 
@@ -13,14 +14,12 @@ This document captures the practical architecture and execution rules for workin
 - `--phase`: Canonical phase ID (alternative to --label).
 - `--issue`: Issue number to process.
 - `--repo`: Target repository (owner/repo).
-- `--runner`: Agent engine to use (`gemini` or `openhands`).
-- `--working-dir`: Local directory to use as the target repository (bypasses managed checkout).
 - `--manual`: Preview mode (no agent execution or GitHub mutations).
 
 Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 1. Ensures canonical labels exist (unless `--manual`)
 2. Resolves issue + phase label (or auto-selects oldest phased issue)
-3. Builds the persona + microagent prompt stack
+3. Builds the persona + microagent_persona prompt stack
 4. Fetches issue payload from GitHub
 5. Verifies phase-label preconditions (relaxed in manual mode)
 6. Dispatches by phase family
@@ -38,7 +37,6 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
     - ordered `sub_issues`
   - Validation enforces schema + Gevurah traceability contract
   - Creates child issues with parent/sub-issue + dependency links
-  - Creates child issue branches
   - Posts summary comment
   - Removes parent Tiferet label
 
@@ -53,42 +51,79 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 
 ## Module Map
 
+- `trigger_workflow/cli.py`
+  - CLI entry point and argument parsing (`run_trigger_cli`)
+  - Maps phase IDs to canonical labels
+
+- `trigger_workflow/orchestration.py`
+  - Top-level workflow routing and phase dispatch (`route_labeled_signal_with_mode`)
+  - Coordinates between context resolution and execution logic
+
+- `trigger_workflow/context.py`
+  - Exposes resolving logic via `SfiratPhaseSignal`
+
+- `trigger_workflow/context_resolver/`
+  - `models.py`: Core types like `SfiratPhaseSignal`
+  - `policy.py`: Conversation scoping and repo detection
+  - `resolution.py`: Context resolution (issue, label, repo)
+
+- `trigger_workflow/execution.py`
+  - Phase-specific execution logic:
+    - `execute_comment_phase_handoff`
+    - `manifest_specification_decomposition` (Tiferet)
+    - `embody_implementation_contract` (Implementation)
+
+- `trigger_workflow/execution_loop.py`
+  - Validation retry loop for implementation phases (`run_agent_implementation_loop`)
+
+- `trigger_workflow/preview.py`
+  - Manual mode behavior and prompt-only previews
+
 - `trigger_workflow/config.py`
   - Canonical phase/label maps
   - Successor mapping (`NEXT_LABEL_MAP`)
-  - Repo checkout config (`TARGET_REPO_CONFIG_MAP`)
-
-- `trigger_workflow/router.py`
-  - Top-level orchestration + phase dispatch
-  - Manual preview mode behavior
-  - Needs-human tagging for pre-implementation failures
 
 - `trigger_workflow/prompts.py`
-  - Prompt construction and context shaping
-  - Persona + functional microagent composition
-  - Phase comment wrapper formatting
+  - Legacy facade for prompt building
+
+- `trigger_workflow/prompts_engine/`
+  - `discussion.py`: Prompts for early comment-based phases
+  - `extraction.py`: Extracting contextual bodies from issues
+  - `formatting.py`: Phase comment wrapper formatting
+  - `implementation.py`: Code-editing phase prompts
+  - `specification.py`: Phase 4 (Tiferet) spec prompts
+
+- `trigger_workflow/domain.py`
+  - Core types including `WorkflowPhase`
+
+- `trigger_workflow/gh_client.py`
+  - Low-level GitHub CLI execution
+
+- `trigger_workflow/github/`
+  - `comments.py`: Issue comment management
+  - `constants.py`: Constants for the GitHub API
+  - `discovery.py`: Issue lookup and label resolution
+  - `hierarchy.py`: Sub-issue and dependency relations
+  - `labels.py`: Phase label management
 
 - `trigger_workflow/github_ops.py`
-  - GitHub CLI wrappers (`gh issue/label/api`)
-  - Label handoff operations
-  - Child issue creation/linking/dependency wiring
+  - High-level facade for `github/` submodule operations
 
 - `trigger_workflow/validation.py`
   - Tiferet JSON payload schema checks
   - Verbatim traceability checks to Gevurah canonical requirements
 
+- `trigger_workflow/validation_runner.py`
+  - Test execution framework for implementation validation
+
 - `trigger_workflow/gemini_runner.py`
   - Gemini CLI subprocess execution.
   - Optimized for fast, single-turn or fixed-retry cycles.
 
-- `trigger_workflow/openhands_runner.py`
-  - OpenHands subprocess execution + event extraction.
-  - Supports complex, multi-turn coding and debugging.
+- `trigger_workflow/git_client.py`
+  - Version control operations and branch contexts
 
-- `trigger_workflow/runner_utils.py`
-  - Managed checkout setup under `.openhands/repos`
-  - Branch verification and phase branch resolution
-  - Validation retry loop for implementation phases
+- `trigger_workflow/delivery.py`
   - Delivery finalization (commit/push/PR summary)
 
 - `trigger_workflow/logging_utils.py`
@@ -96,14 +131,16 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 
 ## Operational Constraints
 
-- Managed checkout policy:
-  - Agent must run in `.openhands/repos/<owner__repo>` unless `--working-dir` is provided.
-  - Refuses running in source checkout path to prevent local pollution.
+- Local execution policy:
+  - Swarm runs directly in the current working directory.
+  - The caller must ensure they are in the root of the target repository.
+  - Managed clones and isolation folders are deprecated.
 
 - Branch policy:
-  - Phases before implementation run on configured main branch.
-  - Implementation phases run on `issue/<number>` branch.
-  - Missing implementation branch is a hard failure.
+  - All phases execute on an `issue/<number>` branch corresponding to the target issue.
+  - If the branch does not exist locally or on origin, it is automatically created from the repository's base branch (e.g. `main`).
+  - Child issues spawned during Phase 4 (Tiferet) branch directly off their parent issue's branch.
+  - Execution contexts automatically fetch and merge upstream changes from their base branch.
 
 - Stateless conversation policy:
   - Runs do not resume prior conversations by default.
@@ -116,11 +153,14 @@ Then delegates to `run_labeled_issue_phase_with_mode(...)`, which:
 
 ## Tests Coverage
 
-- Router behavior: `tests/trigger_workflow/test_router.py`
-- GitHub operations: `tests/trigger_workflow/test_github_ops.py`
-- Prompt contracts: `tests/trigger_workflow/test_prompts.py`
-- Runner/process/branch policies: `tests/trigger_workflow/test_openhands_runner.py`
-- Tiferet validation rules: `tests/trigger_workflow/test_validation.py`
+- CLI interactions: `tests/trigger_workflow/test_cli.py`
+- Core Orchestration: `tests/trigger_workflow/test_orchestration.py`
+- Github Base Ops: `tests/trigger_workflow/test_github_ops.py`, `test_github_labels.py`, `test_github_discovery.py`, `test_github_comments.py`
+- Git Operations: `tests/trigger_workflow/test_git_client.py`
+- Prompting engine: `tests/trigger_workflow/test_prompts.py`, `test_discussion_prompts.py`, `test_extraction.py`, `test_formatting.py`
+- Resolution context: `tests/trigger_workflow/test_resolution.py`, `test_policy.py`
+- Delivery & Execution: `tests/trigger_workflow/test_delivery.py`, `test_execution_loop.py`, `test_gemini_runner.py`, `test_validation_runner.py`, `test_preview.py`
+- Tiferet payload shape checks: `tests/trigger_workflow/test_validation.py`
 
 ## MCP Integration Seam (for future work)
 

@@ -12,7 +12,11 @@ import unittest
 from unittest.mock import patch
 
 from trigger_workflow.config import TIFERET_AUTO_ISSUE_PREFIX
-from trigger_workflow.openhands_runner import resolve_phase_execution_branch
+from trigger_workflow.git_client import resolve_phase_execution_branch
+from trigger_workflow.persona_loader import (
+    read_functional_microagent_persona,
+    read_microagent_persona_for_label,
+)
 from trigger_workflow.prompts import (
     build_implementation_phase_prompt,
     build_comment_phase_prompt,
@@ -20,17 +24,14 @@ from trigger_workflow.prompts import (
     build_phase_prompt_input_context,
     build_tiferet_specification_prompt,
     determine_phase_from_label,
-    read_functional_microagent,
-    read_microagent_for_label,
 )
-from trigger_workflow.router import conversation_scope_for_phase
 
 
 class PhaseWorkflowNamingTests(unittest.TestCase):
     """Guard canonical phase identifiers and session/branch policy helpers.
 
     These checks pin the stable IDs used throughout routing, branch selection,
-    and OpenHands session scoping. If these mappings drift, downstream
+    and agent session scoping. If these mappings drift, downstream
     orchestration can silently run the right phase logic against the wrong
     branch or conversation scope.
     """
@@ -45,22 +46,12 @@ class PhaseWorkflowNamingTests(unittest.TestCase):
         self.assertEqual(determine_phase_from_label("phase:malkhut"), "9")
         self.assertEqual(determine_phase_from_label("phase:hod-refactoring"), "10")
 
-    def test_branch_name_for_phase_uses_main_before_implementation_and_issue_branch_after(self) -> None:
-        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "2B", 12), "main")
-        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "4", 12), "main")
+    def test_branch_name_for_phase_always_uses_issue_branch(self) -> None:
+        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "2B", 12), "issue/12")
+        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "4", 12), "issue/12")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "5", 12), "issue/12")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "9", 12), "issue/12")
         self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "10", 12), "issue/12")
-
-    def test_session_scope_for_phase_isolated_for_all_phases(self) -> None:
-        self.assertEqual(conversation_scope_for_phase("1"), "phase-1")
-        self.assertEqual(conversation_scope_for_phase("2A"), "phase-2A")
-        self.assertEqual(conversation_scope_for_phase("2B"), "phase-2B")
-        self.assertEqual(conversation_scope_for_phase("2C"), "phase-2C")
-        self.assertEqual(conversation_scope_for_phase("4"), "phase-4")
-        self.assertEqual(conversation_scope_for_phase("5"), "phase-5")
-        self.assertEqual(conversation_scope_for_phase("9"), "phase-9")
-        self.assertEqual(conversation_scope_for_phase("10"), "phase-10")
 
 
 class PromptBuilderTests(unittest.TestCase):
@@ -77,7 +68,7 @@ class PromptBuilderTests(unittest.TestCase):
             "phase:keter",
             12,
             "owner/repo",
-            "Keter microagent",
+            "Keter microagent_persona",
             "1",
             {"title": "Example", "body": "Body", "comments": []},
         )
@@ -92,7 +83,7 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("Do not rely on subjective human judgments", joined)
 
     def test_phase_3_persona_stack_requires_atomic_id_bearing_requirements_and_justification(self) -> None:
-        content = read_microagent_for_label("phase:gevurah", "3")
+        content = read_microagent_persona_for_label("phase:gevurah", "3")
         self.assertIsNotNone(content)
         assert content is not None
         self.assertIn(
@@ -115,7 +106,7 @@ class PromptBuilderTests(unittest.TestCase):
             "phase:tiferet",
             12,
             "owner/repo",
-            "Tiferet microagent",
+            "Tiferet microagent_persona",
             "4",
             {"title": "Example", "body": "Body", "comments": []},
         )
@@ -130,14 +121,14 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("Canonical Requirements", prompt)
         self.assertIn("Do not paraphrase or compress them", prompt)
 
-    def test_phase_4_microagent_requires_canonical_requirements_section_verbatim(self) -> None:
-        content = read_microagent_for_label("phase:tiferet", "4")
+    def test_phase_4_microagent_persona_requires_canonical_requirements_section_verbatim(self) -> None:
+        content = read_microagent_persona_for_label("phase:tiferet", "4")
 
         self.assertIn("`Canonical Requirements` section", content)
         self.assertIn("clone the exact canonical requirement text", content)
 
-    def test_read_microagent_for_label_composes_base_persona_phase_persona_and_microagent(self) -> None:
-        content = read_microagent_for_label("phase:binah", "2B")
+    def test_read_microagent_persona_for_label_composes_base_persona_phase_persona_and_microagent_persona(self) -> None:
+        content = read_microagent_persona_for_label("phase:binah", "2B")
         self.assertIsNotNone(content)
         assert content is not None
         self.assertIn("The user is your partner.", content)
@@ -193,7 +184,7 @@ class PromptBuilderTests(unittest.TestCase):
             "phase:netzach",
             12,
             "owner/repo",
-            "Netzach microagent",
+            "Netzach microagent_persona",
             "5",
             {
                 "title": "Example",
@@ -205,8 +196,8 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("## Issue Comments", prompt)
         self.assertIn("Implementation context comment.", prompt)
 
-    def test_phase_5_microagent_enforces_traceability_only_contract_stubs(self) -> None:
-        content = read_microagent_for_label("phase:netzach", "5")
+    def test_phase_5_microagent_persona_enforces_traceability_only_contract_stubs(self) -> None:
+        content = read_microagent_persona_for_label("phase:netzach", "5")
         self.assertIn("contract traceability only", content)
         self.assertIn("passing placeholders", content)
         self.assertIn("assert True", content)
@@ -215,42 +206,70 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("SPARC ALIGNMENT", content)
         self.assertIn("BOUNDARY CONTRACT", content)
 
-    def test_sparc_sister_microagents_include_explicit_alignment_and_boundary_contracts(self) -> None:
+    def test_sparc_sister_microagent_personas_include_explicit_alignment_and_boundary_contracts(self) -> None:
         for label, phase in (
             ("phase:hod", "6"),
             ("phase:yesod-orchestration", "7"),
             ("phase:yesod-embodiment", "8"),
             ("phase:malkhut", "9"),
         ):
-            content = read_microagent_for_label(label, phase)
+            content = read_microagent_persona_for_label(label, phase)
             self.assertIn("SPARC ALIGNMENT", content)
             self.assertIn("BOUNDARY CONTRACT", content)
 
-    def test_phase_6_to_9_microagents_include_discovery_procedure_and_completion_gate(self) -> None:
+    def test_phase_6_to_9_microagent_personas_include_discovery_procedure_and_completion_gate(self) -> None:
         for label, phase in (
             ("phase:hod", "6"),
             ("phase:yesod-orchestration", "7"),
             ("phase:yesod-embodiment", "8"),
             ("phase:malkhut", "9"),
         ):
-            content = read_microagent_for_label(label, phase)
+            content = read_microagent_persona_for_label(label, phase)
             self.assertIn("DISCOVERY PROCEDURE (MANDATORY)", content)
             self.assertIn("Completion gate:", content)
 
-    def test_phase_7_microagent_requires_architecture_artifacts_and_non_empty_diff(self) -> None:
-        content = read_microagent_for_label("phase:yesod-orchestration", "7")
+    def test_phase_7_microagent_persona_requires_architecture_artifacts_and_non_empty_diff(self) -> None:
+        content = read_microagent_persona_for_label("phase:yesod-orchestration", "7")
         self.assertIn("Determine the smallest coherent set of code-level architecture artifacts", content)
         self.assertIn("according to full canonical requirement coverage", content)
         self.assertIn("Leave the repository with concrete file changes (non-empty git diff)", content)
         self.assertIn("ARTIFACT DISCOVERY PROCEDURE (MANDATORY)", content)
         self.assertIn("Completion gate: do not stop after analysis", content)
 
+    def test_phase_6_prompt_enforces_pseudocode_discovery_and_readiness(self) -> None:
+        prompt = build_implementation_phase_prompt(
+            "phase:hod",
+            12,
+            "owner/repo",
+            "Hod microagent_persona",
+            "6",
+            {"title": "Example", "body": "Body", "comments": []},
+        )
+        self.assertIn("This is Phase 6 (Hod Pseudocode)", prompt)
+        self.assertIn("procedural structure and bodyless logic placeholders", prompt)
+        
+    def test_phase_10_prompt_enforces_refactoring_boundaries(self) -> None:
+        prompt = build_implementation_phase_prompt(
+            "phase:hod-refactoring",
+            12,
+            "owner/repo",
+            "Hod Refactoring microagent_persona",
+            "10",
+            {"title": "Example", "body": "Body", "comments": []},
+            pass_instruction=("Mock Pass", "Do the mock thing"),
+        )
+        self.assertIn("This is Phase 10 (Hod Refactoring)", prompt)
+        self.assertIn("Expose the system's architecture clearly", prompt)
+        self.assertIn("Mock Pass", prompt)
+        self.assertIn("Do the mock thing", prompt)
+        self.assertNotIn("## Runtime Context", prompt)
+
     def test_phase_7_prompt_enforces_code_level_artifacts_not_analysis_only(self) -> None:
         prompt = build_implementation_phase_prompt(
             "phase:yesod-orchestration",
             12,
             "owner/repo",
-            "Yesod microagent",
+            "Yesod microagent_persona",
             "7",
             {
                 "title": "Example",
@@ -258,12 +277,11 @@ class PromptBuilderTests(unittest.TestCase):
                 "comments": [{"body": "Architecture context comment."}],
             },
         )
-        self.assertIn("Phase-specific requirements:", prompt)
+        self.assertIn("Operational Constraints and Requirements", prompt)
         self.assertIn("Deliver architecture artifacts as code changes, not analysis-only notes", prompt)
-        self.assertIn("deterministic artifact-discovery pass", prompt)
 
     def test_phase_10_refactorer_persona_stack_is_resolvable(self) -> None:
-        content = read_microagent_for_label("phase:hod-refactoring", "10")
+        content = read_microagent_persona_for_label("phase:hod-refactoring", "10")
         self.assertIn("expanded through Hod", content)
         self.assertIn("ROLE: Refactoring agent", content)
         self.assertIn("HOD REFACTORER", content)
@@ -277,12 +295,11 @@ class PromptBuilderTests(unittest.TestCase):
             "phase:yesod-embodiment",
             12,
             "owner/repo",
-            "Yesod embodiment microagent",
+            "Yesod embodiment microagent_persona",
             "8",
             {"title": "Example", "body": "Original body", "comments": []},
         )
         self.assertIn("This is Phase 8 (Yesod Refinement)", prompt)
-        self.assertIn("deterministic implementation-discovery pass", prompt)
         self.assertIn("explicit completion gate before finishing", prompt)
         self.assertIn("implementation diff is empty", prompt)
 
@@ -291,13 +308,14 @@ class PromptBuilderTests(unittest.TestCase):
             "phase:malkhut",
             12,
             "owner/repo",
-            "Malkhut microagent",
+            "Malkhut microagent_persona",
             "9",
             {"title": "Example", "body": "Original body", "comments": []},
         )
         self.assertIn("This is Phase 9 (Malkhut Completion)", prompt)
-        self.assertIn("deterministic validation-discovery pass", prompt)
-        self.assertIn("evidence-backed readiness status", prompt)
+        self.assertIn("Actively complete the implementation", prompt)
+        self.assertIn("expand testing coverage", prompt)
+        self.assertIn("readiness status", prompt)
 
     def test_build_agent_prompt_preserves_canonical_requirements_in_child_issue_body_for_downstream_phases(self) -> None:
         # This fixture models a real Tiferet child issue body. Downstream
@@ -307,7 +325,7 @@ class PromptBuilderTests(unittest.TestCase):
             "phase:netzach",
             12,
             "owner/repo",
-            "Netzach microagent",
+            "Netzach microagent_persona",
             "5",
             {
                 "title": "[AUTO/TIFERET] Child issue",
@@ -344,30 +362,30 @@ class PromptBuilderTests(unittest.TestCase):
 
         self.assertIn("Phase 2B requires a Phase 1 clarification comment", str(exc.exception))
 
-    @patch("trigger_workflow.prompts.BASE_PERSONA_FILE", "missing-daneel.md")
-    def test_read_microagent_for_label_errors_when_base_persona_missing(self) -> None:
+    @patch("trigger_workflow.persona_loader.BASE_PERSONA_FILE", "missing-daneel.md")
+    def test_read_microagent_persona_for_label_errors_when_base_persona_missing(self) -> None:
         with self.assertRaises(SystemExit) as exc:
-            read_microagent_for_label("phase:binah", "2B")
+            read_microagent_persona_for_label("phase:binah", "2B")
 
         self.assertIn("Base persona file is missing", str(exc.exception))
 
-    @patch.dict("trigger_workflow.prompts.PERSONA_FILE_MAP", {"2B": "missing-phase-persona.md"}, clear=False)
-    def test_read_microagent_for_label_errors_when_phase_persona_missing(self) -> None:
+    @patch.dict("trigger_workflow.persona_loader.PERSONA_FILE_MAP", {"2B": "missing-phase-persona.md"}, clear=False)
+    def test_read_microagent_persona_for_label_errors_when_phase_persona_missing(self) -> None:
         with self.assertRaises(SystemExit) as exc:
-            read_microagent_for_label("phase:binah", "2B")
+            read_microagent_persona_for_label("phase:binah", "2B")
 
         self.assertIn("Phase persona file is missing", str(exc.exception))
 
     @patch.dict(
-        "trigger_workflow.prompts.FUNCTIONAL_MICROAGENT_FILE_MAP",
+        "trigger_workflow.persona_loader.FUNCTIONAL_MICROAGENT_PERSONA_FILE_MAP",
         {"2B": "missing-functional-agent.md"},
         clear=False,
     )
-    def test_read_functional_microagent_errors_when_mapped_file_missing(self) -> None:
+    def test_read_functional_microagent_persona_errors_when_mapped_file_missing(self) -> None:
         with self.assertRaises(SystemExit) as exc:
-            read_functional_microagent("phase:binah", "2B")
+            read_functional_microagent_persona("phase:binah", "2B")
 
-        self.assertIn("Functional microagent file is missing", str(exc.exception))
+        self.assertIn("Functional microagent_persona file is missing", str(exc.exception))
 
 
 if __name__ == "__main__":
