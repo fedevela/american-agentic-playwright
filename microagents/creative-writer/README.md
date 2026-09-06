@@ -34,21 +34,40 @@ The table describes narrative responsibilities and completion conditions. Runtim
 | 10 — [Hod: revision](../../personas/creative-writer/hod_refactoringstructuralclarity.md) | [Editorial revision](phase_10_hod_refactoring.md) | Drafted script, continuity, and available issue context | Clarify pacing, character voice, emotional architecture, and subtext through stronger action and dialogue. | Revised pages stand alone while preserving the core story, inciting incident, climax, and thematic resolution unless the partner requests a plot change. |
 
 ### The Required Local Context (The Law of the World)
+
+The story bible lives in `bible/`. Its `characters.md` is the cast overview;
+`characters/<character_id>/` holds each character's detailed profile. The bible's README is
+navigation; the required canon files are listed below. Treatments, skeletons, and
+performed scripts live outside the bible. Reserve `AGENTS.md` for agent instructions.
+
+The canonical template is the [creative-project reference](../../examples/creative-project/README.md).
+Copy its contents into a story repository, or copy only its `bible/` directory
+when adding a bible to an existing project.
+It includes the bible and a `Script/Season_01/Episode_01/Scene_01/Beat_01/` hierarchy
+preserved with `.gitkeep`. Populate the canon before running the writing workflow.
+
+To migrate an existing story, rename `agents_artifacts/` to `bible/` and move the
+root cast roster `agents.md` to `bible/characters.md`. Update paths in source indexes,
+dramatic-action briefs, performance contexts, and local instructions. Rebuild the
+phase-8 handoff and start a new performance: existing recovery records retain the
+old source paths and must not be rewritten to impersonate the original run.
+The legacy paths are no longer accepted as substitutes for the canonical layout.
+
 The engine requires a formal, binding schema of prerequisite artifacts to exist in the workspace before generating scripts. This grounds the generative process in established truth, ensuring characters remain consistent and plot arcs are derived from documented rules rather than hallucinated out of necessity.
 
 The following 12 artifact types must be provided by the script caller in the local folder context. Items 6–12 are required for each character directory:
-1. `agents.md`: High-level roster of primary characters.
-2. `agents_artifacts/dramatic_arcs.md`: Arcs per character and explicit Plot Arc Colors.
-3. `agents_artifacts/world_rules.md`: The physical, societal, and magical constraints.
-4. `agents_artifacts/theme.md`: The central argument or thesis.
-5. `agents_artifacts/relationships.drawio`: The established dynamics between characters.
-6. `agents_artifacts/characters/<character_name>/appearance.md`
-7. `agents_artifacts/characters/<character_name>/personality.md`
-8. `agents_artifacts/characters/<character_name>/interiorvoice.md`
-9. `agents_artifacts/characters/<character_name>/wants.md`
-10. `agents_artifacts/characters/<character_name>/fears.md`
-11. `agents_artifacts/characters/<character_name>/secrets.md`
-12. `agents_artifacts/characters/<character_name>/lexicon.md`
+1. `bible/characters.md`: High-level roster of primary characters.
+2. `bible/dramatic_arcs.md`: Arcs per character and explicit Plot Arc Colors.
+3. `bible/world_rules.md`: The physical, societal, and magical constraints.
+4. `bible/theme.md`: The central argument or thesis.
+5. `bible/relationships.drawio`: The established dynamics between characters.
+6. `bible/characters/<character_name>/appearance.md`
+7. `bible/characters/<character_name>/personality.md`
+8. `bible/characters/<character_name>/interiorvoice.md`
+9. `bible/characters/<character_name>/wants.md`
+10. `bible/characters/<character_name>/fears.md`
+11. `bible/characters/<character_name>/secrets.md`
+12. `bible/characters/<character_name>/lexicon.md`
 
 Existing story repositories must split their combined motivations-and-fears sheet into
 `wants.md` (primary want and deep need) and `fears.md` (greatest fear and avoidance
@@ -104,7 +123,7 @@ Tiferet is a special handoff, not a normal parent transition from 4 to 5. It ret
 
 Malkhut has no automatic successor. Phase 10 is separately triggered editorial revision and also has no successor. Ordinary phases use fresh native conversations; only a phase-9 scene/run has the persistent director/actor roundtable.
 
-Some creative gates remain model instructions rather than runtime guarantees. [Codex](../../trigger_workflow_creative_writer/codex_runner.py) checks prerequisite existence, and explicit error/rejection responses in discussion/specification paths halt and mark the issue for human intervention. Tiferet rejection does not automatically relabel it to Keter. The [discussion handoff](../../trigger_workflow_creative_writer/core.py) does not recognize Keter's `[ACTION: ASK_QUESTION]` or Gevurah's pending yellow choices as pause signals; these remain unfinished creative work even if a label advances. Keter's functional file also retains a stale reference to eleven artifacts; the twelve types listed here match the required files.
+Some creative gates remain model instructions rather than runtime guarantees. [Codex](../../trigger_workflow_creative_writer/codex_runner.py) checks prerequisite existence, and explicit error/rejection responses in discussion/specification paths halt and mark the issue for human intervention. Tiferet rejection does not automatically relabel it to Keter. The [discussion handoff](../../trigger_workflow_creative_writer/core.py) does not recognize Keter's `[ACTION: ASK_QUESTION]` or Gevurah's pending yellow choices as pause signals; these remain unfinished creative work even if a label advances.
 
 Phases 7 and 8 have writing-specific artifact validators; phase 9 validates scene inputs, role responses, completion, and the public script against the preserved skeleton. Phases 5, 6, and 10 currently retain the [repository validation contract](../../trigger_workflow_creative_writer/runner_utils.py) (`npm run typecheck`, `npm run build`, `npm run test`, `npm run tests:e2e`). These are execution checks, not proof of narrative quality. See the [execution and recovery contract](../../docs/creative-writing-roundtable.md) for scene selection, explicit recovery, and delivery reconciliation.
 

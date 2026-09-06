@@ -20,7 +20,7 @@ continuity, treatment, phase-5 constraints, phase-6 skeleton, phase-7 brief).
 Copy dramatic_action_brief.md unchanged. Save the phase-6 skeleton exactly as both
 scene_skeleton.md (immutable input) and script.md (initial performance destination).
 Write performance_context.json:
-{"version":1,"issue":42,"scene_id":"same as brief","required_moment_ids":["BEAT 1"],"sources":{"bible":["same as brief"],"continuity":["same as brief"],"treatment":["same as brief"],"constraints":["same as brief"],"skeleton":["same as brief"]},"characters":{"stable-character-id":{"persona_paths":["agents_artifacts/characters/stable-character-id/personality.md"],"known_context":"own established knowledge and perceived starting situation","private_context":"own secrets, starting emotion, objective, stakes and constraints"}}}
+{"version":1,"issue":42,"scene_id":"same as brief","required_moment_ids":["BEAT 1"],"sources":{"bible":["same as brief"],"continuity":["same as brief"],"treatment":["same as brief"],"constraints":["same as brief"],"skeleton":["same as brief"]},"characters":{"stable-character-id":{"persona_paths":["bible/characters/stable-character-id/personality.md"],"known_context":"own established knowledge and perceived starting situation","private_context":"own secrets, starting emotion, objective, stakes and constraints"}}}
 Use the actual issue number. Sources, scene ID, ordered moment IDs and participating
 characters must match the brief. Include all relevant persona assets for each actor,
 including appearance, personality, interiorvoice, wants, fears, secrets and lexicon.

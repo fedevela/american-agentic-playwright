@@ -34,7 +34,7 @@ def _create_required_artifacts(repo: Path) -> None:
         path = repo / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("fixture\n", encoding="utf-8")
-    character = repo / "agents_artifacts" / "characters" / "ada"
+    character = repo / "bible" / "characters" / "ada"
     character.mkdir(parents=True)
     for name in REQUIRED_CHARACTER_ARTIFACTS:
         (character / name).write_text("fixture\n", encoding="utf-8")

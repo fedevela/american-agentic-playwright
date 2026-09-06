@@ -57,7 +57,7 @@ the separately triggered editorial revision stage.
 {
   "scene_id": "locked-room",
   "sources": {
-    "bible": ["agents.md", "agents_artifacts/world_rules.md"],
+    "bible": ["bible/characters.md", "bible/world_rules.md"],
     "continuity": ["continuity.md"],
     "treatment": ["treatment.md"],
     "constraints": ["dramaturgical_checklist.md"],
@@ -85,7 +85,7 @@ the separately triggered editorial revision stage.
 }
 ```
 
-Character IDs match directory names under `agents_artifacts/characters/`, including
+Character IDs match directory names under `bible/characters/`, including
 non-speaking characters. Include every assigned moment and participant. Unknown
 facts must be flagged, not manufactured. When prior-phase material exists only in
 issue comments, preserve an attributed source snapshot in the checkout and point
@@ -106,7 +106,7 @@ Each scene directory contains `performance_context.json`:
   "scene_id": "locked-room",
   "required_moment_ids": ["BEAT 1"],
   "sources": {
-    "bible": ["agents.md", "agents_artifacts/world_rules.md"],
+    "bible": ["bible/characters.md", "bible/world_rules.md"],
     "continuity": ["continuity.md"],
     "treatment": ["treatment.md"],
     "constraints": ["dramaturgical_checklist.md"],
@@ -114,7 +114,7 @@ Each scene directory contains `performance_context.json`:
   },
   "characters": {
     "alice": {
-      "persona_paths": ["agents_artifacts/characters/alice/personality.md", "agents_artifacts/characters/alice/secrets.md"],
+      "persona_paths": ["bible/characters/alice/personality.md", "bible/characters/alice/secrets.md"],
       "known_context": "Own established knowledge and perceived starting situation",
       "private_context": "Own secret, immediate objective, emotion, stakes and constraints"
     }
@@ -156,6 +156,11 @@ cues. Original actor objectives/subtext and unperformed action vessels remain in
 
 Normal repository access is retained. Session separation and explicit routing
 enforce the application boundary, **not filesystem secrecy**. Characters are
+reminded on every initial and resumed turn that, within `bible/characters/`,
+only their own character-ID folder is permitted. They must not read, list, search,
+or access sibling folders, including indirectly through tools or alternate paths.
+This prompt guardrail does not grant tool use or file writes; actors still return
+only their role response. The director retains the full briefing. Characters are
 instructed to distinguish author-visible canon from in-story knowledge. Inner
 monologue means authored fictional text, never model hidden reasoning. Semantic
 leaks through a director's narration and artistic fidelity still need review.

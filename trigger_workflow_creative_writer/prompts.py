@@ -151,18 +151,18 @@ def build_issue_runtime_context(
 
 ### Required Local Context (The Law of the World)
 The creative engine requires the following 12 standardized artifacts to be present in the local file system. These form the binding constraints of the story, characters, and world. The caller must provide them, and you must rely on them for all foundational truth rather than inventing it:
-1. `agents.md`
-2. `agents_artifacts/dramatic_arcs.md`
-3. `agents_artifacts/world_rules.md`
-4. `agents_artifacts/theme.md`
-5. `agents_artifacts/relationships.drawio`
-6. `agents_artifacts/characters/[character_name]/appearance.md`
-7. `agents_artifacts/characters/[character_name]/personality.md`
-8. `agents_artifacts/characters/[character_name]/interiorvoice.md`
-9. `agents_artifacts/characters/[character_name]/wants.md`
-10. `agents_artifacts/characters/[character_name]/fears.md`
-11. `agents_artifacts/characters/[character_name]/secrets.md`
-12. `agents_artifacts/characters/[character_name]/lexicon.md`
+1. `bible/characters.md`
+2. `bible/dramatic_arcs.md`
+3. `bible/world_rules.md`
+4. `bible/theme.md`
+5. `bible/relationships.drawio`
+6. `bible/characters/[character_name]/appearance.md`
+7. `bible/characters/[character_name]/personality.md`
+8. `bible/characters/[character_name]/interiorvoice.md`
+9. `bible/characters/[character_name]/wants.md`
+10. `bible/characters/[character_name]/fears.md`
+11. `bible/characters/[character_name]/secrets.md`
+12. `bible/characters/[character_name]/lexicon.md`
 
 **Memory Check Directive:** Before proceeding with any generation, you must verify that you have successfully read and loaded all of the above artifacts into your working memory. If they are not in your context, you must read them from the local file system now.
 

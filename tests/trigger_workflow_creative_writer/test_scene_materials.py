@@ -19,7 +19,7 @@ def make_scene(root: Path, issue=42):
     source_paths["skeleton"] = ["skeleton.md"]
     characters = {}
     for character in ("alice", "bob"):
-        persona = root / "agents_artifacts" / "characters" / character / "personality.md"
+        persona = root / "bible" / "characters" / character / "personality.md"
         persona.parent.mkdir(parents=True)
         persona.write_text(f"Own persona for {character}")
         for filename in ("appearance.md", "interiorvoice.md", "wants.md", "fears.md", "secrets.md", "lexicon.md"):

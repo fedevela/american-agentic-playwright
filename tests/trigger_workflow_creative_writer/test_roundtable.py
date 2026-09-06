@@ -74,6 +74,23 @@ def manifest(arguments):
     return paths[0], json.loads(paths[0].read_text())
 
 
+def test_character_folder_guardrail_reaches_fresh_and_resumed_actor_turns(setup):
+    runtime, args, model, scene = setup
+    runtime.perform_scene(**args)
+    for role in ("alice", "bob"):
+        turns = [call for call in model.calls if call["role"] == role]
+        assert turns[0]["resume"] is None
+        assert turns[1]["resume"] is not None
+        for call in turns:
+            rule = call["request"]["character_folder_guardrail"]
+            assert f"bible/characters/{role}/" in rule
+            assert "Do not read, list, search, or access any sibling character folder" in rule
+            assert "does not authorize tool use" in rule
+    for call in model.calls:
+        if call["role"] == "director":
+            assert "character_folder_guardrail" not in call["request"]
+
+
 def test_persistent_sessions_route_only_observable_deltas_and_render_public_script(setup):
     runtime, args, model, scene = setup
     original = (scene / "scene_skeleton.md").read_text()

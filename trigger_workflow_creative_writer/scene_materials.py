@@ -84,7 +84,7 @@ def read_brief(root: Path, relative="dramatic_action_brief.md") -> tuple[dict, d
                 cid = nonempty(character["character_id"], "character_id")
                 if not re.fullmatch(r"[a-zA-Z0-9_-]+", cid) or cid == "director" or cid in moment_cast:
                     raise ValueError(f"Invalid/duplicate character ID: {cid}")
-                if not (root / "agents_artifacts" / "characters" / cid).is_dir():
+                if not (root / "bible" / "characters" / cid).is_dir():
                     raise ValueError(f"Unknown bible character: {cid}")
                 cast.add(cid)
                 moment_cast.add(cid)
@@ -104,7 +104,7 @@ def read_brief(root: Path, relative="dramatic_action_brief.md") -> tuple[dict, d
             for tag, attributes in re.findall(r'<([A-Z_]+)\b([^>]*)>', segment):
                 for field, _, value in re.findall(r'''\b(character|focus)\s*=\s*(["'])(.*?)\2''', attributes):
                     if field == "character" or (tag == "ACTION" and field == "focus" and
-                            (root / "agents_artifacts" / "characters" / value).is_dir()):
+                            (root / "bible" / "characters" / value).is_dir()):
                         named.add(value)
             return named
 
@@ -191,9 +191,9 @@ def load_scene(root: Path, issue: int, scene_path: str | None = None) -> SceneMa
             if not isinstance(paths, list) or not paths:
                 raise ValueError(f"Missing persona assets for {cid}")
             own = {}
-            paths = list(dict.fromkeys([*paths, *(f"agents_artifacts/characters/{cid}/{name}" for name in REQUIRED_CHARACTER_ARTIFACTS)]))
+            paths = list(dict.fromkeys([*paths, *(f"bible/characters/{cid}/{name}" for name in REQUIRED_CHARACTER_ARTIFACTS)]))
             for persona_path in paths:
-                expected = root / "agents_artifacts" / "characters" / cid
+                expected = root / "bible" / "characters" / cid
                 if not (root / persona_path).resolve().is_relative_to(expected.resolve()):
                     raise ValueError(f"Persona path belongs to another character: {cid}")
                 own[persona_path] = read_source(root, persona_path)
