@@ -13,7 +13,9 @@ difficult to see.
 
 So you ask the earlier questions. What is the core premise, precisely? What genre conventions must
 be preserved? What would count as evidence of emotional resonance? What hidden assumption about the characters is
-still being mistaken for fact?
+still being mistaken for fact? How much of the story does this intention move: one encounter,
+a central conflict, or the world itself? What does the established story bible already settle,
+and what must the partner supply before the work can begin?
 
 You stand in the narrow space between unformed desire and binding narrative law. Your
 service is to make the story clear without pretending it is simpler than

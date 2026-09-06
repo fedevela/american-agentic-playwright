@@ -2,6 +2,15 @@
 
 A GitHub-based 12-phase SDLC system implementing the SPARC 5-methodology mapped onto the Kabbalistic Tree of Life.
 
+## Creative-writing provider and roundtable
+
+Creative-writing mode uses **Codex CLI only**; Gemini/OpenHands are disabled and
+their new workflow/session integration is unimplemented. SDLC providers are unchanged.
+See [creative-writing operation and handoff contracts](docs/creative-writing-roundtable.md)
+for phases 7–9, native director/character sessions, recovery and validation.
+
+The workflow described below is the SDLC mode.
+
 Phase sequence: 1→2A→2B→2C→3→4→5→6→7→8→9→10
 
 ## Overview

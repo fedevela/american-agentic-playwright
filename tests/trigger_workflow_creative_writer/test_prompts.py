@@ -232,13 +232,13 @@ class PromptBuilderTests(unittest.TestCase):
             self.assertIn("YOUR PRECISE DIRECTIVES", content)
             self.assertIn("YOUR NARRATIVE PRODUCTS", content)
 
-    def test_phase_7_microagent_requires_architecture_artifacts_and_non_empty_diff(self) -> None:
+    def test_phase_7_microagent_prepares_action_without_choosing_responses(self) -> None:
         content = read_microagent_for_label("phase:yesod-orchestration", "7")
-        self.assertIn("Read the structured bracket `scene_skeleton`.", content)
-        self.assertIn("An orchestration document detailing the required persona assets", content)
-        self.assertIn("Do NOT write prose or alter the structural flow of the tags.", content)
+        self.assertIn("dramatic_action_brief.md", content)
+        self.assertIn("what each character can perceive and act upon", content)
+        self.assertIn("Do not predetermine discretionary responses", content)
 
-    def test_phase_7_prompt_enforces_code_level_artifacts_not_analysis_only(self) -> None:
+    def test_phase_7_prompt_requires_dramatic_action_brief(self) -> None:
         prompt = build_implementation_phase_prompt(
             "phase:yesod-orchestration",
             12,
@@ -252,8 +252,8 @@ class PromptBuilderTests(unittest.TestCase):
             },
         )
         self.assertIn("Phase-specific requirements:", prompt)
-        self.assertIn("Deliver pacing and structural boundaries as actual document changes", prompt)
-        self.assertIn("deterministic pacing-discovery pass", prompt)
+        self.assertIn("dramatic_action_brief.md", prompt)
+        self.assertIn("stimulus", prompt)
 
     def test_phase_10_refactorer_persona_stack_is_resolvable(self) -> None:
         content = read_microagent_for_label("phase:hod-refactoring", "10")
@@ -262,7 +262,7 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("show, don't tell", content.lower())
         self.assertIn("preserve the emotional climax", content.lower())
 
-    def test_phase_8_prompt_enforces_deterministic_implementation_discovery_and_completion_gate(self) -> None:
+    def test_phase_8_prompt_requires_preserved_performance_handoff(self) -> None:
         prompt = build_implementation_phase_prompt(
             "phase:yesod-embodiment",
             12,
@@ -271,12 +271,12 @@ class PromptBuilderTests(unittest.TestCase):
             "8",
             {"title": "Example", "body": "Original body", "comments": []},
         )
-        self.assertIn("This is Phase 8 (First Draft Execution)", prompt)
-        self.assertIn("deterministic scene-discovery pass", prompt)
-        self.assertIn("explicit completion gate before finishing", prompt)
-        self.assertIn("verify working drafts exist", prompt)
+        self.assertIn("Phase 8 (Performance Materials)", prompt)
+        self.assertIn("performance_context.json", prompt)
+        self.assertIn("completion gate", prompt)
+        self.assertIn("preserve", prompt)
 
-    def test_phase_9_prompt_enforces_deterministic_validation_discovery_and_evidence_gate(self) -> None:
+    def test_phase_9_prompt_requires_omniscient_director_and_python_orchestration(self) -> None:
         prompt = build_implementation_phase_prompt(
             "phase:malkhut",
             12,
@@ -285,9 +285,9 @@ class PromptBuilderTests(unittest.TestCase):
             "9",
             {"title": "Example", "body": "Original body", "comments": []},
         )
-        self.assertIn("This is Phase 9 (The Final Edit)", prompt)
-        self.assertIn("deterministic narrative-discovery pass", prompt)
-        self.assertIn("evidence-backed readiness status", prompt)
+        self.assertIn("Phase 9 (Director", prompt)
+        self.assertIn("inner_monologue", prompt)
+        self.assertIn("Python", prompt)
 
     def test_build_agent_prompt_preserves_canonical_requirements_in_child_issue_body_for_downstream_phases(self) -> None:
         # This fixture models a real Tiferet child issue body. Downstream

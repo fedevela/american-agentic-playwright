@@ -16,7 +16,8 @@ REQUIRED_CHARACTER_ARTIFACTS = [
     "appearance.md",
     "personality.md",
     "interiorvoice.md",
-    "motivations_and_fears.md",
+    "wants.md",
+    "fears.md",
     "secrets.md",
     "lexicon.md",
 ]

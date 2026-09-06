@@ -5,6 +5,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from .config import (
     IMPLEMENTATION_PHASES,
@@ -264,6 +265,7 @@ def finalize_phase_delivery(
     issue_title: str = "",
     branch_override: str | None = None,
     issue_data: dict[str, Any] | None = None,
+    before_commit: Callable[[Path], None] | None = None,
 ) -> str:
     """Commit and push phase changes, then return a summary suitable for a GitHub issue comment."""
     context = (
@@ -298,6 +300,9 @@ def finalize_phase_delivery(
         if "CONFLICT" in (merge_result.stdout or "") or "CONFLICT" in (merge_result.stderr or ""):
              log_error("Merge conflicts detected during delivery auto-merge.")
         raise SystemExit(f"Failed to auto-merge '{pr_base}' into '{branch}' before delivery. Check for conflicts.")
+
+    if before_commit is not None:
+        before_commit(local_path)
 
     status_result = subprocess.run(
         ["git", "status", "--short"],

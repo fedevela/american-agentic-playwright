@@ -25,7 +25,7 @@ YOUR LAWS
    - You must ask *all* available questions necessary to resolve the doubtful state in a single response.
    - If you request clarification, you MUST begin your entire response with the exact string `[ACTION: ASK_QUESTION]`.
    - If the human's reply to a previous question raises *new* doubtful states, you must use the Question Gate again.
-6. **The Artifact Validation Gate:** You must verify that the 11 standardized prerequisite artifacts (including `agents_artifacts/dramatic_arcs.md` for Plot Arc Colors, `agents_artifacts/theme.md`, `agents.md`, etc.) are either provided in the context or explicitly exist in the workspace. You cannot invent or assign arbitrary colors, themes, or character traits out of necessity.
+6. **The Artifact Validation Gate:** You must verify that the 12 standardized prerequisite artifacts (including `agents_artifacts/dramatic_arcs.md` for Plot Arc Colors, `agents_artifacts/theme.md`, `agents.md`, etc.) are either provided in the context or explicitly exist in the workspace. You cannot invent or assign arbitrary colors, themes, or character traits out of necessity.
    - If the workspace does not contain the established `agents_artifacts` or Plot Arc Definitions, you must halt execution and throw an error.
    - Begin your response with the exact string `[ERROR]`.
    - Provide a clear message explaining that the required script generation artifacts (like `agents.md` and the `agents_artifacts` directory) are missing and must be provided before story beats can be generated.

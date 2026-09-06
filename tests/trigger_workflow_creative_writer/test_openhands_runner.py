@@ -171,6 +171,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         )
         self.assertEqual(ensure_git_branch_mock.call_count, 2)
 
+    @patch("trigger_workflow_creative_writer.runner_utils.git_run", return_value=subprocess.CompletedProcess(args=["git"], returncode=0, stdout="", stderr=""))
     @patch("trigger_workflow_creative_writer.runner_utils.log_info")
     @patch("trigger_workflow_creative_writer.runner_utils.ensure_managed_repo_checkout")
     @patch("trigger_workflow_creative_writer.runner_utils.current_branch", return_value="issue/21")
@@ -185,6 +186,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         current_branch_mock,
         ensure_managed_repo_checkout_mock,
         log_info_mock,
+        git_run_mock,
     ) -> None:
         # The mocked config object is intentionally minimal: this test is about
         # path verification and branch logging, not dataclass identity.
@@ -192,9 +194,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         del ensure_git_branch_mock
         del current_branch_mock
         local_path = Path("/tmp/particle-life-3d")
-        managed_path = Path(
-            "/Users/macbook/Documents/gitworkspace/openhands-swarm/.openhands/repos/fedevela__particle-life-3d"
-        )
+        managed_path = Path(__file__).resolve().parents[2] / ".openhands" / "repos" / "fedevela__particle-life-3d"
         resolve_target_repo_config_mock.return_value = type(
             "Config",
             (),
@@ -307,9 +307,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         del ensure_git_branch_mock
         del current_branch_mock
         local_path = Path("/tmp/particle-life-3d")
-        managed_path = Path(
-            "/Users/macbook/Documents/gitworkspace/openhands-swarm/.openhands/repos/fedevela__particle-life-3d"
-        )
+        managed_path = Path(__file__).resolve().parents[2] / ".openhands" / "repos" / "fedevela__particle-life-3d"
         resolve_target_repo_config_mock.return_value = type(
             "Config",
             (),

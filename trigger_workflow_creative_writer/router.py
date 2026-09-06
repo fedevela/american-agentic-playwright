@@ -31,64 +31,53 @@ from .github_ops import advance_issue_label
 
 
 def execute_malkhut_performance_phase(request: PhaseExecutionRequest) -> None:
-    """
-    Execute phase 9/Malkhut using the Multi-Session Performance Loop.
-    This explicitly relieves the LLM from managing loops, enforcing the Slice Principle.
-    The Python trigger acts as the Information Broker here.
-    """
-    log_info("Building Malkhut orchestration loop...")
-    
-    # How the Trigger Orchestrates Phase 9:
-    
-    # 1. The Parse: The Python trigger reads skeleton.md and identifies the required character personas.
-    # skeleton_content = read_skeleton_file()
-    # required_personas = extract_required_personas(skeleton_content)
-    
-    # 2. The Session Dictionary: The Python trigger initializes an array of persistent API conversation histories.
-    # session_dict = {
-    #     "stage_master": create_persistent_session("malkhut_stage_master"),
-    #     "souls": {p: create_persistent_session(f"malkhut_soul_{p}") for p in required_personas}
-    # }
-    
-    # 3. The Loop: Programmatically bounce prompts between distinct conversation histories.
-    # current_stimulus = initial_tags
-    # while not scene_complete:
-    #     # 1. Stage Master narrates the environment/action and explicitly designates the next speaker
-    #     stage_output = prompt_session(session_dict["stage_master"], current_stimulus)
-    #
-    #     # 2. The Stage Master MUST narrate back to every persona what is happening
-    #     for p in required_personas:
-    #         prompt_session(session_dict["souls"][p], f"Stage Master Narration: {stage_output.narration}")
-    #
-    #     # 3. The Python trigger reads the Stage Master's decision on who acts next
-    #     active_soul = stage_output.next_speaker
-    #     if not active_soul:
-    #         break # Scene over
-    #
-    #     # 4. Prompt the chosen Character Soul to react (dialogue, action, or parenthetical)
-    #     soul_output = prompt_session(session_dict["souls"][active_soul], "It is your turn to act/speak.")
-    #
-    #     # 5. Extract dialogue/actions and write to the final script buffer
-    #     append_to_script(stage_output.narration, soul_output.external_manifestation)
-    #
-    #     # 6. Feed the soul's external manifestation back to the Stage Master as the new stimulus for the next loop
-    #     current_stimulus = f"Character {active_soul} did/said: {soul_output.external_manifestation}"
-    # 
-    # write_final_script_md()  # Bypassing the need for a general-purpose headless agent entirely.
+    """Perform first; journal all delivery/handoff effects under the run lock."""
+    from . import config
+    from .artifact_validation import validate_required_artifacts
+    from .runner_utils import prepare_phase_execution_context
 
-    log_info("Finalizing git delivery (commit + push)...")
-    delivery_summary = finalize_delivery(
-        repo=request.repo,
-        issue=request.issue,
-        phase=request.phase,
-        issue_title=str(request.issue_data.get("title") or ""),
-        issue_data=request.issue_data,
+    config.require_enabled_provider()
+    if request.phase != "9":
+        raise ValueError("Malkhut performance handler requires phase 9")
+    context = prepare_phase_execution_context(
+        request.repo, request.phase, request.issue, issue_data=request.issue_data,
     )
-    log_multiline("Delivery summary", delivery_summary)
-    post_phase_machine_comment(request, delivery_summary)
-    advance_issue_label(request.repo, request.issue, request.label)
-    log_info("Label advanced")
+    validate_required_artifacts(context.local_path)
+    from .roundtable import perform_scene
+    from .scene_materials import load_scene
 
+    scene = load_scene(context.local_path, request.issue, config.SCENE_PATH)
+    relative_scene = str(scene.directory.relative_to(context.local_path.resolve()))
+
+    def deliver() -> str:
+        rendered_script = (scene.directory / "script.md").read_bytes()
+
+        def before_commit(checkout) -> None:
+            final_scene = load_scene(checkout, request.issue, relative_scene)
+            if final_scene.scene_id != scene.scene_id or final_scene.fingerprint != scene.fingerprint:
+                raise ValueError("Scene input fingerprint changed before delivery; reconciliation required")
+            if (final_scene.directory / "script.md").read_bytes() != rendered_script:
+                raise ValueError("Rendered script changed before delivery; reconciliation required")
+
+        summary = finalize_delivery(
+            repo=request.repo, issue=request.issue, phase=request.phase,
+            issue_title=str(request.issue_data.get("title") or ""),
+            issue_data=request.issue_data,
+            before_commit=before_commit,
+        )
+        post_phase_machine_comment(request, summary)
+        advance_issue_label(request.repo, request.issue, request.label)
+        return summary
+
+    result = perform_scene(
+        repo=request.repo, issue=request.issue, cwd=context.local_path,
+        state_root=config.WORKSPACE / "workspace" / "roundtable",
+        scene_path=config.SCENE_PATH, run_id=config.PERFORMANCE_RUN,
+        new_performance=config.NEW_PERFORMANCE, model=config.CODEX_MODEL,
+        max_calls=config.MAX_ROLE_CALLS, timeout=config.ROLE_TIMEOUT,
+        max_no_progress=config.MAX_NO_PROGRESS, deliver=deliver,
+    )
+    log_info(f"Performance status: {result.get('status', 'completed')}")
 
 __all__ = [
     "PhaseExecutionRequest",

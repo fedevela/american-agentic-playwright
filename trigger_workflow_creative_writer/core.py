@@ -57,13 +57,10 @@ def conversation_scope_for_phase(phase: str) -> str:
 
 
 def describe_phase_conversation_policy(phase: str, session_scope: str) -> str:
-    """Describe whether the phase starts from an empty session or the shared per-issue session."""
-    if session_scope:
-        return (
-            f"strictly independent phase session '{session_scope}' "
-            "(starts with empty OpenHands conversation context)"
-        )
-    return "shared per-issue session policy (OpenHands runs start fresh by runner policy)"
+    """Preparation is fresh; a performance owns explicit native participant UUIDs."""
+    if phase == "9":
+        return "separate native director and character sessions, resumed only within this performance"
+    return f"fresh independent Codex session ({session_scope or 'current phase'}); never resume preparation"
 
 
 def log_prompt_size_and_conversation_policy(prompt: str, phase: str) -> str:
@@ -190,6 +187,7 @@ def resolve_phase_execution_request(
     include_base_persona: bool = True,
 ) -> PhaseExecutionRequest:
     """Resolve and validate issue/label context into a reusable phase execution request."""
+    config.require_enabled_provider()
     repo = repo or DEFAULT_REPO
     log_section("STARTING PHASE EXECUTION")
     log_info(f"Repository: {repo}")
@@ -404,7 +402,13 @@ def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
         "\n".join(
             [
                 f"1. Run {config.RUNNER_TYPE} with the prompt above on the resolved issue branch.",
-                "2. Run trigger validation flow for phases 6-9 (`typecheck -> build -> test:e2e`).",
+                (
+                    "2. Validate source handoff, perform with separate native sessions, and check explicit completion and moment coverage."
+                    if phase == "9" else
+                    "2. Validate dramatic-action brief and preserved performance artifacts (no npm gates)."
+                    if phase in {"7", "8"} else
+                    "2. Run the existing phase validation command contract."
+                ),
                 "3. Finalize delivery (git add/commit/push and PR create/lookup).",
                 "4. Post the delivery summary as a wrapped phase comment.",
                 "5. Advance the issue label to the next phase.",

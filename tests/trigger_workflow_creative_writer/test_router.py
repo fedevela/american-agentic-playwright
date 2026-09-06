@@ -330,8 +330,7 @@ class RouterPhaseExecutionTests(unittest.TestCase):
         preview_phase_execution_plan(request)
 
         build_phase_execution_prompt_mock.assert_called_once()
-        # RUNNER_TYPE defaults to gemini
-        self.assertEqual(log_multiline_mock.call_args_list[0].args[0], "Manual mode prompt for gemini (implementation)")
+        self.assertEqual(log_multiline_mock.call_args_list[0].args[0], "Manual mode prompt for codex (implementation)")
         self.assertEqual(log_multiline_mock.call_args_list[0].args[1], "PROMPT-CONTENT")
         self.assertEqual(log_multiline_mock.call_args_list[1].args[0], "Manual mode planned actions")
 

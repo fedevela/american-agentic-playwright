@@ -2,6 +2,27 @@
 
 This document captures the practical architecture and execution rules for working safely in this repository.
 
+## Creative-writing mode
+
+The older module map below describes the SDLC engine. `trigger.py --mode creative-writer`
+selects `trigger_workflow_creative_writer`, whose sole enabled provider is Codex CLI.
+Gemini/OpenHands workflow/session integration is unimplemented and disabled there;
+SDLC providers/defaults are unchanged.
+
+- Phases 7/8 prepare dramatic action and preserve performance materials; phase 9 is
+  the director's roundtable, not validation-only. Phase 10 remains separate revision.
+- `codex_runner.py` owns native CLI calls; ordinary phases always start fresh.
+- `scene_materials.py` validates the phase-7 brief and phase-8 context index.
+- `roundtable.py` owns separate persistent director/character sessions for a specific
+  scene/run, observation routing, checkpoints, completion and guarded delivery.
+- Director receives all fictional inner monologues; actors receive only own context
+  and eligible observations. Normal repository access remains; no filesystem secrecy claim.
+- Use `--performance-run UUID` for explicit recovery, `--new-performance` for a deliberate
+  restart, and `--scene` to disambiguate scene directories. Ambiguous interrupted turns
+  or delivery require reconciliation, never blind replay.
+- Phases 7–9 use writing-specific gates, not npm. Other creative phases retain their gates.
+- See [creative-writing contracts and operation](docs/creative-writing-roundtable.md).
+
 ## Entry Point
 
 - `trigger.py` is a thin CLI shim that calls `trigger_workflow.router.run_trigger_cli()`.

@@ -171,7 +171,22 @@ IMPLEMENTATION_PHASES = {"5", "6", "7", "8", "9", "10"}
 STRICTLY_INDEPENDENT_PHASES = set(PHASE_DISPLAY_NAME_MAP.keys())
 
 # Runner configuration
-RUNNER_TYPE = "gemini"  # Options: "gemini", "openhands"
+RUNNER_TYPE = "codex"  # Legacy provider session integrations are unimplemented.
+PERFORMANCE_RUN = None
+NEW_PERFORMANCE = False
+SCENE_PATH = None
+CODEX_MODEL = None
+MAX_ROLE_CALLS = 120
+ROLE_TIMEOUT = 1200
+MAX_NO_PROGRESS = 6
+
+
+def require_enabled_provider() -> None:
+    if RUNNER_TYPE != "codex":
+        raise SystemExit(
+            f"Provider '{RUNNER_TYPE}' is disabled: creative-writing workflow/session "
+            "integration is unimplemented. Use --runner codex."
+        )
 
 TARGET_REPO_CONFIG_MAP = {
     "fedevela/particle-life-3d": TargetRepoConfig(

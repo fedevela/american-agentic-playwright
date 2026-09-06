@@ -150,7 +150,7 @@ def build_issue_runtime_context(
 - Phase: {phase}
 
 ### Required Local Context (The Law of the World)
-The creative engine requires the following 11 standardized artifacts to be present in the local file system. These form the binding constraints of the story, characters, and world. The caller must provide them, and you must rely on them for all foundational truth rather than inventing it:
+The creative engine requires the following 12 standardized artifacts to be present in the local file system. These form the binding constraints of the story, characters, and world. The caller must provide them, and you must rely on them for all foundational truth rather than inventing it:
 1. `agents.md`
 2. `agents_artifacts/dramatic_arcs.md`
 3. `agents_artifacts/world_rules.md`
@@ -159,9 +159,10 @@ The creative engine requires the following 11 standardized artifacts to be prese
 6. `agents_artifacts/characters/[character_name]/appearance.md`
 7. `agents_artifacts/characters/[character_name]/personality.md`
 8. `agents_artifacts/characters/[character_name]/interiorvoice.md`
-9. `agents_artifacts/characters/[character_name]/motivations_and_fears.md`
-10. `agents_artifacts/characters/[character_name]/secrets.md`
-11. `agents_artifacts/characters/[character_name]/lexicon.md`
+9. `agents_artifacts/characters/[character_name]/wants.md`
+10. `agents_artifacts/characters/[character_name]/fears.md`
+11. `agents_artifacts/characters/[character_name]/secrets.md`
+12. `agents_artifacts/characters/[character_name]/lexicon.md`
 
 **Memory Check Directive:** Before proceeding with any generation, you must verify that you have successfully read and loaded all of the above artifacts into your working memory. If they are not in your context, you must read them from the local file system now.
 
@@ -366,36 +367,31 @@ def build_implementation_phase_prompt(
         "- Terminal discipline (mandatory): favor bounded, deterministic commands (`rg`, targeted paths) and avoid broad recursive scans from repo root.",
         "- Exclude heavy/generated trees when searching (for example `node_modules`, `build`, `.git`) unless explicitly needed.",
         "- Always constrain potentially long-running commands (path filters and/or explicit command timeouts).",
-        "- If terminal reports the previous command is still running and blocks new commands, immediately recover by interacting with the active process (`is_input=true`): first poll with empty input, then interrupt with `C-c` if needed, then continue with a narrower command.",
-        "- Do not loop on blocked terminal state; recover deterministically and proceed with code edits.",
+        "- If a command remains active, use the available process/session tool to inspect or interrupt it before retrying a narrower command.",
+        "- Do not loop on blocked terminal state; recover and continue the requested writing artifacts.",
     ]
     phase_requirements: list[str] = []
     if phase == "7":
         phase_requirements = [
-            "- This is Phase 7 (Act Assembly & Pacing). Deliver pacing and structural boundaries as actual document changes, not analysis-only notes.",
-            "- First run a deterministic pacing-discovery pass: derive emotional pressures, map sequence loci, then select boundaries per locus.",
-            "- Then implement the smallest coherent structural set that fully covers canonical beat IDs.",
-            "- Keep artifacts requirement-traceable: each act break must map to one or more canonical beat IDs.",
-            "- Do not stop at read-only analysis; leave a non-empty git diff with concrete structural edits.",
-            "- Apply an explicit completion gate before finishing: if canonical beat coverage or non-empty diff conditions are not met, continue mapping.",
-            "- Do not fully write the dialogue; focus on placement, act seams, rising action, and emotional boundaries.",
+            "- Phase 7 (Dramatic-Action Preparation): write dramatic_action_brief.md.",
+            "- Establish stimulus, knowledge, ignorance, concealment, objectives, emotion, stakes, relationships and available actions for each dramatic moment.",
+            "- Preserve canonical moment IDs and include non-speaking characters; do not predetermine discretionary responses or write final dialogue.",
+            "- Use the microagent's JSON brief contract with existing source paths; missing context blocks completion.",
         ]
     elif phase == "8":
         phase_requirements = [
-            "- This is Phase 8 (First Draft Execution).",
-            "- First run a deterministic scene-discovery pass: identify dialogue and prose obligations from prior outlines.",
-            "- Embody those outlines in flowing prose without deviating from the specified emotional intent.",
-            "- Do not quietly rewrite the core plot to match easier prose; adjust prose to serve the outline.",
-            "- Apply an explicit completion gate before finishing: verify working drafts exist for all assigned beat IDs before finishing.",
+            "- Phase 8 (Performance Materials): preserve the attributed skeleton, do not draft dialogue or prose.",
+            "- Write scene AGENTS.md, scene_skeleton.md, identical initial script.md, copied dramatic_action_brief.md and performance_context.json.",
+            "- Include full director source references and separate own-character starting contexts.",
+            "- Apply the completion gate: matching scenes, cast, moments and existing sources; preserve source brief and all skeleton constraints.",
         ]
     elif phase == "9":
         phase_requirements = [
-            "- This is Phase 9 (The Final Edit). Execute validation with evidence-first discipline.",
-            "- Run a deterministic narrative-discovery pass: collect pacing flaws, map each failure to violated beat IDs, then apply minimal corrective deltas.",
-            "- Keep corrections requirement-traceable and scope-bounded to observed violations.",
-            "- Apply an explicit completion gate before finishing: do not terminate on narrative; finish only with evidence-backed readiness status.",
+            "- Phase 9 (Director's Roundtable): Python orchestrates separate native sessions and writes the public script.",
+            "- The omniscient director receives all prior context plus each fictional inner_monologue and outer_response.",
+            "- Characters receive only their own context and eligible observations; they choose action, dialogue or silence.",
+            "- Return schema-valid role turns; explicit completion and performed moment coverage are required before Python delivery.",
         ]
-
     requirements_block = ""
     requirement_lines = [*terminal_discipline_requirements, *phase_requirements]
     if requirement_lines:

@@ -8,3 +8,6 @@ workspace/
 .openhands/workspace/.sdlc-state.json
 **/workspace/
 .DS_Store
+.venv
+.pytest_cache
+
