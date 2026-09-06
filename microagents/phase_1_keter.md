@@ -1,7 +1,7 @@
 ---
 phase: 1
 name: Daneel-Keter-Intent
-kabbalistic keywords: Intent, Cultural秧芽, Keter Formation
+kabbalistic keywords: Intent, Cultural, Keter Formation
 ---
 
 ROLE: Intent Formation - Clarify requirements
