@@ -372,6 +372,7 @@ def test_comment_phase_starts_fresh_guarded_turn_in_ignored_workspace(tmp_path: 
     record_path = tmp_path / "ordinary.json"
     monkeypatch.setenv("FAKE_CODEX_RECORD", str(record_path))
     monkeypatch.setattr(codex_runner.config, "WORKSPACE", workspace)
+    monkeypatch.setenv("FAKE_CODEX_RESPONSE", '{"response":"## Intent\\n\\nRed’s **choice**.\\n\\n- Keep the threshold open."}')
     monkeypatch.setattr(
         codex_runner,
         "prepare_phase_execution_context",
@@ -387,12 +388,36 @@ def test_comment_phase_starts_fresh_guarded_turn_in_ignored_workspace(tmp_path: 
         session_scope="must-not-resume",
     )
 
-    assert response == "final response"
+    assert response == "## Intent\n\nRed’s **choice**.\n\n- Keep the threshold open."
+    from trigger_workflow_creative_writer.prompts import format_phase_comment
+    assert format_phase_comment("1", "phase:keter", response) == (
+        "<!-- phase:1:start label=phase:keter name=Keter -->\n"
+        "### Phase 1: Keter\n\n## Intent\n\nRed’s **choice**.\n\n"
+        "- Keep the threshold open.\n\n"
+        "<!-- phase:1:end label=phase:keter name=Keter -->"
+    )
     record = json.loads(record_path.read_text(encoding="utf-8"))
+    assert "--output-schema" in record["argv"]
     assert "resume" not in record["argv"]
     assert "Python owns commit, push, pull request, GitHub comment, and label operations" in record["prompt"]
     response_path = Path(record["argv"][record["argv"].index("--output-last-message") + 1])
     assert response_path.is_relative_to((workspace / "workspace" / "codex").resolve())
+
+
+@pytest.mark.parametrize("response", ['not json', '[]', '{}', '{"response": null}', '{"response": 3}', '{"response": "  "}', '{"response": "ok", "extra": true}'])
+def test_comment_phase_rejects_invalid_payload_before_publication(tmp_path: Path, monkeypatch, response: str) -> None:
+    from trigger_workflow_creative_writer import codex_runner
+
+    _install_fake_codex(tmp_path, monkeypatch)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _create_required_artifacts(repo)
+    monkeypatch.setenv("FAKE_CODEX_RESPONSE", response)
+    monkeypatch.setattr(codex_runner.config, "WORKSPACE", tmp_path / "app")
+    monkeypatch.setattr(codex_runner, "prepare_phase_execution_context", lambda *args, **kwargs: SimpleNamespace(local_path=repo, branch="main"))
+
+    with pytest.raises(SystemExit, match="comment response"):
+        codex_runner.run_codex_comment_phase("analysis", repo="owner/story", issue=1, phase="1")
 
 
 def test_disabled_provider_is_rejected_before_checkout(tmp_path: Path, monkeypatch) -> None:
@@ -418,10 +443,10 @@ def test_disabled_provider_is_rejected_before_checkout(tmp_path: Path, monkeypat
     [
         ('```json\n{"comment": "ok", "sub_issues": []}\n```', {"comment": "ok", "sub_issues": []}),
         ('```\n{"comment": "ok"}\n```', {"comment": "ok"}),
-        ('[ERROR:REJECT_BEAT] impossible', {"__action_rejection": True, "comment": "[ERROR:REJECT_BEAT] impossible"}),
+        ('{"outcome":"complete","narrative":"A sign reads [ERROR:REJECT_BEAT]"}', {"outcome":"complete","narrative":"A sign reads [ERROR:REJECT_BEAT]"}),
     ],
 )
-def test_json_phase_parses_fences_and_preserves_action_rejection(
+def test_json_phase_parses_fences_without_routing_on_quoted_error_prose(
     tmp_path: Path,
     monkeypatch,
     response: str,
@@ -510,6 +535,37 @@ def test_phase_9_direct_implementation_requires_roundtable_before_checkout(monke
         )
 
 
+def _ready_scene_issue():
+    from tests.trigger_workflow_creative_writer.test_dramaturgy import base, established
+    from trigger_workflow_creative_writer.cycles import child_assignments
+    from trigger_workflow_creative_writer.validation import validate_result
+
+    accepted = established()
+    result = validate_result(
+        {**base("4"), "assignments": [{"element_id": "cycle-one:e1", "outline": "She opens the door."}]},
+        phase="4", cycle_id="cycle-one", scope="season", accepted=accepted,
+    )
+    child = child_assignments(result, parent_issue=1, accepted=accepted)[0]
+    return {"title": child["title"], "body": child["body"], "labels": [{"name": "size:scene"}], "comments": []}
+
+
+@pytest.mark.parametrize("fetch", [False, True])
+def test_phase_5_rejects_legacy_assignment_before_checkout_or_agent(monkeypatch, fetch) -> None:
+    from trigger_workflow_creative_writer import codex_runner, github_ops
+
+    legacy = {"title": "Legacy [SMALL] scene", "body": "Requirement IDs: CH-001", "labels": [{"name": "size:scene"}]}
+    monkeypatch.setattr(github_ops, "fetch_issue_data", lambda repo, issue: legacy)
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Legacy assignment must fail before checkout or agent execution")
+    monkeypatch.setattr(codex_runner, "_prepare_context", forbidden)
+    monkeypatch.setattr(codex_runner, "_call_ordinary_turn", forbidden)
+    with pytest.raises(SystemExit, match="assignment|Keter|legacy"):
+        codex_runner.run_codex_implementation_phase(
+            "Prepare scene", repo="owner/story", issue=5, phase="5",
+            issue_data=None if fetch else legacy,
+        )
+
+
 def test_phase_5_validation_retry_uses_fresh_sessions_and_bounded_contract(tmp_path: Path, monkeypatch) -> None:
     from trigger_workflow_creative_writer import codex_runner
 
@@ -544,6 +600,7 @@ def test_phase_5_validation_retry_uses_fresh_sessions_and_bounded_contract(tmp_p
         issue=5,
         phase="5",
         session_scope="ignored",
+        issue_data=_ready_scene_issue(),
     )
 
     assert len(calls) == 2

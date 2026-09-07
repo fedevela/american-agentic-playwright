@@ -1,61 +1,48 @@
-"""Validation tests for the Tiferet payload contract.
-
-These tests cover the rules that govern the structure of the phase-4/Tiferet
-child-issue payload.
-"""
-
-from __future__ import annotations
-
+"""Compatibility boundary for normalized dramatic Tiferet results."""
+from copy import deepcopy
 import unittest
 
-from trigger_workflow_creative_writer.config import TIFERET_AUTO_ISSUE_PREFIX
 from trigger_workflow_creative_writer.validation import (
+    validate_result,
     validate_tiferet_specification_payload_structure,
 )
+from tests.trigger_workflow_creative_writer.test_dramaturgy import CYCLE, base, established
 
 
 class PhaseFourPayloadValidationTests(unittest.TestCase):
-    """Verify payload shape for the phase-4/Tiferet JSON payload."""
+    def normalized_result(self):
+        accepted = established()
+        payload = base('4')
+        payload['assignments'] = [
+            {'element_id': element['id'], 'outline': element['outline']}
+            for element in accepted['3']['elements']
+        ]
+        return validate_result(payload, phase='4', cycle_id=CYCLE,
+                               scope='season', accepted=accepted)
 
-    def test_validate_phase_four_payload_accepts_valid_structure(self) -> None:
-        payload = {
-            "comment": "Decomposition rationale.",
-            "sub_issues": [
-                {
-                    "title": f"{TIFERET_AUTO_ISSUE_PREFIX}Example",
-                    "body": "\n".join(
-                        [
-                            "Requirement IDs: CH-001, CH-003",
-                            "",
-                            "Canonical Requirements:",
-                            "- CH-001: [RED] When x, then y",
-                            "- CH-003: [RED] When a, then b",
-                            "",
-                            "Given x, when y, then z.",
-                        ]
-                    ),
-                }
-            ],
-        }
+    def test_accepts_current_cycle_normalized_structure(self):
+        validate_tiferet_specification_payload_structure(self.normalized_result())
 
-        validate_tiferet_specification_payload_structure(payload)
-
-    def test_validate_phase_four_payload_rejects_missing_requirement_ids_line(self) -> None:
-        payload = {
-            "comment": "Decomposition rationale.",
-            "sub_issues": [
-                {
-                    "title": f"{TIFERET_AUTO_ISSUE_PREFIX}Example",
-                    "body": "Given x, when y, then z.",
-                }
-            ],
-        }
-
-        with self.assertRaises(SystemExit) as exc:
+    def test_rejects_legacy_prose_decomposition_even_with_requirement_ids(self):
+        payload = {'comment': 'Decomposition rationale.', 'sub_issues': [
+            {'title': '[SMALL] A scene',
+             'body': 'Requirement IDs: CH-001\nCanonical Requirements:\nCH-001: A choice.'}
+        ]}
+        with self.assertRaisesRegex(SystemExit, 're-established through Keter'):
             validate_tiferet_specification_payload_structure(payload)
 
-        self.assertIn("must begin with a `Requirement IDs:` line", str(exc.exception))
+    def test_rejects_normalized_ready_scene_with_missing_beat_coverage(self):
+        payload = deepcopy(self.normalized_result())
+        payload['elements'][0]['beats'] = []
+        with self.assertRaisesRegex(SystemExit, 'ordered nonempty beats'):
+            validate_tiferet_specification_payload_structure(payload)
+
+    def test_rejects_unknown_source_in_normalized_ready_scene(self):
+        payload = deepcopy(self.normalized_result())
+        payload['elements'][0]['source_refs'] = ['unknown-anchor']
+        with self.assertRaisesRegex(SystemExit, 'unknown source references'):
+            validate_tiferet_specification_payload_structure(payload)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

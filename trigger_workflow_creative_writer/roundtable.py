@@ -370,7 +370,7 @@ def perform_scene(*, repo: str, issue: int, cwd: Path, state_root: Path,
             raise ValueError("Input or CLI/config/model fingerprint changed; start an intentional new performance")
         for filename, key in (("snapshots.json", "snapshot_hash"), ("skeleton.md", "skeleton_hash")):
             try:
-                valid = _hash((run / filename).read_text(encoding="utf-8")) == state[key]
+                valid = _hash((run / filename).read_bytes().decode("utf-8")) == state[key]
             except OSError:
                 valid = False
             if not valid:

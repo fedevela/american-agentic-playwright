@@ -11,7 +11,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from trigger_workflow_creative_writer.config import TIFERET_AUTO_ISSUE_PREFIX
+from tests.trigger_workflow_creative_writer.test_dramaturgy import base, established
 from trigger_workflow_creative_writer.runner_utils import resolve_phase_execution_branch
 from trigger_workflow_creative_writer.prompts import (
     build_implementation_phase_prompt,
@@ -25,6 +25,22 @@ from trigger_workflow_creative_writer.prompts import (
     read_microagent_for_label,
 )
 from trigger_workflow_creative_writer.router import conversation_scope_for_phase
+
+
+def cycle_issue(*phases):
+    from trigger_workflow_creative_writer.cycles import encode_record
+
+    results = established()
+    return {
+        "title": "Raw title should stay isolated",
+        "body": "Original intention should stay isolated",
+        "labels": [{"name": "size:season"}],
+        "comments": [
+            {"body": "Attributed old human discussion."},
+            {"body": encode_record({"kind": "cycle", "version": 1, "cycle_id": "cycle-one", "scope": "season"})},
+            *[{"body": encode_record(results[phase])} for phase in phases],
+        ],
+    }
 
 
 class PhaseWorkflowNamingTests(unittest.TestCase):
@@ -89,68 +105,49 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("6. `bible/characters/[character_name]/custom_dimension.md`", context)
         self.assertNotIn("appearance.md", context)
 
-    def test_phase_1_prompt_enforces_observable_acceptance_signals(self) -> None:
-        prompt = build_comment_phase_prompt(
-            "phase:keter",
-            12,
-            "owner/repo",
-            "Keter microagent",
-            "1",
-            {"title": "Example", "body": "Body", "comments": []},
-        )
-        self.assertIn("observable, automatable, and verifiable through end-to-end tests", prompt)
-        self.assertIn("Do not rely on subjective human judgments", prompt)
+    def test_phase_1_prompt_establishes_dramatic_axes_without_compliance_prose(self) -> None:
+        prompt = build_comment_phase_prompt("phase:keter", 12, "owner/repo", "Keter microagent", "1", cycle_issue())
+        for axis in ("pursuit", "opposition", "pressure", "change", "dramatic_question"):
+            self.assertIn(axis, prompt)
+        self.assertIn("Original intention should stay isolated", prompt)
+        for obsolete in ("Clarified Requirement", "Constraints and Invariants", "Acceptance Signals", "Phase 2 Handoff", "Memory Check Directive"):
+            self.assertNotIn(obsolete, prompt)
 
-    def test_phase_2_story_requirements_enforce_e2e_observable_outcomes(self) -> None:
-        requirements = build_phase_2_story_requirements()
-        joined = "\n".join(requirements)
-        self.assertIn("observable, automatable, and verifiable through end-to-end tests", joined)
-        self.assertIn("Write `then` clauses in measurable terms", joined)
-        self.assertIn("Do not rely on subjective human judgments", joined)
+    def test_phase_2_artifacts_have_scope_without_software_story_format(self) -> None:
+        joined = "\n".join(build_phase_2_story_requirements())
+        self.assertIn("episode", joined)
+        self.assertIn("act", joined)
+        self.assertIn("scene", joined)
+        self.assertIn("season is assigned only by the partner", joined)
+        self.assertIn("ready scene leaves", joined)
+        self.assertNotIn("Given", joined)
+        self.assertNotIn("ORANGE", joined)
+        self.assertNotIn("DOM", joined)
 
-    def test_phase_3_persona_stack_requires_atomic_id_bearing_requirements_and_justification(self) -> None:
+    def test_phase_3_persona_stack_preserves_organization_and_human_choice(self) -> None:
         content = read_microagent_for_label("phase:gevurah", "3")
-        self.assertIsNotNone(content)
-        assert content is not None
-        self.assertIn(
-            "Include these exact section headings: `Master Story Beats`, `Showrunner Options (Human Gate)`, and `Next Phase Handoff`.",
-            content,
-        )
-        self.assertIn(
-            "Every beat in your final chronological sequence MUST retain the 4 core properties",
-            content,
-        )
-        self.assertIn("Assign each surviving, synthesized narrative event a sequential identifier", content)
-        self.assertIn(
-            "Provide a clear dramaturgical rationale for excluded or merged",
-            content,
-        )
+        self.assertIn("dramatic anchors", content)
+        self.assertIn("source references", content)
+        self.assertIn("partner", content)
+        self.assertNotIn("Next Phase Handoff", content)
+        self.assertNotIn("GUID", content)
 
-    def test_build_spec_prompt_requires_tiferet_title_prefix_and_consolidation_explanation(self) -> None:
-        prompt = build_tiferet_specification_prompt(
-            "phase:tiferet",
-            12,
-            "owner/repo",
-            "Tiferet microagent",
-            "4",
-            {"title": "Example", "body": "Body", "comments": []},
-        )
-        self.assertIn(f'"title": "{TIFERET_AUTO_ISSUE_PREFIX}Short actionable issue title"', prompt)
-        self.assertIn("must explicitly reconcile the provided Master Story Beats against the final child issue set", prompt)
-        self.assertIn(
-            "ensuring the Scale/Size of the beat is accurately fractured down",
-            prompt,
-        )
-        self.assertIn("must state which Master Story Beats are covered by each child issue", prompt)
-        self.assertIn("Every child issue body must begin with a `Resolves Beats:` line", prompt)
-        self.assertIn("Copy the full canonical beat definitions verbatim.", prompt)
-        self.assertIn("Do not paraphrase or compress them", prompt)
+    def test_tiferet_prompt_uses_accepted_synthesis_and_structured_assignments(self) -> None:
+        prompt = build_tiferet_specification_prompt("phase:tiferet", 12, "owner/repo", "Tiferet microagent", "4", cycle_issue("1", "2A", "2B", "2C", "3"))
+        self.assertIn('"assignments"', prompt)
+        self.assertIn("Loyalty at the door", prompt)
+        self.assertIn("same scope", prompt)
+        self.assertIn("pause advancement and child creation", prompt)
+        self.assertNotIn("Resolves Beats:", prompt)
+        self.assertNotIn("[SMALL]", prompt)
+        self.assertIn("Python owns GitHub dependencies, parent membership, and completion rollup", prompt)
 
-    def test_phase_4_microagent_requires_canonical_requirements_section_verbatim(self) -> None:
+    def test_phase_4_microagent_preserves_accepted_organization_and_recursion(self) -> None:
         content = read_microagent_for_label("phase:tiferet", "4")
-
-        self.assertIn("`Resolves Beats:` line", content)
-        self.assertIn("explicitly lists the full bracketed definitions of the beats it covers", content)
+        self.assertIn("accepted organization", content)
+        self.assertIn("same scope", content)
+        self.assertIn("question outcome", content)
+        self.assertNotIn("Resolves Beats:", content)
 
     def test_read_microagent_for_label_composes_base_persona_phase_persona_and_microagent(self) -> None:
         content = read_microagent_for_label("phase:binah", "2B")
@@ -158,74 +155,34 @@ class PromptBuilderTests(unittest.TestCase):
         assert content is not None
         self.assertIn("The user is your partner.", content)
         self.assertIn("expanded through Binah", content)
-        self.assertIn("functional embodiment of Daneel-through-Binah", content)
+        self.assertIn("You are Daneel-through-Binah", content)
 
-    def test_build_phase_input_context_uses_keter_only_for_phase_2_variants(self) -> None:
-        # Phase-2 variants are intentionally constrained to the normalized Keter
-        # comment so they do not re-interpret the raw issue body independently.
-        issue_data = {
-            "title": "Example",
-            "body": "Original issue body should not be used",
-            "comments": [
-                {
-                    "body": "\n".join(
-                        [
-                            "<!-- phase:1:start label=phase:keter name=Keter -->",
-                            "### Phase 1: Keter",
-                            "",
-                            "Clarified requirement from Keter.",
-                            "",
-                            "<!-- phase:1:end label=phase:keter name=Keter -->",
-                        ]
-                    )
-                }
-            ],
-        }
-        context = build_phase_prompt_input_context("phase:binah", 12, "owner/repo", "2B", issue_data)
-        self.assertIn("Clarified requirement from Keter.", context)
-        self.assertNotIn("Original issue body should not be used", context)
+    def test_level_two_sees_accepted_keter_and_canon_without_siblings_or_raw_issue(self) -> None:
+        issue_data = cycle_issue("1", "2A", "2B", "2C")
+        for phase in ("2A", "2B", "2C"):
+            context = build_phase_prompt_input_context("phase:binah", 12, "owner/repo", phase, issue_data)
+            self.assertIn("The choice of loyalty", context)
+            self.assertIn("bible/characters.md", context)
+            self.assertNotIn("Original intention should stay isolated", context)
+            self.assertNotIn("Raw title should stay isolated", context)
+            self.assertNotIn("Door possibility", context)
+            self.assertNotIn("Attributed old human discussion", context)
 
-    def test_build_phase_input_context_includes_all_comments_for_phase_3(self) -> None:
-        # Gevurah is the first synthesis phase, so it must see the full issue
-        # discussion history rather than the narrowed Keter-only context.
-        issue_data = {
-            "title": "Example",
-            "body": "Original body",
-            "comments": [
-                {"body": "First prior comment."},
-                {"body": "Second prior comment."},
-            ],
-        }
+    def test_gevurah_receives_all_three_current_explorations(self) -> None:
+        context = build_phase_prompt_input_context("phase:gevurah", 12, "owner/repo", "3", cycle_issue("1", "2A", "2B", "2C"))
+        for phase in ("2A", "2B", "2C"):
+            self.assertIn("Door possibility " + phase, context)
+        self.assertIn("The choice of loyalty", context)
 
-        context = build_phase_prompt_input_context("phase:gevurah", 12, "owner/repo", "3", issue_data)
+    def test_downstream_phase_six_retains_preparation_comments(self) -> None:
+        prompt = build_implementation_phase_prompt("phase:hod", 12, "owner/repo", "Hod", "6", {"title": "Example", "body": "Outline", "comments": [{"body": "Preparation context comment."}]})
+        self.assertIn("Preparation context comment.", prompt)
 
-        self.assertIn("Original body", context)
-        self.assertIn("## Issue Comments", context)
-        self.assertIn("First prior comment.", context)
-        self.assertIn("Second prior comment.", context)
-
-    def test_build_agent_prompt_includes_all_comments_for_phase_5_and_later(self) -> None:
-        prompt = build_implementation_phase_prompt(
-            "phase:netzach",
-            12,
-            "owner/repo",
-            "Netzach microagent",
-            "5",
-            {
-                "title": "Example",
-                "body": "Original body",
-                "comments": [{"body": "Implementation context comment."}],
-            },
-        )
-
-        self.assertIn("## Issue Comments", prompt)
-        self.assertIn("Implementation context comment.", prompt)
-
-    def test_phase_5_microagent_enforces_traceability_only_contract_stubs(self) -> None:
+    def test_phase_5_microagent_requires_ready_assignment_and_episode_manuscript(self) -> None:
         content = read_microagent_for_label("phase:netzach", "5")
-        self.assertIn("You must maintain strict traceability.", content)
-        self.assertIn("A deterministic checklist of required dramaturgical artifacts", content)
-        self.assertIn("YOUR PRECISE DIRECTIVES", content)
+        self.assertIn("runtime-validated ready-scene assignment", content)
+        self.assertIn("ordered beats", content)
+        self.assertIn("one script.md per episode", content)
 
     def test_sparc_sister_microagents_include_explicit_alignment_and_boundary_contracts(self) -> None:
         for label, phase in (
@@ -320,50 +277,33 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("inner_monologue", prompt)
         self.assertIn("Python", prompt)
 
-    def test_build_agent_prompt_preserves_canonical_requirements_in_child_issue_body_for_downstream_phases(self) -> None:
-        # This fixture models a real Tiferet child issue body. Downstream
-        # implementation phases must receive the verbatim Canonical Requirements
-        # block, not a stripped-down or normalized variant.
-        prompt = build_implementation_phase_prompt(
-            "phase:netzach",
-            12,
-            "owner/repo",
-            "Netzach microagent",
-            "5",
-            {
-                "title": "[AUTO/TIFERET] Child issue",
-                "body": "\n".join(
-                    [
-                        "Requirement IDs: CH-001",
-                        "",
-                        "## Canonical Requirements",
-                        "- CH-001: [RED] When user selects third left menu option, WebGL scene initializes with animated dot cloud implementing random walk physics behavior",
-                        "",
-                        "## Gherkin Scenarios",
-                        "Given x, when y, then z.",
-                    ]
-                ),
-                "comments": [],
-            },
+    def test_phase_five_receives_validated_beats_and_shared_manuscript_placement(self) -> None:
+        from trigger_workflow_creative_writer.cycles import child_assignments
+        from trigger_workflow_creative_writer.validation import validate_result
+
+        accepted = established()
+        result = validate_result(
+            {**base("4"), "assignments": [{"element_id": "cycle-one:e1", "outline": "She opens the door to her enemy."}]},
+            phase="4", cycle_id="cycle-one", scope="season", accepted=accepted,
         )
+        child = child_assignments(result, parent_issue=1, accepted=accepted)[0]
+        issue_data = {"title": child["title"], "body": child["body"], "labels": [{"name": "size:scene"}], "comments": []}
+        prompt = build_implementation_phase_prompt("phase:netzach", 12, "owner/repo", "Netzach", "5", issue_data)
+        self.assertIn("She opens the door to her enemy.", prompt)
+        self.assertIn("She bars the door.", prompt)
+        self.assertIn("Script/Season_01/Episode_01", prompt)
+        self.assertIn("one script.md per episode", prompt)
+        self.assertIn("scene_materials/<scene_id>/", prompt)
+        self.assertIn("neighboring scene regions", prompt)
 
-        self.assertIn("## Canonical Requirements", prompt)
-        self.assertIn(
-            "- CH-001: [RED] When user selects third left menu option, WebGL scene initializes with animated dot cloud implementing random walk physics behavior",
-            prompt,
-        )
+    def test_phase_five_rejects_unstructured_legacy_prose_even_with_phase_label(self) -> None:
+        with self.assertRaises(SystemExit):
+            build_implementation_phase_prompt("phase:netzach", 12, "owner/repo", "Netzach", "5", {"title": "Legacy [SMALL] scene", "body": "Requirement IDs: CH-001", "labels": [{"name": "phase:netzach"}, {"name": "size:scene"}], "comments": []})
 
-    def test_build_phase_input_context_errors_when_phase_2_lacks_keter_comment(self) -> None:
-        issue_data = {
-            "title": "Example",
-            "body": "Original body",
-            "comments": [],
-        }
-
-        with self.assertRaises(SystemExit) as exc:
+    def test_level_two_requires_structured_current_keter(self) -> None:
+        issue_data = {"title": "Example", "body": "Original body", "comments": [{"body": "<!-- phase:1:start -->old prose<!-- phase:1:end -->"}]}
+        with self.assertRaises(SystemExit):
             build_phase_prompt_input_context("phase:binah", 12, "owner/repo", "2B", issue_data)
-
-        self.assertIn("Phase 2B requires a Phase 1 clarification comment", str(exc.exception))
 
     @patch("trigger_workflow_creative_writer.prompts.BASE_PERSONA_FILE", "missing-daneel.md")
     def test_read_microagent_for_label_errors_when_base_persona_missing(self) -> None:

@@ -40,6 +40,7 @@ def run_trigger_cli(mode: str = "creative-writer") -> None:
         action="store_true",
         help="Return only the generated phase prompt text for the requested issue/label",
     )
+    parser.add_argument("--new-cycle", action="store_true", help="Explicitly restart Keter; preserve earlier cycles as history")
     recovery = parser.add_mutually_exclusive_group()
     recovery.add_argument("--performance-run", help="Resume an explicit performance UUID")
     recovery.add_argument("--new-performance", action="store_true", help="Start fresh sessions intentionally")
@@ -57,6 +58,7 @@ def run_trigger_cli(mode: str = "creative-writer") -> None:
     if min(args.max_role_calls, args.role_timeout, args.max_no_progress) < 1:
         parser.error("Performance limits must be positive")
     config.PERFORMANCE_RUN = args.performance_run
+    config.NEW_CYCLE = args.new_cycle
     config.NEW_PERFORMANCE = args.new_performance
     config.SCENE_PATH = args.scene
     config.CODEX_MODEL = args.codex_model

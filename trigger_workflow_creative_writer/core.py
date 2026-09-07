@@ -16,8 +16,11 @@ from .config import (
 )
 from .github_ops import (
     advance_issue_label,
+    edit_issue_labels,
     clear_issue_labels_except,
     create_child_issues,
+    complete_scene_and_roll_up,
+    reconcile_parent_completion,
     ensure_phase_labels,
     fetch_issue_data,
     issue_has_label,
@@ -46,7 +49,8 @@ from .prompts import (
     format_phase_comment,
     read_microagent_for_label,
 )
-from .validation import validate_tiferet_specification_payload_structure
+from .validation import validate_tiferet_specification_payload_structure, validate_result
+from . import cycles
 
 
 def conversation_scope_for_phase(phase: str) -> str:
@@ -86,6 +90,7 @@ def build_phase_execution_prompt(
     prompt_builder: Callable[..., str],
 ) -> tuple[str, str]:
     """Build a phase prompt using the common execution request payload."""
+    cycles.bind_issue(request.issue_data, request.repo, request.issue)
     return build_phase_prompt_and_conversation_scope(
         request.phase,
         prompt_builder,
@@ -215,6 +220,7 @@ def resolve_phase_execution_request(
 
     log_step("Step 2: Fetching issue data from GitHub")
     issue_data = fetch_issue_data(repo, issue)
+    cycles.bind_issue(issue_data, repo, issue)
     log_info(f"Issue #{issue} fetched: '{issue_data.get('title', 'Unknown')}'")
 
     if label is None:
@@ -234,7 +240,7 @@ def resolve_phase_execution_request(
     else:
         # Verify label on issue_data
         if not issue_has_label(issue_data, label):
-            if manual:
+            if manual or (getattr(config, "NEW_CYCLE", False) and label == "phase:keter"):
                 log_info(
                     f"Manual mode label override: issue #{issue} is not labeled '{label}', "
                     "but continuing with the requested label for preview."
@@ -267,6 +273,12 @@ def resolve_phase_execution_request(
     label_names = [l.get("name", "") for l in issue_data.get("labels", []) if l.get("name")]
     log_info(f"Current labels: {', '.join(label_names) if label_names else '(none)'}")
 
+    if getattr(config, "NEW_CYCLE", False):
+        if phase != "1":
+            raise SystemExit("--new-cycle requires --phase 1 (Keter).")
+        issue_data["_start_new_cycle"] = not manual
+        if manual:
+            issue_data["_preview_cycle"] = cycles.new_cycle(issue_data)
     request = PhaseExecutionRequest(
         label=label,
         issue=issue,
@@ -316,9 +328,9 @@ def render_prompt_only_output(request: PhaseExecutionRequest, prompt: str) -> st
     elif request.phase == SPECIFICATION_PHASE:
         actions = [
             "1. Prepare a commit message with the above prompt.",
-            "2. Validate JSON payload structure and requirement traceability.",
-            "3. Post the parent phase comment from `payload.comment`.",
-            "4. Create ordered child issues from `payload.sub_issues` and create child branches.",
+            "2. Validate current-cycle source coverage, scope, readiness and ordered beats; pause for questions.",
+            "3. Persist the accepted structured result and Python-rendered dramatic comment.",
+            "4. Reconcile and create ready scenes or recursive assignments, ownership dependencies and child branches.",
             "5. Generate the gh command to post the comment to the issue in md format.",
             "6. Remove the parent phase label from the parent issue.",
         ]
@@ -368,8 +380,8 @@ def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
             "\n".join(
                 [
                     f"1. Run {config.RUNNER_TYPE} with the prompt above and capture the final assistant message.",
-                    "2. Post that message to the issue as a phase comment wrapper.",
-                    "3. Advance the issue label to the next phase.",
+                    "2. Validate structured outcome and source coverage, then publish the Python-rendered phase comment.",
+                    "3. Advance only accepted completion; questions pause and development returns to Keter.",
                 ]
             ),
         )
@@ -384,9 +396,9 @@ def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
             "\n".join(
                 [
                     f"1. Run {config.RUNNER_TYPE} with the prompt above and capture the final assistant message as JSON.",
-                    "2. Validate JSON payload structure and requirement traceability.",
-                    "3. Post the parent phase comment from `payload.comment`.",
-                    "4. Create ordered child issues from `payload.sub_issues` and create child branches.",
+                    "2. Validate current-cycle source coverage, scope, readiness and ordered beats; pause for questions.",
+                    "3. Persist the accepted structured result and Python-rendered dramatic comment.",
+                    "4. Reconcile and create ready scenes or recursive assignments, ownership dependencies and child branches.",
                     "5. Post the generated child issue summary comment.",
                     "6. Remove the parent phase label from the parent issue.",
                 ]
@@ -417,95 +429,125 @@ def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
     )
 
 
+def _persist_record(request: PhaseExecutionRequest, record: dict, body: str) -> None:
+    """Publish durable state before any label or child-delivery effect."""
+    wrapped = format_phase_comment(request.phase, request.label, body)
+    post_issue_comment(request.repo, request.issue, wrapped)
+    # Keep the current tick consistent with the durable issue (also for direct callers).
+    comments = request.issue_data.setdefault("comments", [])
+    if not comments or comments[-1].get("body") != wrapped:
+        comments.append({"body": wrapped})
+
+
+def _ensure_cycle(request: PhaseExecutionRequest) -> dict:
+    cycles.bind_issue(request.issue_data, request.repo, request.issue)
+    restart = request.issue_data.pop("_start_new_cycle", False)
+    current = None if restart else cycles.current_cycle(request.issue_data)
+    if request.phase == "1" and (current is None or restart):
+        current = cycles.new_cycle(request.issue_data)
+        request.issue_data["_pending_cycle"] = current
+        if restart:
+            edit_issue_labels(request.repo, request.issue, add=["phase:keter"],
+                              remove=[l for l in issue_phase_labels(request.issue_data) if l != "phase:keter"] + ["phase:askQuestion"])
+    if current is None:
+        raise SystemExit("Legacy work must be re-established through Keter before continuing.")
+    return current
+
+
+def _publish_phase_result(request: PhaseExecutionRequest, result: dict, *, next_cycle: dict | None = None) -> None:
+    """Publish narrative and its tracing metadata together, never a startup comment."""
+    pending = request.issue_data.get("_pending_cycle")
+    body = cycles.render_result(result)
+    if pending is not None:
+        body = cycles.encode_record(pending) + "\n\n" + body
+    if next_cycle is not None:
+        body += "\n\n" + cycles.encode_record(next_cycle)
+    _persist_record(request, result, body)
+    request.issue_data.pop("_pending_cycle", None)
+
+
+def _restart_development(request: PhaseExecutionRequest, result: dict, accepted: dict) -> None:
+    # Durable develop results are replayed here if cycle publication was interrupted.
+    next_cycle = cycles.new_cycle(request.issue_data, development={"prior_result":result,
+        "prior_work":accepted, "development_question":result["development_question"], "return_reason":result["return_reason"]})
+    _publish_phase_result(request, result, next_cycle=next_cycle)
+    edit_issue_labels(request.repo, request.issue, add=["phase:keter"],
+                      remove=([request.label] if request.label != "phase:keter" else []) + ["phase:askQuestion"])
+
+
+def _phase_result(request: PhaseExecutionRequest, builder: Callable[..., str]) -> dict | None:
+    cycle = _ensure_cycle(request)
+    if request.phase != "1" and cycles.current_result(request.issue_data, "1") is None:
+        edit_issue_labels(request.repo, request.issue, add=["phase:keter"], remove=[request.label, "phase:askQuestion"])
+        return None
+    previous = cycles.current_result(request.issue_data, request.phase)
+    if cycles.waiting_for_partner(request.issue_data, request.phase):
+        edit_issue_labels(request.repo, request.issue, add=["phase:askQuestion"])
+        log_info("Waiting for the partner's reply; no phase execution or advancement.")
+        return None
+    accepted = cycles.accepted_results(request.issue_data)
+    if previous and previous.get("outcome") == "develop":
+        _restart_development(request, previous, accepted)
+        return None
+    if previous and previous.get("outcome") == "complete":
+        # A failed label update or interrupted child delivery reuses accepted output.
+        edit_issue_labels(request.repo, request.issue, remove=["phase:askQuestion"])
+        return accepted[request.phase]
+    prompt, session_scope = build_phase_execution_prompt(request, builder)
+    payload = run_json_phase(prompt, repo=request.repo, issue=request.issue, phase=request.phase,
+                             session_scope=session_scope, issue_data=request.issue_data)
+    # Models supply dramatic content, never issue ownership or legacy transport tags.
+    for key in ('issue_ref', 'kind', 'version', 'phase'):
+        payload.pop(key, None)
+    inherited = cycles.source_context(request.issue_data)
+    if request.phase == "1" and not set(inherited["canon_refs"]) <= set(payload.get("canon_refs", [])):
+        raise SystemExit("Inherited canon references must be preserved.")
+    result = validate_result(payload, phase=request.phase, cycle_id=cycle["cycle_id"], scope=cycle["scope"],
+                             accepted=accepted, inherited=inherited["anchors"] if inherited else [])
+    result['issue_ref'] = cycles.issue_reference(request.issue_data)
+    if result['outcome'] == 'develop':
+        _restart_development(request, result, accepted)
+        return None
+    _publish_phase_result(request, result)
+    if result["outcome"] == "question":
+        edit_issue_labels(request.repo, request.issue, add=["phase:askQuestion"])
+        return None
+    if result["outcome"] == "failure":
+        raise SystemExit(result["narrative"])
+    if previous and previous.get("outcome") == "question":
+        edit_issue_labels(request.repo, request.issue, remove=["phase:askQuestion"])
+    return result
+
+
 def execute_comment_phase_handoff(request: PhaseExecutionRequest) -> None:
-    """Execute comment-only phases by generating and posting a phase comment."""
-    log_info("Building discussion prompt...")
-    prompt, session_scope = build_phase_execution_prompt(request, build_comment_phase_prompt)
-
-    log_info(f"Running {config.RUNNER_TYPE} for phase {request.phase.upper()}...")
-    comment = run_comment_phase(
-        prompt,
-        repo=request.repo,
-        issue=request.issue,
-        phase=request.phase,
-        session_scope=session_scope,
-        issue_data=request.issue_data,
-    )
-    log_info(f"Comment generated ({len(comment)} chars)")
-    log_multiline("Generated comment", comment)
-
-    log_info("Posting comment to GitHub...")
-    post_phase_machine_comment(request, comment)
-    log_info("Comment posted")
-
-    if "[ERROR]" in comment or "[ERROR:REJECT_BEAT]" in comment:
-        log_error("Agent emitted an explicit error/rejection. Halting workflow.")
-        tag_issue_needs_human(request.repo, request.issue)
-        raise SystemExit("Agent explicitly requested human intervention.")
-
-    log_info("Advancing to next phase label...")
-    advance_issue_label(request.repo, request.issue, request.label)
-    log_info("Label advanced")
+    """Publish a validated dramatic result; human questions pause advancement."""
+    result = _phase_result(request, build_comment_phase_prompt)
+    if result is not None:
+        advance_issue_label(request.repo, request.issue, request.label)
 
 
 def execute_tiferet_specification_phase(request: PhaseExecutionRequest) -> None:
-    """Execute phase 4/Tiferet by generating parent/child issues and clearing the parent phase label."""
-    log_info("Building specification prompt...")
-    prompt, session_scope = build_phase_execution_prompt(request, build_tiferet_specification_prompt)
-
-    log_info(f"Running {config.RUNNER_TYPE} for JSON payload...")
-    payload = run_json_phase(
-        prompt,
-        repo=request.repo,
-        issue=request.issue,
-        phase=request.phase,
-        session_scope=session_scope,
-        issue_data=request.issue_data,
-    )
-    log_info("JSON payload received")
-
-    if payload.get("__action_rejection"):
-        log_error("Tiferet rejected the beat. Halting workflow.")
-        post_phase_machine_comment(request, payload.get("comment", ""))
-        tag_issue_needs_human(request.repo, request.issue)
-        raise SystemExit("Agent explicitly requested human intervention.")
-
-    log_info("Validating payload schema...")
-    validate_tiferet_specification_payload_structure(payload)
-    log_info("Validation passed")
-    log_multiline("Generated parent comment", payload["comment"].strip())
-
-    log_info("Posting parent comment...")
-    post_phase_machine_comment(request, payload["comment"].strip())
-    log_info("Parent comment posted")
-
-    log_info(f"Creating {len(payload['sub_issues'])} ordered child issues with parent and dependency links...")
-    created = create_child_issues(request.repo, request.issue, payload["sub_issues"])
-    log_info(f"Created and linked {len(created)} child issues")
-    child_issue_numbers = [int(item["number"]) for item in created]
-    log_info("Creating child issue branches for downstream implementation phases...")
-    create_issue_branches_for_child_issues(request.repo, request.issue, child_issue_numbers)
-    log_info(f"Created/verified {len(child_issue_numbers)} child issue branches")
-
-    log_info("Posting summary comment...")
-    summary_comment = build_phase_four_summary(created)
-    log_multiline("Generated summary comment", summary_comment)
-    post_phase_machine_comment(request, summary_comment)
-    log_info("Summary comment posted")
-
-    log_info("Completing Tiferet handoff: clearing all labels from parent issue except needs-human...")
-    current_labels = [l.get("name", "") for l in request.issue_data.get("labels", []) if l.get("name")]
-    clear_issue_labels_except(
-        request.repo,
-        request.issue,
-        current_labels,
-        keep=[NEEDS_HUMAN_LABEL],
-    )
-    log_info("Parent issue labels cleared (handoff complete)")
+    """Deliver ready scene leaves and recursive assignments from accepted organization."""
+    result = _phase_result(request, build_tiferet_specification_prompt)
+    if result is None:
+        return
+    validate_tiferet_specification_payload_structure(result)
+    assignments = cycles.child_assignments(result, parent_issue=request.issue,
+        accepted=cycles.accepted_results(request.issue_data), inherited=cycles.source_context(request.issue_data))
+    created = create_child_issues(request.repo, request.issue, assignments)
+    create_issue_branches_for_child_issues(request.repo, request.issue, [int(item["number"]) for item in created])
+    post_phase_machine_comment(request, build_phase_four_summary(created))
+    remove_issue_label(request.repo, request.issue, request.label)
+    reconcile_parent_completion(request.repo, request.issue)
 
 
 def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
     """Execute phases 5-9 headlessly in the configured runner."""
+    if request.phase == "10" and any(r.get("kind") == "final-delivery" and r.get("issue") == request.issue for r in cycles.issue_records(request.issue_data)):
+        complete_scene_and_roll_up(request.repo, request.issue)
+        return
+    if request.phase == "5":
+        cycles.ready_assignment(request.issue_data)
     log_info("Building agent prompt...")
     prompt, session_scope = build_phase_execution_prompt(request, build_implementation_phase_prompt)
 
@@ -529,6 +571,11 @@ def execute_implementation_phase_task(request: PhaseExecutionRequest) -> None:
     )
     log_multiline("Delivery summary", delivery_summary)
     log_info("Posting delivery summary comment...")
+    if request.phase == "10":
+        record = {"kind":"final-delivery", "version":1, "issue":request.issue, "summary":delivery_summary}
+        _persist_record(request, record, delivery_summary + "\n\n" + cycles.encode_record(record))
+        complete_scene_and_roll_up(request.repo, request.issue)
+        return
     post_phase_machine_comment(request, delivery_summary)
     log_info("Delivery summary comment posted")
     log_info("Advancing to next phase label...")

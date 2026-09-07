@@ -24,6 +24,12 @@ SDLC providers/defaults are unchanged.
   restart, and `--scene` to disambiguate scene directories. Ambiguous interrupted turns
   or delivery require reconciliation, never blind replay.
 - Phases 7–9 use writing-specific gates, not npm. Other creative phases retain their gates.
+- Upstream exploration uses versioned cycle results and structured readiness; see
+  [recursive dramatic development](docs/creative-writing-exploration.md).
+- Season scope is human-created only. Generated artifacts use episode/act/scene;
+  every issue branch ends in ready scene leaves. Python maintains ownership,
+  parent-blocked-by-child dependencies, and completion rollup.
+- Legacy prose must restart through Keter; `--new-cycle --phase 1` preserves history.
 - See [creative-writing contracts and operation](docs/creative-writing-roundtable.md).
 
 ## Entry Point

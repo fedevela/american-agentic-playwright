@@ -94,6 +94,12 @@ PHASE_LABEL_METADATA = {
     },
 }
 
+for _scope in ("season", "episode", "act", "scene"):
+    PHASE_LABEL_METADATA[f"size:{_scope}"] = {
+        "description": f"Dramatic scope: {_scope}" + (" (human-created only)" if _scope == "season" else ""),
+        "color": "C5DEF5",
+    }
+
 # Single-successor handoff chain. Each phase advances to exactly one next label.
 NEXT_LABEL_MAP = {
     "phase:keter": "phase:chokhmah",
@@ -189,6 +195,11 @@ def require_enabled_provider() -> None:
         )
 
 TARGET_REPO_CONFIG_MAP = {
+    "fedevela/little-red-riding-hood-GSA.ADM.2325.8B": TargetRepoConfig(
+        local_path=Path("/home/fedevela/Documents/github/little-red-riding-hood-GSA.ADM.2325.8B"),
+        main_branch="main",
+        issue_branch_prefix="issue/",
+    ),
     "fedevela/particle-life-3d": TargetRepoConfig(
         local_path=Path("/Users/macbook/Documents/gitworkspace/particle-life-3d"),
         main_branch="main",
@@ -197,3 +208,6 @@ TARGET_REPO_CONFIG_MAP = {
 }
 
 TIFERET_AUTO_ISSUE_PREFIX = "[AUTO/TIFERET] "
+
+# Explicit upstream restart; ordinary retries keep the current cycle.
+NEW_CYCLE = False

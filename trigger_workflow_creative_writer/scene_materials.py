@@ -10,6 +10,7 @@ import re
 
 from .artifact_validation import REQUIRED_ARTIFACTS, REQUIRED_CHARACTER_ARTIFACTS
 from .manuscript import scene_body, validate_scene_id
+from .play_format import normalize_scene_heading, validate_public_text
 
 
 SOURCE_ROLES = ("bible", "continuity", "treatment", "constraints", "skeleton")
@@ -96,9 +97,8 @@ def _template_moment_references(template: str) -> list[str]:
 
 def _validate_scene_template(template: str, moment_ids: list[str]) -> None:
     """Ensure the public preparation template has only scene-level Markdown."""
-    heading = re.match(r"^###[ \t]+SCENE[ \t]+[0-9]+[ \t]+—[ \t]+([^\r\n]+)\r?$", template, re.M)
-    if not heading or heading[1] != heading[1].upper():
-        raise ValueError("scene template requires an uppercase Markdown scene heading")
+    heading = re.match(r"[^\r\n]*", template)[0]
+    normalize_scene_heading(heading)
     if re.search(r"^---\s*$", template, re.M):
         raise ValueError("scene_template.md cannot contain front matter")
     if re.search(r"^#{1,6}\s*ACT\b", template, re.I | re.M):
@@ -110,7 +110,9 @@ def _validate_scene_template(template: str, moment_ids: list[str]) -> None:
     if re.search(r"<(?!\!--\s*RESOLVES\b)[^>]+>", template, re.I):
         raise ValueError("scene_template.md cannot contain raw HTML")
     first_marker = _TEMPLATE_MARKER.search(template)
-    if _INJECT_PLACEHOLDER.search(template[:first_marker.start() if first_marker else len(template)]):
+    opening = template[:first_marker.start() if first_marker else len(template)]
+    validate_public_text(opening)
+    if _INJECT_PLACEHOLDER.search(opening):
         raise ValueError("scene_template.md cannot place a dialogue placeholder before a beat marker")
     references = _template_moment_references(template)
     # Every RESOLVES occurrence must be one of those real marker lines. Public

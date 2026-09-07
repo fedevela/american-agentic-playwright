@@ -406,18 +406,19 @@ def _guarded_prompt(prompt: str) -> str:
     return f"{prompt.rstrip()}\n\n{PYTHON_OWNED_OPERATIONS}\n"
 
 
-def _call_ordinary_turn(prompt: str, *, cwd: Path, phase: str) -> str:
+def _call_ordinary_turn(prompt: str, *, cwd: Path, phase: str, schema: dict | None = None) -> str:
     return call_codex(
         _guarded_prompt(prompt),
         cwd=cwd,
         turn_dir=_new_turn_dir(phase),
         session_id=None,
+        schema=schema,
         model=getattr(config, "CODEX_MODEL", None),
         timeout=getattr(config, "ROLE_TIMEOUT", 1200),
     )
 
 
-def run_codex_comment_phase(
+def _run_preparation_phase(
     prompt: str,
     *,
     repo: str,
@@ -425,6 +426,7 @@ def run_codex_comment_phase(
     phase: str,
     session_scope: str = "",
     issue_data: dict[str, Any] | None = None,
+    schema: dict | None = None,
 ) -> str:
     """Run a conversation-independent Codex phase and return its final response."""
     del session_scope
@@ -436,7 +438,49 @@ def run_codex_comment_phase(
         issue_data=issue_data,
     )
     validate_required_artifacts(context.local_path)
-    return _call_ordinary_turn(prompt, cwd=context.local_path, phase=phase)
+    return _call_ordinary_turn(prompt, cwd=context.local_path, phase=phase, schema=schema)
+
+
+COMMENT_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {"response": {"type": "string"}},
+    "required": ["response"],
+    "additionalProperties": False,
+}
+
+
+def decode_comment_response(content: str) -> str:
+    """Decode the transport envelope before Python renders the public comment."""
+    try:
+        payload = json.loads(_strip_optional_json_fence(content))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Invalid Codex comment response: {exc}") from exc
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"response"}
+        or not isinstance(payload["response"], str)
+        or not payload["response"].strip()
+    ):
+        raise SystemExit("Invalid Codex comment response: expected one nonempty 'response' string.")
+    return payload["response"]
+
+
+def run_codex_comment_phase(
+    prompt: str,
+    *,
+    repo: str,
+    issue: int,
+    phase: str,
+    session_scope: str = "",
+    issue_data: dict[str, Any] | None = None,
+) -> str:
+    """Return validated Markdown; JSON serialization belongs to the harness."""
+    content = _run_preparation_phase(
+        prompt, repo=repo, issue=issue, phase=phase,
+        session_scope=session_scope, issue_data=issue_data,
+        schema=COMMENT_RESPONSE_SCHEMA,
+    )
+    return decode_comment_response(content)
 
 
 def _strip_optional_json_fence(content: str) -> str:
@@ -463,7 +507,7 @@ def run_codex_json_phase(
     issue_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a fresh Codex phase and parse its final response as a JSON object."""
-    content = run_codex_comment_phase(
+    content = _run_preparation_phase(
         prompt,
         repo=repo,
         issue=issue,
@@ -471,8 +515,6 @@ def run_codex_json_phase(
         session_scope=session_scope,
         issue_data=issue_data,
     )
-    if "[ERROR]" in content or "[ERROR:REJECT_BEAT]" in content:
-        return {"__action_rejection": True, "comment": content}
     try:
         payload = json.loads(_strip_optional_json_fence(content))
     except json.JSONDecodeError as exc:
@@ -499,6 +541,14 @@ def run_codex_implementation_phase(
         raise SystemExit(
             "Phase 9 direct Codex implementation is disabled; use the native-session roundtable."
         )
+    if phase == "5":
+        from .cycles import ready_assignment, bind_issue
+        from .github_ops import fetch_issue_data
+
+        if issue_data is None:
+            issue_data = fetch_issue_data(repo, issue)
+        bind_issue(issue_data, repo, issue)
+        ready_assignment(issue_data)
     context = _prepare_context(
         repo=repo,
         issue=issue,

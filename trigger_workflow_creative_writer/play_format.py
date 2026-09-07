@@ -10,6 +10,20 @@ if TYPE_CHECKING:
 
 _MARKER = re.compile(r'<!--\s*RESOLVES\s*\[(BEAT\s+[^\]]+)\]\s*-->')
 _INLINE = re.compile(r'\*\(([^\n]*?)\)\*')
+_SCENE_TEMPLATE_HEADING = re.compile(r'^###[ \t]+SCENE[ \t]+([0-9]+)[ \t]+—[ \t]+([^\r\n]+)\r?$')
+_INTERNAL_SKELETON_TAG = re.compile(
+    r'</?(?:SCENE_HEADING|DIALOGUE|ACTION|PARENTHETICAL|CAMERA|LIGHTING|AUDIO|TRANSITION)(?=[\s/>])', re.I)
+_CANONICAL_TEMPLATE_PLACEHOLDER = re.compile(r'''\[\s*(?:
+    INJECT\s+HERE|TODO|TBD|PLAY\s+TITLE|PLAYWRIGHT\s+NAME|CONTACT\s+NAME|
+    EMAIL\s+ADDRESS|ADDITIONAL\s+CONTACT\s+INFORMATION|CHARACTER\s+NAME|
+    AGE\s+DESCRIPTION|GENDER,\s+AS\s+ESTABLISHED|RELEVANT\s+TRAITS|
+    WHERE\s+THE\s+PLAY\s+TAKES\s+PLACE\.|WHEN\s+THE\s+PLAY\s+TAKES\s+PLACE\.|
+    NUMBER|SCENE\s+TITLE|SETTING\s+AT\s+THE\s+OPENING\s+OF\s+THE\s+SCENE\.|BEAT\s+ID|
+    STAGE\s+DIRECTION:\s+ACTION\s+OR\s+MOVEMENT\.|DIALOGUE\s+IN\s+NORMAL\s+SENTENCE\s+CASE\.|
+    DIALOGUE\s+BEFORE\s+AN\s+INLINE\s+DIRECTION\.|BRIEF\s+ACTION\s+OR\s+EMOTIONAL\s+CUE\.|
+    DIALOGUE\s+CONTINUES\.|STAGE\s+DIRECTION\s+BETWEEN\s+SPEECHES\.|DIALOGUE[^\]]*|
+    STAGE\s+DIRECTION[^\]]*|BRIEF\s+ACTION[^\]]*
+)\s*\]''', re.I | re.X)
 _PUBLIC_PROPERTIES = {
     'CAMERA': {'shot', 'movement', 'target'},
     'LIGHTING': {'mood', 'source'},
@@ -19,16 +33,23 @@ _PUBLIC_PROPERTIES = {
 }
 
 
+def normalize_scene_heading(heading: str) -> str:
+    """Validate one template heading and return its safe Markdown normalization."""
+    match = _SCENE_TEMPLATE_HEADING.fullmatch(heading)
+    if not match or match[2] != match[2].upper():
+        raise ValueError('scene template requires an uppercase Markdown scene heading')
+    return f'### SCENE {match[1]} — {match[2]}'
+
+
 def validate_public_text(text: str) -> None:
     """Reject reserved structural markers and known unfilled template vessels."""
     if re.search(r'<!--\s*(?:SCENE\b|RESOLVES\b)', text, re.I):
         raise ValueError('Reserved scene/beat marker in public performance')
-    if (re.search(r'\[\s*(?:INJECT\s+HERE|TODO|TBD|CHARACTER NAME|SCENE TITLE|'
-                  r'Dialogue[^\]]*|Stage direction[^\]]*|Brief action[^\]]*)\s*\]', text, re.I)
+    if (_CANONICAL_TEMPLATE_PLACEHOLDER.search(text)
             or re.search(r'^\s*(?:TODO|TBD)(?:\s*:.*)?\s*$', text, re.M)):
         raise ValueError('Unresolved placeholder in public performance')
-    if re.search(r'<DIALOGUE\b[^>]*(?:/\s*>|>\s*</DIALOGUE\s*>)', text, re.I):
-        raise ValueError('Empty dialogue vessel in public performance')
+    if _INTERNAL_SKELETON_TAG.search(text):
+        raise ValueError('Internal skeleton tag in public performance')
 
 
 def _plain(text: str) -> str:
@@ -102,8 +123,9 @@ def render_scene(scene: SceneMaterials, state: dict) -> str:
         raise ValueError('Scene is incomplete: explicit completion and actual moment performance required')
     parts = _MARKER.split(scene.scene_template)
     opening = parts[0].strip()
-    if not opening.startswith('### SCENE '):
-        raise ValueError('Scene template requires a Markdown scene heading')
+    heading = re.match(r'[^\r\n]*', opening)[0]
+    opening = normalize_scene_heading(heading) + opening[len(heading):]
+    validate_public_text(opening)
     cues, per_moment, transitions = _fixed_constraints(scene.skeleton)
     lines = [opening, *cues]
     events = {mid: [] for mid in scene.moment_ids}

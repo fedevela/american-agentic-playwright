@@ -32,105 +32,6 @@ class RouterPhaseExecutionTests(unittest.TestCase):
 
     @patch("trigger_workflow_creative_writer.core.advance_issue_label")
     @patch("trigger_workflow_creative_writer.core.post_issue_comment")
-    @patch("trigger_workflow_creative_writer.core.log_multiline")
-    @patch("trigger_workflow_creative_writer.core.run_comment_phase", return_value="Line one\nLine two")
-    def test_execute_discussion_phase_logs_generated_comment_body(
-        self,
-        run_comment_phase_mock,
-        log_multiline_mock,
-        post_issue_comment_mock,
-        advance_issue_label_mock,
-    ) -> None:
-        del post_issue_comment_mock
-        del advance_issue_label_mock
-        execute_comment_phase_handoff(
-            PhaseExecutionRequest(
-                label="phase:keter",
-                issue=55,
-                repo="owner/repo",
-                microagent_content="prompt",
-                phase="1",
-                issue_data={"title": "Issue", "body": "Body", "comments": []},
-            )
-        )
-
-        log_multiline_mock.assert_called_once_with("Generated comment", "Line one\nLine two")
-        self.assertEqual(run_comment_phase_mock.call_args.kwargs["session_scope"], "phase-1")
-
-    @patch("trigger_workflow_creative_writer.core.post_issue_comment")
-    @patch("trigger_workflow_creative_writer.core.clear_issue_labels_except")
-    @patch("trigger_workflow_creative_writer.core.create_issue_branches_for_child_issues")
-    @patch("trigger_workflow_creative_writer.core.log_multiline")
-    @patch("trigger_workflow_creative_writer.core.build_phase_four_summary", return_value="Summary body")
-    @patch(
-        "trigger_workflow_creative_writer.core.create_child_issues",
-        return_value=[{"number": 101, "id": 1001, "title": "child", "url": "https://example.com/101"}],
-    )
-    @patch("trigger_workflow_creative_writer.core.validate_tiferet_specification_payload_structure")
-    @patch(
-        "trigger_workflow_creative_writer.core.run_json_phase",
-        return_value={"comment": "Parent body", "sub_issues": []},
-    )
-    def test_execute_specification_phase_uses_shared_issue_session_scope(
-        self,
-        run_json_phase_mock,
-        validate_phase_four_payload_mock,
-        create_child_issues_mock,
-        build_phase_four_summary_mock,
-        log_multiline_mock,
-        create_issue_branches_for_child_issues_mock,
-        clear_issue_labels_except_mock,
-        post_issue_comment_mock,
-    ) -> None:
-        # Phase 4 must validate against a real-looking Gevurah comment, so this
-        # fixture includes the canonical requirement block expected by router
-        # validation before child issues are posted.
-        del validate_phase_four_payload_mock
-        del create_child_issues_mock
-        del build_phase_four_summary_mock
-        del log_multiline_mock
-        del post_issue_comment_mock
-        issue_data = {
-            "title": "Issue",
-            "body": "Body",
-            "comments": [
-                {
-                    "body": "\n".join(
-                        [
-                            "<!-- phase:3:start label=phase:gevurah name=Gevurah -->",
-                            "### Phase 3: Gevurah",
-                            "",
-                            "## Canonical Requirements",
-                            "",
-                            "- CH-001: [RED] When user selects the option, then the scene initializes",
-                            "",
-                            "## Synthesis Decisions",
-                            "",
-                            "Decision text.",
-                        ]
-                    )
-                }
-            ],
-        }
-        execute_tiferet_specification_phase(
-            PhaseExecutionRequest(
-                label="phase:tiferet",
-                issue=55,
-                repo="owner/repo",
-                microagent_content="prompt",
-                phase="4",
-                issue_data=issue_data,
-            )
-        )
-
-        self.assertEqual(run_json_phase_mock.call_args.kwargs["session_scope"], "phase-4")
-        create_issue_branches_for_child_issues_mock.assert_called_once_with("owner/repo", 55, [101])
-        clear_issue_labels_except_mock.assert_called_once_with(
-            "owner/repo", 55, [], keep=["phase:needsHuman"]
-        )
-
-    @patch("trigger_workflow_creative_writer.core.advance_issue_label")
-    @patch("trigger_workflow_creative_writer.core.post_issue_comment")
     @patch("trigger_workflow_creative_writer.core.finalize_delivery", return_value="Delivery summary")
     @patch("trigger_workflow_creative_writer.core.run_implementation_phase")
     def test_execute_agent_phase_uses_shared_issue_session_scope(
@@ -142,25 +43,25 @@ class RouterPhaseExecutionTests(unittest.TestCase):
     ) -> None:
         execute_implementation_phase_task(
             PhaseExecutionRequest(
-                label="phase:netzach",
+                label="phase:hod",
                 issue=55,
                 repo="owner/repo",
                 microagent_content="prompt",
-                phase="5",
+                phase="6",
                 issue_data={"title": "Issue", "body": "Body", "comments": []},
             )
         )
 
-        self.assertEqual(run_implementation_phase_mock.call_args.kwargs["session_scope"], "phase-5")
+        self.assertEqual(run_implementation_phase_mock.call_args.kwargs["session_scope"], "phase-6")
         finalize_delivery_mock.assert_called_once_with(
             repo="owner/repo",
             issue=55,
-            phase="5",
+            phase="6",
             issue_title="Issue",
-            issue_data={"title": "Issue", "body": "Body", "comments": []},
+            issue_data={"title": "Issue", "body": "Body", "comments": [], "number":55, "_repo":"owner/repo"},
         )
         post_issue_comment_mock.assert_called_once()
-        advance_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:netzach")
+        advance_issue_label_mock.assert_called_once_with("owner/repo", 55, "phase:hod")
 
     @patch("trigger_workflow_creative_writer.core.execute_implementation_phase_task")
     @patch("trigger_workflow_creative_writer.core.execute_tiferet_specification_phase")

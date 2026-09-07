@@ -1,22 +1,20 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 from .artifact_validation import REQUIRED_CHARACTER_ARTIFACTS
 from .config import (
     BASE_PERSONA_FILE,
-    DISCUSSION_PHASES,
     FUNCTIONAL_MICROAGENT_FILE_MAP,
-    KETER_DERIVED_PHASES,
     LABEL_PHASE_MAP,
     MICROAGENTS_DIR,
     PERSONAS_DIR,
     PERSONA_FILE_MAP,
     PHASE_DISPLAY_NAME_MAP,
-    TIFERET_AUTO_ISSUE_PREFIX,
 )
-from .logging_utils import log_error, log_info
+from .logging_utils import log_info
 
 
 COMMENT_VISIBLE_PHASES = {"3", "4", "5", "6", "7", "8", "9"}
@@ -90,46 +88,11 @@ def read_functional_microagent(label: str, phase: str | None) -> str:
 
 
 def extract_phase_1_comment(issue_data: dict[str, Any]) -> str | None:
-    """Extract the normalized Keter comment body from machine-marked issue comments."""
-    comments = issue_data.get("comments") or []
-    log_info(f"Extracting phase 1 comment from {len(comments)} comments...")
-    for i, comment in enumerate(comments):
-        log_info(f"  Processing comment {i + 1}/{len(comments)}")
-        if not isinstance(comment, dict):
-            log_info("    - Skipping: not a dictionary.")
-            continue
-        body = str(comment.get("body") or "")
-        if not body:
-            log_info("    - Skipping: empty body.")
-            continue
+    """Return the accepted Keter result for the current exploration cycle."""
+    from .cycles import current_result
 
-        log_info(f"    - Comment body length: {len(body)}")
-        start_marker = "<!-- phase:1:start"
-        end_marker = "<!-- phase:1:end"
-
-        if start_marker in body and end_marker in body:
-            log_info("    - Found start and end markers for phase 1.")
-            start_idx = body.find(start_marker)
-            end_idx = body.find(end_marker, start_idx)
-            if end_idx > start_idx:
-                content = body[start_idx:end_idx]
-                log_info(f"    - Extracted content block (length: {len(content)})")
-                lines = content.split("\n")
-                for j, line in enumerate(lines):
-                    if line.startswith("### Phase 1:"):
-                        log_info(f"    - Found '### Phase 1:' on line {j + 1}.")
-                        extracted = "\n".join(lines[j + 2 :]).strip() if j + 2 < len(lines) else ""
-                        log_info(f"    - Returning extracted clarification (length: {len(extracted)})")
-                        return extracted
-                log_info("    - Fallback: returning raw content between markers because '### Phase 1:' was not found.")
-                return content
-            else:
-                log_info(f"    - Skipping: end marker found before start marker (start={start_idx}, end={end_idx}).")
-        else:
-            log_info("    - Skipping: missing start or end marker for phase 1.")
-
-    log_info("No phase 1 comment found after checking all comments.")
-    return None
+    result = current_result(issue_data, "1")
+    return json.dumps(result, ensure_ascii=False, indent=2) if result else None
 
 
 def build_issue_runtime_context(
@@ -154,8 +117,8 @@ def build_issue_runtime_context(
 - Issue number: #{issue}
 - Phase: {phase}
 
-### Required Local Context (The Law of the World)
-The creative engine requires the following 12 standardized artifacts to be present in the local file system. These form the binding constraints of the story, characters, and world. The caller must provide them, and you must rely on them for all foundational truth rather than inventing it:
+### Established Canon
+Use these local references for the established story, characters, and world:
 1. `bible/characters.md`
 2. `bible/dramatic_arcs.md`
 3. `bible/world_rules.md`
@@ -163,7 +126,7 @@ The creative engine requires the following 12 standardized artifacts to be prese
 5. `bible/relationships.drawio`
 {character_artifact_lines}
 
-**Memory Check Directive:** Before proceeding with any generation, you must verify that you have successfully read and loaded all of the above artifacts into your working memory. If they are not in your context, you must read them from the local file system now.
+Read the relevant canon references and preserve established dramatic facts. Let them inform the writing without announcing prerequisite verification.
 
 ## Issue Content
 
@@ -201,39 +164,19 @@ def build_phase_prompt_input_context(
     phase: str,
     issue_data: dict[str, Any],
 ) -> str:
-    """Build prompt context, restricting phases 2A-2C to Keter and giving phases 3+ access to issue comments."""
-    if phase not in KETER_DERIVED_PHASES:
-        include_comments = phase in COMMENT_VISIBLE_PHASES
-        source = "original issue body and all issue comments" if include_comments else "original issue body"
-        log_info(f"Prompt input source: {source} for phase {phase.upper()}")
-        return build_issue_runtime_context(label, issue, repo, phase, issue_data, include_comments=include_comments)
+    """Use cycle-owned inputs upstream, preserving independent exploration contexts."""
+    if phase not in {"1", "2A", "2B", "2C", "3", "4"}:
+        return build_issue_runtime_context(
+            label, issue, repo, phase, issue_data, include_comments=phase in COMMENT_VISIBLE_PHASES
+        )
+    from .cycles import prompt_context
 
-    log_info(f"Phase {phase.upper()} is in KETER_DERIVED_PHASES, extracting Phase 1/Keter comment for prompt context")
-    phase_1_comment = extract_phase_1_comment(issue_data)
-    if not phase_1_comment:
-        log_error(f"Phase {phase.upper()} requires an existing Phase 1/Keter comment, but none was found on the issue.")
-        raise SystemExit(f"Phase {phase.upper()} requires a Phase 1 clarification comment, but none was found.")
-
-    title = issue_data.get("title", "Untitled")
-    log_info(f"Prompt input source: Phase 1/Keter comment only for phase {phase.upper()}")
-    log_info(f"Extracted Keter clarification length: {len(phase_1_comment)} chars")
-    return f"""## Runtime Context
-- Repository: {repo}
-- Trigger label: {label}
-- Issue number: #{issue}
-- Phase: {phase}
-
-## Issue Title
-
-**Title:** {title}
-
-## Phase 1 Input
-
-Use only this Keter clarification as the task content for this phase.
-Do not derive requirements directly from the original issue body.
-
-{phase_1_comment}
-"""
+    context = prompt_context(issue_data, phase)
+    # Avoid raw title/body/comments here: cycle context determines precisely what
+    # the current perspective can see, including its own pending human answer.
+    runtime = build_issue_runtime_context(label, issue, repo, phase, {})
+    runtime = runtime.split("## Issue Content", 1)[0].strip()
+    return f"{runtime}\n\n## Current Exploration Cycle\n\n{json.dumps(context, ensure_ascii=False, indent=2)}"
 
 
 def strip_microagent(microagent: str) -> str:
@@ -245,17 +188,15 @@ def strip_microagent(microagent: str) -> str:
 
 
 def build_phase_2_story_requirements() -> list[str]:
-    """Return shared requirements for phase-2 semaphored user-story comments."""
+    """Return shared dramatic exploration instructions for level two."""
     return [
-        "- Emit semaphored user stories only; do not add headings, preamble, summary, or commentary.",
-        "- Format every line as `[COLOR] Given ..., when ..., then ...`.",
-        "- Use only these semaphore tags: `[RED]`, `[ORANGE]`, and `[GREEN]`.",
-        "- Keep the output shape consistent across all phase 2 variants: a flat list of semaphored user stories.",
-        "- Derive every story exclusively from the Keter clarification provided in the prompt.",
-        "- Favor behaviors that are observable, automatable, and verifiable through end-to-end tests.",
-        "- Write `then` clauses in measurable terms: concrete state changes, DOM/UI changes, emitted values, preserved controls, deterministic outputs, or other inspectable outcomes.",
-        "- Do not rely on subjective human judgments such as 'feels natural', 'looks better', 'visibly improved', or 'responsive' unless those claims are tied to explicit, testable signals.",
-        "- Do not mention other phases, personas, or handoff language.",
+        "- Develop an independent lyrical exploration of the accepted current Keter brief.",
+        "- Give every artifact a structured scope: episode, act, or scene; season is assigned only by the partner.",
+        "- Scope describes the artifact's dramatic reach; level two explores material and does not create issues.",
+        "- Later assignments may create issues at episode, act, or scene scope; every branch ultimately reaches ready scene leaves, with intermediate scopes or same-scope development as needed.",
+        "- Explore possibility, resistance, motivation, visible action, imagery, scenes, and beats through this perspective.",
+        "- Preserve source references and ancestry; keep beats inside scenes.",
+        "- Leave unresolved divergent choices to the partner using a structured question outcome.",
     ]
 
 
@@ -267,46 +208,31 @@ def build_comment_phase_prompt(
     phase: str,
     issue_data: dict[str, Any],
 ) -> str:
-    log_info(f"Building comment-producing prompt for phase {phase.upper()}")
-    """Build a prompt for comment-producing phases."""
-    requirements = [
-        "- Be concise and authoritative.",
-        "- Do not mention tool limitations, environment limitations, or inability to post.",
-        "- Do not describe yourself as unable to act.",
-        "- Do not wrap the answer in code fences.",
-        "- Keep the content appropriate for a single GitHub issue comment.",
-    ]
+    """Build the literary phase prompt with the harness-owned result contract."""
+    from .validation import result_contract
 
-    if phase == "1":
-        requirements.extend(
-            [
-                "- Produce a comprehensive clarification comment, not an ACK.",
-                "- Start with a short statement that the requirement has been clarified.",
-                "- Include these exact section headings: `Clarified Requirement`, `Constraints and Invariants`, `Acceptance Signals`, and `Phase 2 Handoff`.",
-                "- `Clarified Requirement` must describe the feature behavior in one coherent paragraph.",
-                "- `Constraints and Invariants` must be a flat bullet list covering preserved behavior, determinism/seed expectations, UI placement, and boundary behavior when applicable.",
-                "- `Acceptance Signals` must be a flat bullet list of observable outcomes a reviewer can verify.",
-                "- Favor acceptance signals that are observable, automatable, and verifiable through end-to-end tests or other inspectable checks.",
-                "- Do not rely on subjective human judgments such as 'feels natural', 'looks better', 'visibly improved', or 'responsive' unless they are translated into explicit, measurable signals.",
-                "- `Phase 2 Handoff` must state that generative expansion can proceed.",
-            ]
-        )
-    elif phase in {"2A", "2B", "2C"}:
-        requirements.extend(build_phase_2_story_requirements())
-
+    responsibilities = {
+        "1": "Receive the human intention and inherited material. Establish a broad narrative stroke with precise pursuit, opposition, pressure, change, and dramatic question. Preserve canon naturally in the writing.",
+        "2A": "Discover generative possibilities and surprising action through Chokhmah.",
+        "2B": "Explore resistance, consequence, and dramatic structure through Binah.",
+        "2C": "Explore motivation, relationships, emotional generosity, and imagery through Chesed.",
+        "3": "Synthesize all three current explorations into dramatic anchors, their relationships, possible scenes, ordered beat coverage, and material needing further development. Preserve the partner's authority over divergent choices.",
+    }
+    instructions = [responsibilities[phase]]
+    if phase in {"2A", "2B", "2C"}:
+        instructions.extend(build_phase_2_story_requirements())
     return f"""{strip_microagent(microagent)}
 
 {build_phase_prompt_input_context(label, issue, repo, phase, issue_data)}
 
-Return valid JSON only. No markdown fences. No explanation outside JSON.
+{chr(10).join(instructions)}
 
-Use this exact schema:
-{{
-  "response": "The complete GitHub comment body for this phase."
-}}
+Return raw structured JSON only, without code fences.
+Python renders public comments, headings, identifiers, ancestry, and source-reference lines.
+Keep narrative content separate from status, scope, references, and readiness.
+Questions for the partner pause advancement; use the structured outcome instead of declaring an execution failure.
 
-Requirements:
-{chr(10).join(requirements)}
+{result_contract(phase)}
 """
 
 
@@ -318,38 +244,34 @@ def build_tiferet_specification_prompt(
     phase: str,
     issue_data: dict[str, Any],
 ) -> str:
-    """Build a prompt for phase 4/Tiferet, the child-issue specification phase."""
+    """Turn accepted dramatic organization into ready scenes and recursive work."""
+    from .validation import result_contract
+
     return f"""{strip_microagent(microagent)}
 
 {build_phase_prompt_input_context(label, issue, repo, phase, issue_data)}
 
-Return valid JSON only. No markdown fences. No explanation outside JSON.
+Turn the accepted synthesis into concrete scene outlines and recursive assignments.
+Preserve its organization, source anchors, relationships, scope, and ancestry.
+A single result may contain ready scenes and material requiring further development.
+A ready scene needs an established outline, ordered nonempty beats covering its assigned
+anchors, episode ownership, act placement, and scene identity. Larger elements and unfinished
+scenes receive a specific development brief, an unresolved question, and the reason for returning.
+The same scope may need another cycle; do not force a sequence of smaller sizes.
+Issues may exist at episode, act, or scene scope, but every branch must ultimately
+reach ready scene leaves. Larger and unfinished scene assignments continue development.
+Generated artifacts use episode, act, or scene scope. Season is created only by the partner.
+Unresolved structural choices return for development or a question to the partner; do not silently rewrite them.
 
-Use this exact schema:
-{{
-  "comment": "GitHub comment body for the parent issue explaining the decomposition rationale",
-  "sub_issues": [
-    {{
-      "title": "{TIFERET_AUTO_ISSUE_PREFIX}Short actionable issue title",
-      "body": "Child issue body beginning with a 'Resolves Beats:' traceability line copying the full Master Story Beat definitions verbatim, followed by a detailed Scene/Sequence Outline."
-    }}
-  ]
-}}
+Return raw structured JSON only, without code fences.
+Python renders public comments, headings, identifiers, ancestry, beat-reference lines,
+child issue bodies, size labels, phase labels, and child summaries.
+Python owns GitHub dependencies, parent membership, and completion rollup.
+Supply dramatic assignments; the harness derives and maintains these GitHub relationships.
+One script.md per episode contains all acts, scenes, and beats. Beats are never issues or files.
+Questions for the partner pause advancement and child creation.
 
-Requirements:
-- `comment` must summarize the specification and explain that child issues were spawned.
-- `comment` must explicitly reconcile the provided Master Story Beats against the final child issue set.
-- `comment` must explain the grouping logic for every child issue, ensuring the Scale/Size of the beat is accurately fractured down (e.g. from a [LARGE] episode beat into [MEDIUM] sequence beats, or [MEDIUM] down to [SMALL] scene beats).
-- `comment` must state which Master Story Beats are covered by each child issue and why they belong together.
-- `sub_issues` must contain one or more items.
-- Order `sub_issues` from earliest required chronological step to the latest.
-- Prefix every child issue title with `{TIFERET_AUTO_ISSUE_PREFIX}` so auto-created issues are visibly distinct from human-authored issues.
-- Every child issue body must begin with a `Resolves Beats:` line listing every Master Story Beat (with its full bracketed definition) consolidated into that child issue.
-- The beat list must be complete for that child issue; do not omit any covered beats.
-- Copy the full canonical beat definitions verbatim. Do not paraphrase or compress them.
-- Each child issue body must contain a detailed `Scene/Sequence Outline` explaining how the beats translate into visible action.
-- Assume child issues will be created in listed order, attached as sub-issues to the parent issue.
-- Do not mention tool limitations, environment limitations, or inability to post.
+{result_contract(phase)}
 """
 
 
@@ -370,7 +292,17 @@ def build_implementation_phase_prompt(
         "- Do not loop on blocked terminal state; recover and continue the requested writing artifacts.",
     ]
     phase_requirements: list[str] = []
-    if phase == "7":
+    if phase == "5":
+        from .cycles import ready_assignment
+
+        assignment = ready_assignment(issue_data)
+        phase_requirements = [
+            "- Prepare the validated ready-scene assignment below, preserving ordered beats and source anchors.",
+            "- Use one script.md per episode, containing all acts, scenes, and beats; keep preparation in scene_materials/<scene_id>/.",
+            "- Preserve episode ownership, act placement, scene identity, and all neighboring scene regions.",
+            json.dumps(assignment, ensure_ascii=False, indent=2),
+        ]
+    elif phase == "7":
         phase_requirements = [
             "- Phase 7 (Dramatic-Action Preparation): write dramatic_action_brief.md.",
             "- Establish stimulus, knowledge, ignorance, concealment, objectives, emotion, stakes, relationships and available actions for each dramatic moment.",
@@ -434,7 +366,7 @@ def format_phase_comment(phase: str, label: str, body: str) -> str:
 def build_phase_four_summary(created: list[dict[str, Any]]) -> str:
     """Build the parent summary comment listing created child issues."""
     log_info("Building child-issue summary comment")
-    lines = [f"Spawned {len(created)} auto-created child issues in implementation order:"]
+    lines = [f"Spawned {len(created)} dramatic assignments in organization order:"]
     for item in created:
         lines.append(f"- {item['title']}: {item['url']}")
     return "\n".join(lines)

@@ -197,6 +197,17 @@ def test_public_scene_template_rejects_nonpublic_or_mismatched_structure(tmp_pat
         load_scene(tmp_path, 42)
 
 
+def test_load_scene_rejects_neutral_heading_and_opening_placeholders(tmp_path):
+    from trigger_workflow_creative_writer.scene_materials import load_scene
+    scene = make_scene(tmp_path)
+    template = scene / "scene_template.md"
+    template.write_text('### SCENE 1 — [SCENE TITLE]\n\n'
+                        '> *([Setting at the opening of the scene.])*\n\n'
+                        '<!-- RESOLVES [BEAT 1] -->\n[INJECT HERE]\n')
+    with pytest.raises(ValueError, match="placeholder"):
+        load_scene(tmp_path, 42)
+
+
 def test_version_one_handoff_explains_required_migration(tmp_path):
     from trigger_workflow_creative_writer.scene_materials import load_scene
     scene = make_scene(tmp_path)

@@ -46,6 +46,52 @@ def test_requested_markdown_play_format_and_private_exclusion():
     assert result.index('Opens the door') < result.index('Cut.') < result.index('BEAT 2') < result.index('AUDIO: Birdsong')
 
 
+def test_renderer_rejects_neutral_template_heading_and_opening_placeholders():
+    scene, state = performance()
+    scene.scene_template = ('### SCENE 1 — [SCENE TITLE]\n\n'
+                            '> *([Setting at the opening of the scene.])*\n\n'
+                            '<!-- RESOLVES [BEAT 1] -->\n[INJECT HERE]\n\n'
+                            '<!-- RESOLVES [BEAT 2] -->\n[INJECT HERE]\n')
+    opening = scene.scene_template.split('<!-- RESOLVES', 1)[0]
+    with pytest.raises(ValueError, match='placeholder'):
+        play_format.validate_public_text(opening)
+    with pytest.raises(ValueError, match='placeholder'):
+        play_format.render_scene(scene, state)
+
+
+def test_renderer_rejects_an_unresolved_opening_placeholder():
+    scene, state = performance()
+    scene.scene_template = scene.scene_template.replace('\n<!-- RESOLVES', '\n\nTODO: describe the opening\n<!-- RESOLVES', 1)
+    with pytest.raises(ValueError, match='placeholder'):
+        play_format.render_scene(scene, state)
+
+
+@pytest.mark.parametrize('placeholder', [
+    '[PLAY TITLE]', '[Playwright name]', '[Contact name]', '[Email address]',
+    '[Additional contact information]', '[Age description]', '[gender, as established]',
+    '[relevant traits]', '[Where the play takes place.]', '[When the play takes place.]',
+    '[NUMBER]', '[BEAT ID]', '[Setting at the opening of the scene.]',
+])
+def test_known_neutral_manuscript_placeholders_cannot_be_public(placeholder):
+    with pytest.raises(ValueError, match='placeholder'):
+        play_format.validate_public_text(placeholder)
+
+
+@pytest.mark.parametrize('placeholder', [
+    '[Dialogue unfinished line.]', '[Stage direction: a generic movement.]',
+    '[Brief action under pressure.]',
+])
+def test_known_dialogue_and_action_placeholder_variants_cannot_be_public(placeholder):
+    with pytest.raises(ValueError, match='placeholder'):
+        play_format.validate_public_text(placeholder)
+
+
+def test_renderer_normalizes_a_valid_tab_separated_scene_heading():
+    scene, state = performance()
+    scene.scene_template = scene.scene_template.replace('### SCENE 1 — THE ROOM', '###\tSCENE  \t1\t— \tTHE ROOM')
+    assert play_format.render_scene(scene, state).startswith('### SCENE 1 — THE ROOM\n')
+
+
 @pytest.mark.parametrize('text', ['<!-- SCENE evil BEGIN -->', '<!-- RESOLVES [BEAT 99] -->', '[INJECT HERE]', '[TODO]', 'TODO: draft', '[Dialogue in normal sentence case.]', '[CHARACTER NAME]'])
 def test_reserved_markers_and_placeholders_cannot_become_public(text):
     scene, state = performance(dialogue=text)
@@ -61,6 +107,11 @@ def test_structural_markdown_and_html_are_escaped():
     assert '\n# heading' not in result and '\n## heading' not in result
     assert '&lt;script&gt;' in result and '\\[link\\]' in result
     assert '\\*\\*bold\\*\\*' in result and '&amp;' in result
+
+
+def test_generic_html_that_only_shares_a_skeleton_tag_prefix_is_escaped():
+    scene, state = performance(dialogue='<audio-file>recording</audio-file>')
+    assert '&lt;audio-file&gt;recording&lt;/audio-file&gt;' in play_format.render_scene(scene, state)
 
 
 def test_inline_parentheses_are_preserved_without_allowing_nested_markup():

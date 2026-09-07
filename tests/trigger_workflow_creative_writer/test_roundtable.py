@@ -196,6 +196,33 @@ def test_invalid_structured_turn_is_not_accepted_or_delivered(setup, mutation):
     assert state["pending"]
 
 
+@pytest.mark.parametrize(("role", "field", "tag"), [
+    ("alice", "action", '<ACTION focus="alice" intent="private sentinel">Hello.</ACTION>'),
+    ("alice", "dialogue", '<DIALOGUE objective="private sentinel" subtext="private fear">Hello.</DIALOGUE>'),
+    ("director", "stage", '<SCENE_HEADING location="private sentinel">Hello.</SCENE_HEADING>'),
+])
+def test_internal_skeleton_tags_in_public_turns_are_rejected_before_delivery(setup, role, field, tag):
+    runtime, args, model, scene = setup
+    initial = (scene.parent.parent / "script.md").read_text()
+
+    def mutate(response, request):
+        if request["role"] != role:
+            return
+        if field == "stage":
+            if response["stage_events"]:
+                response["stage_events"][0]["text"] = tag
+        else:
+            response["outer_response"][field] = tag
+
+    model.mutate = mutate
+    deliveries = []
+    with pytest.raises(ValueError, match="(?i)internal skeleton"):
+        runtime.perform_scene(**args, deliver=lambda: deliveries.append(True))
+    assert deliveries == []
+    assert (scene.parent.parent / "script.md").read_text() == initial
+    assert "private sentinel" not in (scene.parent.parent / "script.md").read_text()
+
+
 def test_changed_inputs_config_and_output_fail_closed(setup):
     runtime, args, model, scene = setup
     with pytest.raises(ValueError, match="limit"):
@@ -619,3 +646,19 @@ def test_episode_crlf_front_matter_and_neighbor_survive_performance(setup):
     runtime.perform_scene(**args, scene_path=str(first.relative_to(args['cwd'])))
     final = manuscript.read_bytes().decode()
     assert final == original.replace(initial_body, scene_body(final, 'locked-room'))
+
+
+def test_crlf_skeleton_snapshot_resumes_the_existing_sessions(setup):
+    runtime, args, model, scene = setup
+    source = args["cwd"] / "skeleton.md"
+    canonical = source.read_bytes().replace(b"\n", b"\r\n")
+    source.write_bytes(canonical)
+    (scene / "scene_skeleton.md").write_bytes(canonical)
+    with pytest.raises(ValueError, match="limit"):
+        runtime.perform_scene(**args, max_calls=3)
+    _, state = manifest(args)
+    director_session = model.calls[0]["session"]
+    result = runtime.perform_scene(**args, run_id=state["run_id"])
+    assert result["status"] == "completed"
+    assert any(call["role"] == "director" and call["resume"] == director_session for call in model.calls[3:])
+    assert (scene.parent.parent / "script.md").read_text().count("Tries the handle.") == 2
