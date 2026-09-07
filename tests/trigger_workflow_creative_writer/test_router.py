@@ -30,6 +30,21 @@ class RouterPhaseExecutionTests(unittest.TestCase):
     workflow incorrectly while appearing operationally healthy.
     """
 
+    def setUp(self):
+        from contextlib import nullcontext
+        from types import SimpleNamespace
+        from trigger_workflow_creative_writer.season_branches import SeasonRoot
+        for target, value in [
+            ("runner_utils.prepare_phase_execution_context", SimpleNamespace(local_path="/tmp/repo")),
+            ("runner_utils.prepare_initial_season_work", None),
+            ("season_branches.checkout_lock", nullcontext()),
+            ("season_branches.resolve_season_root", SeasonRoot(1, "Season", (55, 1))),
+            ("runner_utils.resolve_target_repo_config", SimpleNamespace(issue_branch_prefix="issue/", main_branch="main")),
+        ]:
+            patcher = patch("trigger_workflow_creative_writer." + target, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     @patch("trigger_workflow_creative_writer.core.advance_issue_label")
     @patch("trigger_workflow_creative_writer.core.post_issue_comment")
     @patch("trigger_workflow_creative_writer.core.finalize_delivery", return_value="Delivery summary")

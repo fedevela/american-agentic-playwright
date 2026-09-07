@@ -17,7 +17,7 @@ def request():
 
 def test_phase9_missing_materials_never_delivers(tmp_path, monkeypatch):
     from trigger_workflow_creative_writer import runner_utils
-    monkeypatch.setattr(runner_utils, "prepare_phase_execution_context", lambda *a, **k: SimpleNamespace(local_path=tmp_path, branch="issue/42"))
+    monkeypatch.setattr(runner_utils, "prepare_phase_execution_context", lambda *a, **k: SimpleNamespace(local_path=tmp_path, branch="issue/1"))
     def unexpected(*a, **k):
         pytest.fail("Incomplete performance reached delivery or GitHub handoff")
     monkeypatch.setattr(router, "finalize_delivery", unexpected)
@@ -37,6 +37,7 @@ def test_phase9_disabled_provider_rejected_before_any_checkout_or_handoff(monkey
 @pytest.fixture
 def delivery_boundary(tmp_path, monkeypatch):
     from trigger_workflow_creative_writer import roundtable, runner_utils, scene_materials
+    from trigger_workflow_creative_writer.season_branches import SeasonRoot
     from trigger_workflow_creative_writer.artifact_validation import REQUIRED_ARTIFACTS
     from tests.trigger_workflow_creative_writer.test_roundtable import Model
     from tests.trigger_workflow_creative_writer.test_scene_materials import make_scene
@@ -60,15 +61,23 @@ def delivery_boundary(tmp_path, monkeypatch):
     model = Model()
     monkeypatch.setattr(roundtable, "call_codex", model)
     monkeypatch.setattr(roundtable, "codex_fingerprint", lambda *a, **k: {"cli": "fake-v1"})
+    monkeypatch.setattr(runner_utils, "resolve_season_root", lambda *a, **k: SeasonRoot(1, "Story", (42, 1)))
     boundary = SimpleNamespace(story=story, scene=scene, engine=engine, model=model,
                                events=[], merges=0, change=None)
+
+    def prepare(checkout, *args, **kwargs):
+        boundary.events.append("prepare-season")
+        boundary.merges += 1
+        if boundary.change:
+            boundary.change(boundary.merges, checkout)
+    monkeypatch.setattr(runner_utils, "prepare_season_branch", prepare)
 
     def process(command, *, cwd, **kwargs):
         operation = " ".join(command[:3]) if command[0] == "gh" else command[1]
         boundary.events.append(operation)
         output = ""
         if operation == "branch":
-            output = "issue/42\n"
+            output = "issue/1\n"
         elif operation == "merge":
             boundary.merges += 1
             if boundary.change:
@@ -78,9 +87,9 @@ def delivery_boundary(tmp_path, monkeypatch):
         elif operation == "rev-parse":
             output = "abc123\n"
         elif operation == "ls-remote":
-            output = "abc123\trefs/heads/issue/42\n"
+            output = "abc123\trefs/heads/issue/1\n"
         elif operation == "gh pr list":
-            output = '[{"number": 42, "title": "Story", "url": "https://github.com/owner/story/pull/42"}]'
+            output = '[{"number": 42, "title": "Season #1: Story", "baseRefName": "main", "url": "https://github.com/owner/story/pull/42"}]'
         elif operation == "show":
             output = "Script/Season_01/Episode_01/script.md\n"
         elif operation not in {"fetch", "add", "commit", "push"}:
@@ -99,8 +108,8 @@ def delivery_boundary(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("changed_file", ["continuity.md", "Script/Season_01/Episode_01/script.md"])
-@pytest.mark.parametrize("merge_number", [2, 3])
-def test_phase9_merge_changes_abort_before_staging_and_leave_delivery_pending(delivery_boundary, changed_file, merge_number):
+@pytest.mark.parametrize("merge_number", [2])
+def test_phase9_delivery_preparation_changes_abort_before_staging_and_leave_delivery_pending(delivery_boundary, changed_file, merge_number):
     boundary = delivery_boundary
     def merge_change(count, checkout):
         if count == merge_number:
@@ -109,7 +118,7 @@ def test_phase9_merge_changes_abort_before_staging_and_leave_delivery_pending(de
     boundary.change = merge_change
     with pytest.raises(ValueError, match="fingerprint.*changed|script.*changed|Expected one scene handoff"):
         router.execute_malkhut_performance_phase(request())
-    assert boundary.merges == 3
+    assert boundary.merges == 2
     assert not {"add", "commit", "push", "comment", "advance"}.intersection(boundary.events)
     manifests = list((boundary.engine / "workspace" / "roundtable").glob("*/*/*/manifest.json"))
     assert len(manifests) == 1
@@ -118,12 +127,12 @@ def test_phase9_merge_changes_abort_before_staging_and_leave_delivery_pending(de
     assert state["status"] == "completed"
 
 
-def test_phase9_unchanged_merges_validate_before_staging_then_deliver(delivery_boundary):
+def test_phase9_unchanged_season_preparation_validates_before_staging_then_delivers(delivery_boundary):
     boundary = delivery_boundary
     router.execute_malkhut_performance_phase(request())
     events = boundary.events
-    assert boundary.merges == 3
-    last_merge = max(i for i, event in enumerate(events) if event == "merge")
+    assert boundary.merges == 2
+    last_merge = max(i for i, event in enumerate(events) if event == "prepare-season")
     last_validation = max(i for i, event in enumerate(events) if event == "validate-scene")
     assert last_merge < last_validation < events.index("add") < events.index("commit") < events.index("push") < events.index("comment") < events.index("advance")
     manifests = list((boundary.engine / "workspace" / "roundtable").glob("*/*/*/manifest.json"))
@@ -168,4 +177,4 @@ def test_phase9_guard_uses_actual_delivery_checkout_and_scene_identity(delivery_
         with pytest.raises(ValueError, match="fingerprint.*changed|script.*changed|Expected one scene handoff"):
             router.execute_malkhut_performance_phase(request())
         assert not {"add", "commit", "push", "comment", "advance"}.intersection(boundary.events)
-    assert boundary.merges == 3
+    assert boundary.merges == 2

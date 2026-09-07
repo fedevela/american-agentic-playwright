@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any
 
-SCOPES = {'season', 'episode', 'act', 'scene'}
+SCOPES = {'season', 'episode', 'act', 'scene', 'undetermined'}
 GENERATED_SCOPES = SCOPES - {'season'}
 AXES = ('pursuit', 'opposition', 'pressure', 'change', 'dramatic_question')
 
@@ -25,28 +25,44 @@ def references(value: Any, allowed: set[str], name: str, *, empty: bool = False)
     require(isinstance(value, list) and all(isinstance(v, str) for v in value), f'{name} must be source references')
     require(len(value) == len(set(value)), f'{name} has duplicate source references')
     require(empty or bool(value), f'{name} needs source references')
-    require(set(value) <= allowed, f'{name} contains unknown source references: {set(value) - allowed}')
+    require(set(value) <= allowed,
+            f'{name} contains unknown source references: {sorted(set(value) - allowed)}; '
+            f'allowed anchor IDs: {sorted(allowed)}')
     return set(value)
 
 
-def validate_element(element: dict, anchor_ids: set[str]) -> None:
+def validate_element(element: dict, anchor_ids: set[str], *, reconcile_scene_refs: bool = False) -> None:
     require(isinstance(element, dict), 'element must be an object')
-    require(isinstance(element.get('scope'), str) and element['scope'] in GENERATED_SCOPES, 'generated scope must be episode, act, or scene; seasons are human-created')
+    require(isinstance(element.get('scope'), str) and element['scope'] in GENERATED_SCOPES, 'generated scope must be episode, act, scene, or undetermined; seasons are human-created')
     text(element.get('title'), 'element title')
     text(element.get('content'), 'element content')
-    assigned = references(element.get('source_refs'), anchor_ids, 'element')
+    context = f'element {element["title"]!r}'
+    assigned = references(element.get('source_refs'), anchor_ids, context)
     require(isinstance(element.get('readiness'), str) and element['readiness'] in {'ready','develop'}, 'element readiness must be ready or develop')
     require(isinstance(element.get('outline', ''), str), 'outline must be text')
     require(isinstance(element.get('beats', []), list), 'beats must be an ordered list')
+    if reconcile_scene_refs and element['scope'] == 'scene':
+        # Preserve declared assignments and append valid beat sources in first-use order.
+        # validate_result works on a deep copy, keeping the original response intact.
+        additions = []
+        for number, beat in enumerate(element.get('beats', []), 1):
+            beat_context = f'{context}, beat {number}'
+            require(isinstance(beat, dict), f'{beat_context} must be an object')
+            references(beat.get('source_refs'), anchor_ids, beat_context)
+            for ref in beat['source_refs']:
+                if ref not in assigned:
+                    additions.append(ref)
+                    assigned.add(ref)
+        element['source_refs'].extend(additions)
     if element['readiness'] == 'develop':
-        text(element.get('development_question'), 'development question')
-        text(element.get('return_reason'), 'return reason')
+        text(element.get('development_question'), f'{context}, readiness=develop: development_question')
+        text(element.get('return_reason'), f'{context}, readiness=develop: return_reason')
         placement = element.get('placement')
         require(placement is None or (isinstance(placement, dict) and all(isinstance(placement.get(k), str) and placement[k].strip() for k in ('episode','act','scene_id'))), 'development placement must be null or explicit episode/act/scene identity')
-        for beat in element.get('beats', []):
+        for number, beat in enumerate(element.get('beats', []), 1):
             require(isinstance(beat, dict), 'beat must be an object')
             text(beat.get('content'), 'beat content')
-            references(beat.get('source_refs'), assigned, 'beat')
+            references(beat.get('source_refs'), assigned, f'{context}, beat {number}')
         return
     require(element['scope'] == 'scene', 'only a scene can be ready')
     require(not element.get('development_question') and not element.get('return_reason'), 'ready scene cannot have unresolved development questions')
@@ -59,11 +75,12 @@ def validate_element(element: dict, anchor_ids: set[str]) -> None:
     beats = element.get('beats')
     require(isinstance(beats, list) and bool(beats), 'ready scene requires ordered nonempty beats')
     covered = set()
-    for beat in beats:
+    for number, beat in enumerate(beats, 1):
         require(isinstance(beat, dict), 'beat must be an object')
         text(beat.get('content'), 'beat content')
-        covered |= references(beat.get('source_refs'), assigned, 'beat')
-    require(covered == assigned, 'missing beat coverage of assigned dramatic anchors')
+        covered |= references(beat.get('source_refs'), assigned, f'{context}, beat {number}')
+    require(covered == assigned,
+            f'{context}: missing beat coverage of assigned dramatic anchors: {sorted(assigned - covered)}')
 
 
 def validate_reference_prefix(prefix: Any) -> None:
@@ -113,8 +130,8 @@ def validate_result(payload: dict, *, phase: str, cycle_id: str, scope: str,
     if result['outcome'] == 'failure':
         return result
     if result['outcome'] == 'develop':
-        text(result.get('development_question'), 'development question')
-        text(result.get('return_reason'), 'return reason')
+        text(result.get('development_question'), 'top-level outcome=develop: development_question')
+        text(result.get('return_reason'), 'top-level outcome=develop: return_reason')
         return result
     inherited = inherited or []
     if phase == '1':
@@ -157,7 +174,7 @@ def validate_result(payload: dict, *, phase: str, cycle_id: str, scope: str,
         require(isinstance(item, dict), 'dramatic material must be an object')
         text(item.get('content'), 'dramatic content')
         if phase in {'2A','2B','2C'}:
-            require(isinstance(item.get('scope'), str) and item['scope'] in GENERATED_SCOPES, 'artifact scope must be episode, act, or scene; seasons are human-created')
+            require(isinstance(item.get('scope'), str) and item['scope'] in GENERATED_SCOPES, 'artifact scope must be episode, act, scene, or undetermined; seasons are human-created')
         covered |= references(item.get('source_refs'), pool, 'dramatic material', empty=not pool)
         item['id'] = f'{cycle_id}:{phase}:a{index}'
     require(covered == pool, 'missing source coverage of accepted current-cycle material')
@@ -168,7 +185,7 @@ def validate_result(payload: dict, *, phase: str, cycle_id: str, scope: str,
         covered = set()
         locations = set()
         for index, element in enumerate(elements, 1):
-            validate_element(element, pool)
+            validate_element(element, pool, reconcile_scene_refs=True)
             covered.update(element['source_refs'])
             element['id'] = f'{cycle_id}:e{index}'
             for number, beat in enumerate(element.get('beats') or [], 1):
@@ -192,34 +209,46 @@ def validate_tiferet_specification_payload_structure(payload: dict[str, Any]) ->
 
 def result_contract(phase: str) -> str:
     common = {'cycle_id':'copy current cycle_id','scope':'copy current issue scope',
-              'outcome':'complete | develop | question | failure', 'narrative':'dramatic prose',
-              'questions':[], 'canon_refs':['relevant canon paths; preserve inherited references']}
+              'outcome':'complete | develop | question | failure', 'narrative':'concise phase-domain summary',
+              'questions':[], 'canon_refs':['relevant canon paths; preserve inherited references'],
+              'development_question':'specific question for the whole work when outcome=develop; otherwise empty',
+              'return_reason':'reason the whole work needs a new Keter cycle when outcome=develop; otherwise empty'}
     if phase == '1':
         common.update(reference_prefix={'code':'2–12 uppercase letters chosen meaningfully for this specific project',
                                         'meaning':'neutral description of what those letters refer to'},
                       axes={axis:'precise dramatic axis' for axis in AXES},
                       anchors=[{'content':'dramatic anchor','source_refs':['source_material.anchors IDs (including development.sources); empty only when no inherited/developed sources']}])
     elif phase in {'2A','2B','2C'}:
-        common['artifacts'] = [{'scope':'episode | act | scene', 'content':'independent lyrical possibility with scenes and internal beats',
+        common['narrative'] = 'one short orienting sentence'
+        common['artifacts'] = [{'scope':'episode | act | scene | undetermined', 'content':'one short sentence on one line per item: a premise-level idea in this phase’s domain',
                                 'source_refs':['accepted Keter anchor IDs']}]
     elif phase == '3':
+        common['outcome'] = ('complete for an established synthesis, including a mixture of ready and develop elements | '
+                             'develop to return the whole work to Keter | question | failure')
         common.update(anchors=[{'content':'synthesized anchor and relationships','source_refs':['current exploration artifact IDs']}],
-            elements=[{'title':'dramatic element', 'scope':'episode | act | scene', 'readiness':'ready | develop',
-                       'source_refs':['IDs of this result\'s anchors: <cycle_id>:3:a1, a2, ...'],
-                       'content':'dramatic action and relationships','outline':'established scene outline, or prior work',
-                       'development_question':'required for develop, empty for ready', 'return_reason':'required for develop, empty for ready',
+            elements=[{'title':'dramatic element', 'scope':'episode | act | scene | undetermined', 'readiness':'ready | develop',
+                       'source_refs':['IDs of this result\'s anchors: <cycle_id>:3:a1, a2, ...; include every anchor used by this element\'s beats'],
+                       'content':'dramatic purpose: a milestone, circumstance, or change and its relationships','outline':'established scene outline, or prior work',
+                       'development_question':'specific question for this element when readiness=develop; empty when readiness=ready',
+                       'return_reason':'reason this element needs exploration when readiness=develop; empty when readiness=ready',
                        'placement':{'episode':'Script/Season_01/Episode_01','act':'1','scene_id':'safe-scene-id'},
-                       'beats':[{'content':'ordered action','source_refs':['assigned anchor IDs']}]}])
+                       'beats':[{'content':'ordered dramatic purpose and situation; expression belongs to the character','source_refs':['anchor IDs declared in this parent element\'s source_refs; cover every declared anchor across a ready scene\'s beats']}]}])
     elif phase == '4':
         common['assignments'] = [{'element_id':'accepted element ID, in accepted order','outline':'concrete scene outline; preserve prior work for develop'}]
     return ('Return one JSON object, no fences. Python assigns IDs and renders public headings, size labels, ancestry and source lines.\n'
             + json.dumps(common, ensure_ascii=False, indent=2)
             + '\nKeter chooses the reference prefix from the specific project and describes its meaning neutrally; it is a reference label, not a slogan or dramatic interpretation. Reuse an established project prefix when appropriate. Other phases inherit it from accepted Keter; do not choose or override it. Keep internal IDs out of narrative prose. '
-            'For question, supply questions and pause; omit phase-specific fields. For failure, describe the execution failure in narrative. '
-            'For develop, supply development_question and return_reason; this returns current work to a new Keter cycle. '
+            'The output schema defines the required fields. For question, supply questions and pause. '
+            'For outcomes question, failure, or develop, represent unused phase-specific arrays as [], nullable objects as null, and unused text as an empty string. '
+            'For failure, describe the execution failure in narrative. '
+            'For top-level outcome=develop, supply top-level development_question and return_reason alongside outcome; this returns the whole current work to a new Keter cycle. '
             'Unresolved human choices require question, never complete or develop. Complete requires all phase-specific fields and no questions. '
             'Every accepted source must be accounted for; combine/divide via source_refs without losing ancestry. '
             'Only scenes with episode/act/scene placement, established outline and ordered beats covering every assigned anchor may be ready. '
             'Develop elements require a specific question and reason; placement may be null and beats empty. '
-            'Season scope is human-created only; generated artifacts/elements use episode, act or scene. '
+            'Let dramatic purpose establish an element and exploration discover its form. '
+            'Use undetermined (scope to be discovered) while form remains open, with readiness=develop, '
+            'a specific development_question and return_reason. Preserve prior outlines and beat ideas; placement may be null. '
+            'Keep the owning issue scope unchanged throughout its cycle; later synthesis establishes child scopes. '
+            'Season scope is human-created only; generated artifacts/elements use episode, act, scene or undetermined. '
             'Tiferet preserves accepted organization; structural problems use develop or question instead of rewriting it.')

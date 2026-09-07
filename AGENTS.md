@@ -12,12 +12,16 @@ SDLC providers/defaults are unchanged.
 - Phases 7/8 prepare dramatic action and preserve performance materials; phase 9 is
   the director's roundtable, not validation-only. Phase 10 remains separate revision.
 - `codex_runner.py` owns native CLI calls; ordinary phases always start fresh.
-- `scene_materials.py` validates the phase-7 brief and version-2 phase-8 context index.
+- `scene_materials.py` validates the phase-7 brief and version-3 phase-8 context index.
 - One episode `script.md` contains every scene and beat; scene-scoped preparation
   lives in `scene_materials/<scene_id>/`. `manuscript.py` locates bounded regions
   and `play_format.py` renders public Markdown without private actor fields.
 - `roundtable.py` owns separate persistent director/character sessions for a specific
   scene/run, observation routing, checkpoints, completion and guarded delivery.
+- Actor turns contain ordered thought/dialogue/action items. Python assigns item IDs
+  and routes witnesses per observable item; thoughts remain private. Actors launch
+  and resume from their character folder, with explicitly safe bible sources and
+  actor-facing issue/scene and current-beat context. No extra sandbox is configured.
 - Director receives all fictional inner monologues; actors receive only own context
   and eligible observations. Normal repository access remains; no filesystem secrecy claim.
 - Use `--performance-run UUID` for explicit recovery, `--new-performance` for a deliberate
@@ -26,9 +30,13 @@ SDLC providers/defaults are unchanged.
 - Phases 7–9 use writing-specific gates, not npm. Other creative phases retain their gates.
 - Upstream exploration uses versioned cycle results and structured readiness; see
   [recursive dramatic development](docs/creative-writing-exploration.md).
-- Season scope is human-created only. Generated artifacts use episode/act/scene;
-  every issue branch ends in ready scene leaves. Python maintains ownership,
+- Season scope is human-created only. Generated artifacts use episode/act/scene/undetermined;
+  every issue tree ends in ready scene leaves. Python maintains ownership,
   parent-blocked-by-child dependencies, and completion rollup.
+- Creative phases share one Git branch per human-created season root, for example
+  `issue/1`, and one season PR to main. `season_branches.py` validates ancestry;
+  the harness locks the managed checkout through execution and delivery. Recursive
+  child issues have no separate branches. The older SDLC branch policy below is unchanged.
 - Legacy prose must restart through Keter; `--new-cycle --phase 1` preserves history.
 - See [creative-writing contracts and operation](docs/creative-writing-roundtable.md).
 

@@ -21,10 +21,11 @@ def performance(dialogue='He said "wait" — ¿por qué? *(softly)* 我在这里
                  inner_monologue='private inner sentinel', private_direction='private direction sentinel',
                  public_events=[
                      dict(kind='stage', moment_id='BEAT 1', text='The lock clicks.'),
-                     dict(kind='character', moment_id='BEAT 1', character_id='alice',
-                          outer_response=dict(dialogue=dialogue, action=action, silence=silence)),
+                     *[dict(kind='character', moment_id='BEAT 1', character_id='alice', category=category, text=text)
+                       for category, text in [('action', action), ('dialogue', dialogue),
+                                               ('action', 'deliberate silence.' if silence else '')] if text],
                      dict(kind='character', moment_id='BEAT 2', character_id='bob',
-                          outer_response=dict(dialogue='', action='', silence=True))])
+                          category='action', text='deliberate silence.')])
     return scene, state
 
 

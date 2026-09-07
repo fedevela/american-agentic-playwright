@@ -198,6 +198,8 @@ class SceneMaterials:
     moment_ids: list[str]
     director_context: str
     character_contexts: dict[str, str]
+    character_moment_contexts: dict[str, dict[str, str]]
+    character_directories: dict[str, Path]
     skeleton: str
     manuscript_path: Path
     scene_template: str
@@ -239,8 +241,8 @@ def load_scene(root: Path, issue: int, scene_path: str | None = None) -> SceneMa
     scene = path.parent
     relative = lambda name: str((scene / name).relative_to(root))
     try:
-        if type(data["version"]) is not int or data["version"] != 2:
-            raise ValueError("performance_context version 2 migration is required; migrate version 1 handoffs")
+        if type(data["version"]) is not int or data["version"] != 3:
+            raise ValueError("performance_context version 3 migration is required; migrate legacy handoffs with explicit actor-safe context")
         validate_scene_id(data["scene_id"])
         if scene.name != data["scene_id"] or scene.parent.name != "scene_materials":
             raise ValueError("Scene handoff must live in scene_materials/<scene_id>")
@@ -277,8 +279,36 @@ def load_scene(root: Path, issue: int, scene_path: str | None = None) -> SceneMa
         if set(data["characters"]) != cast:
             raise ValueError("Brief and handoff disagree on participating characters")
         contexts = {}
+        moment_contexts = {}
+        character_directories = {}
         display_names = {}
+        safe_paths = data["actor_safe_bible_paths"]
+        if not isinstance(safe_paths, list):
+            raise ValueError("actor_safe_bible_paths must be an explicit list")
+        safe_bible = {}
+        for safe_path in safe_paths:
+            nonempty(safe_path, "actor_safe_bible_paths entry")
+            declared = Path(safe_path)
+            resolved = (root / declared).resolve()
+            if (declared.is_absolute() or not declared.is_relative_to("bible")
+                    or declared.is_relative_to("bible/characters")
+                    or not resolved.is_relative_to(root / "bible")
+                    or resolved.is_relative_to(root / "bible/characters")):
+                raise ValueError(f"actor_safe_bible path must remain inside bible and outside characters: {safe_path}")
+            safe_bible[safe_path] = read_source(root, safe_path)
+        sources.update(safe_bible)
         for cid, character in data["characters"].items():
+            expected = root / "bible" / "characters" / cid
+            if expected.resolve() != expected or not expected.is_dir():
+                raise ValueError(f"Invalid character directory; must remain bible/characters/{cid}")
+            character_directories[cid] = expected
+            scene_context = nonempty(character["scene_context"], f"{cid}.scene_context")
+            per_moment = character["moment_contexts"]
+            if not isinstance(per_moment, dict) or set(per_moment) != set(mids):
+                raise ValueError(f"{cid}.moment_contexts must cover exactly the required dramatic moments")
+            moment_contexts[cid] = {
+                mid: nonempty(per_moment[mid], f"{cid}.moment_contexts.{mid}") for mid in mids
+            }
             known = nonempty(character["known_context"], f"{cid}.known_context")
             private = nonempty(character["private_context"], f"{cid}.private_context")
             display_name = nonempty(character["display_name"], f"{cid}.display_name")
@@ -291,12 +321,14 @@ def load_scene(root: Path, issue: int, scene_path: str | None = None) -> SceneMa
             own = {}
             paths = list(dict.fromkeys([*paths, *(f"bible/characters/{cid}/{name}" for name in REQUIRED_CHARACTER_ARTIFACTS)]))
             for persona_path in paths:
-                expected = root / "bible" / "characters" / cid
                 if not (root / persona_path).resolve().is_relative_to(expected.resolve()):
                     raise ValueError(f"Persona path belongs to another character: {cid}")
                 own[persona_path] = read_source(root, persona_path)
             sources.update(own)
-            contexts[cid] = json.dumps({"character_id": cid, "persona": own,
+            contexts[cid] = json.dumps({"issue": issue, "scene_id": data["scene_id"],
+                                       "manuscript_path": data["manuscript_path"],
+                                       "scene_context": scene_context, "actor_safe_bible": safe_bible,
+                                       "character_id": cid, "persona": own,
                                        "known_context": known, "private_context": private}, ensure_ascii=False)
         # The runner enforces the world's required-artifact gate. Include all of
         # those sources when present, even if the index accidentally omits one.
@@ -308,7 +340,8 @@ def load_scene(root: Path, issue: int, scene_path: str | None = None) -> SceneMa
                         relative("performance_context.json"): path.read_bytes().decode("utf-8")})
         context = json.dumps({"handoff": data, "sources": sources}, ensure_ascii=False)
         fingerprint = hashlib.sha256(json.dumps(sources, sort_keys=True).encode()).hexdigest()
-        return SceneMaterials(scene, data["scene_id"], mids, context, contexts, skeleton,
+        return SceneMaterials(scene, data["scene_id"], mids, context, contexts,
+                              moment_contexts, character_directories, skeleton,
                               manuscript_path, scene_template, display_names, sources, fingerprint)
     except (KeyError, TypeError, AttributeError) as exc:
         raise ValueError(f"Incomplete scene handoff: {exc}") from exc

@@ -37,7 +37,7 @@ def issue_records(issue_data: dict) -> list[dict]:
 def issue_scope(issue_data: dict) -> str:
     sizes = [label['name'][5:] for label in issue_data.get('labels', [])
              if isinstance(label, dict) and str(label.get('name','')).startswith('size:')]
-    require(len(sizes) == 1 and sizes[0] in SCOPES, 'issue needs exactly one size:season/episode/act/scene label; re-establish through Keter')
+    require(len(sizes) == 1 and sizes[0] in SCOPES, 'issue needs exactly one size:season/episode/act/scene/undetermined label; re-establish through Keter')
     return sizes[0]
 
 
@@ -58,6 +58,9 @@ def bind_issue(issue_data: dict, repo: str, number: int) -> None:
 
 
 def check_issue_reference(record: dict, issue_data: dict) -> None:
+    season = record.get('season_ref')
+    if season is not None and issue_data.get('_season_ref') is not None:
+        require(season == issue_data['_season_ref'], 'record belongs to another season')
     owner = record.get('issue_ref')
     if owner is not None:
         actual = issue_reference(issue_data)
@@ -96,6 +99,8 @@ def new_cycle(issue_data: dict, *, development: dict | None = None) -> dict:
     owner = issue_reference(issue_data)
     if owner is not None:
         result['issue_ref'] = owner
+    if issue_data.get('_season_ref') is not None:
+        result['season_ref'] = deepcopy(issue_data['_season_ref'])
     return result
 
 
@@ -154,6 +159,8 @@ def accepted_results(issue_data: dict) -> dict:
             owner = issue_reference(issue_data)
             if owner is not None:
                 accepted[phase]['issue_ref'] = owner
+            if issue_data.get('_season_ref') is not None:
+                accepted[phase]['season_ref'] = deepcopy(issue_data['_season_ref'])
     return accepted
 
 
@@ -246,13 +253,17 @@ def readable_references(content: str, aliases: dict[str, str]) -> str:
                   lambda match: aliases[match[0]], content)
 
 
+def display_scope(scope: str) -> str:
+    return 'scope to be discovered' if scope == 'undetermined' else f'size:{scope}'
+
+
 def render_result(result: dict, *, reference_map: dict[str, str] | None = None, issue_label: str = "Issue") -> str:
     aliases = reference_map if reference_map is not None else public_reference_map(result)
     prefix = result.get('reference_prefix')
-    lines = [result['narrative'], '', f"Exploration: size:{result['scope']} · {result['outcome']}"]
+    lines = [result['narrative'], '', f"Exploration: {display_scope(result['scope'])} · {result['outcome']}"]
     if result.get('issue_ref'):
         owner = result['issue_ref']
-        lines += [f"{issue_label}: {owner['repo']}#{owner['number']} · size:{owner['scope']}"]
+        lines += [f"{issue_label}: {owner['repo']}#{owner['number']} · {display_scope(owner['scope'])}"]
     if prefix:
         lines += [f"Reference prefix: {prefix['code']} — {prefix['meaning']}"]
     if any(re.search(r'-H[0-9]+-', alias) for alias in aliases.values()):
@@ -260,13 +271,10 @@ def render_result(result: dict, *, reference_map: dict[str, str] | None = None, 
     for key in ('axes',):
         for name, content in result.get(key, {}).items():
             lines += ['', f'**{name.replace("_"," ").capitalize()}**', content]
-    for item in result.get('anchors', []) + result.get('artifacts', []):
-        scope = f" · size:{item['scope']}" if 'scope' in item else ''
-        lines += ['', f"#### {item['id']}{scope}", item['content']]
-        if item['source_refs']:
-            lines.append('Source anchors: ' + ', '.join(item['source_refs']))
+    if result.get('elements'):
+        lines += ['', '### Elements for issue creation', '', 'E means element. Each accepted element becomes one issue.']
     for item in result.get('elements', []):
-        lines += ['', f"#### {item['id']}: {item['title']} · size:{item['scope']} · {item['readiness']}",
+        lines += ['', f"#### {item['id']}: {item['title']} · {display_scope(item['scope'])} · {item['readiness']}",
                   item['content']]
         if item['source_refs']:
             lines.append('Source anchors: ' + ', '.join(item['source_refs']))
@@ -275,6 +283,16 @@ def render_result(result: dict, *, reference_map: dict[str, str] | None = None, 
             lines += [f"- {beat['id']}: {beat['content']}", '  Beat references: ' + ', '.join(beat['source_refs'])]
         if item.get('development_question'):
             lines += ['Development question: ' + item['development_question'], 'Return reason: ' + item['return_reason']]
+    supporting = result.get('phase') in {'3', '4'} and bool(result.get('anchors'))
+    if supporting:
+        lines += ['', '<details>', '<summary>Supporting dramatic anchors</summary>', '', 'G identifies a supporting Gevurah anchor.']
+    for item in result.get('anchors', []) + result.get('artifacts', []):
+        scope = f" · {display_scope(item['scope'])}" if 'scope' in item else ''
+        lines += ['', f"#### {item['id']}{scope}", item['content']]
+        if item['source_refs']:
+            lines.append('Source anchors: ' + ', '.join(item['source_refs']))
+    if supporting:
+        lines += ['', '</details>', '']
     if result.get('development_question'):
         lines += ['Development question: ' + result['development_question'], 'Return reason: ' + result['return_reason']]
     lines += ['', *[f'Question for the partner: {q}' for q in result.get('questions',[])], '']
@@ -295,10 +313,13 @@ def child_assignments(result: dict, *, parent_issue: int, accepted: dict, inheri
                       'element':deepcopy(element), 'anchors':[deepcopy(a) for a in result['anchors'] if a['id'] in element['source_refs']],
                       'canon_refs':result['canon_refs'], 'ancestry':ancestry,
                       'accepted':deepcopy({**accepted,'4':result}), 'inherited':deepcopy(inherited['anchors'] if inherited else [])}
+        season = result.get('season_ref') or (inherited or {}).get('season_ref')
+        if season is not None:
+            assignment['season_ref'] = deepcopy(season)
         if owner is not None:
             assignment['parent_ref'] = deepcopy(owner)
         public = render_result({**result,'anchors':assignment['anchors'],'elements':[element]}, reference_map=aliases, issue_label='Source issue')
-        public = f"Assignment scope: size:{element['scope']} · {element['readiness']}\n\n" + public
+        public = f"Assignment scope: {display_scope(element['scope'])} · {element['readiness']}\n\n" + public
         # Body contains one assignment record; phase results belong to comments on their source issue.
         public = public.rsplit('\n',1)[0]
         placement = element.get('placement')

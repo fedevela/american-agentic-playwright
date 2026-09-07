@@ -237,7 +237,7 @@ def call_codex(
         command.extend(["--output-schema", str(schema_path)])
     command.extend(["--output-last-message", str(response_path)])
     if model is not None:
-        command.extend(["--model", model])
+        command.extend(["-m", model])
     if expected_session is not None:
         command.append(expected_session)
     command.append("-")
@@ -507,6 +507,8 @@ def run_codex_json_phase(
     issue_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a fresh Codex phase and parse its final response as a JSON object."""
+    from .response_schemas import phase_response_schema
+
     content = _run_preparation_phase(
         prompt,
         repo=repo,
@@ -514,6 +516,7 @@ def run_codex_json_phase(
         phase=phase,
         session_scope=session_scope,
         issue_data=issue_data,
+        schema=phase_response_schema(phase),
     )
     try:
         payload = json.loads(_strip_optional_json_fence(content))

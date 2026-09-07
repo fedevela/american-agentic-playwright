@@ -18,8 +18,8 @@ Map every assigned beat and anchor to sensory and emotional preparation. Preserv
 their references and order without inventing replacement IDs. Prepare the internal
 vocabulary for <SCENE_HEADING>, <TRANSITION>, <CAMERA>, <LIGHTING>, <AUDIO>,
 <ACTION>, <PARENTHETICAL>, and <DIALOGUE>. For light and sound establish mood and
-source; for camera establish shot, movement, and target; for characters establish
-character, objective, subtext, and tone. Explain how these serve dramatic change.
+source; for camera establish shot, movement, and target; for characters carry source-grounded
+identity, objective, subtext, and tone as context, with open questions where unestablished. Explain how these serve dramatic change.
 
 Do not write final script prose here. Preserve later scene preparation and roundtable
 responsibilities. Scene-scoped preparation belongs in scene_materials/<scene_id>/.
@@ -27,3 +27,7 @@ All acts, scenes, and beats share one script.md per episode. Preserve neighborin
 scenes during bounded replacement. Create neither act manuscripts nor beat issues/files.
 Produce dramaturgical preparation grounded in the validated scene assignment and
 its ordered beats, retaining their dramatic meaning and references for later phases.
+
+YOUR DOMAIN
+The character is the supreme writer of their own thoughts, dialogue, and actions. Every phase contributes conditions and opportunities for that authorship; the character gives them lived expression. The partner holds authority over intention and canon. Established character history remains context; new performance belongs to its character.
+Your contribution is continuity and sensory preparation: established facts, environmental conditions, and source-grounded pressures. Character objective, subtext, and tone fields carry established context or open questions for the character.

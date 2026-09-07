@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
+
+from .season_branches import resolve_season_root
 
 from .config import (
     IMPLEMENTATION_PHASES,
@@ -101,13 +104,13 @@ def ensure_managed_repo_checkout(repo: str, source_path: Path) -> Path:
     return managed_path
 
 def resolve_phase_execution_branch(repo: str, phase: str, issue: int) -> str:
-    """Return the branch that should back this phase run."""
+    """Use the validated human-created season branch for every creative phase."""
+    if phase not in PRE_IMPLEMENTATION_PHASES | IMPLEMENTATION_PHASES:
+        raise SystemExit(f"Unknown phase '{phase}' for branch resolution.")
     config = resolve_target_repo_config(repo)
-    if phase in PRE_IMPLEMENTATION_PHASES:
-        return config.main_branch
-    if phase in IMPLEMENTATION_PHASES:
-        return f"{config.issue_branch_prefix}{issue}"
-    raise SystemExit(f"Unknown phase '{phase}' for branch resolution.")
+    root = resolve_season_root(repo, issue)
+    return f"{config.issue_branch_prefix}{root.number}"
+
 
 def git_run(local_path: Path, args: list[str], *, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
     """Run a git command inside the target repository with consistent logging."""
@@ -144,15 +147,7 @@ def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> Non
         log_info(f"Switching target repository to existing branch '{branch}'")
         result = git_run(local_path, ["switch", branch], capture_output=True)
         if result.returncode != 0:
-            # If switch failed due to local changes, perform a reset and clean in the managed repo.
-            log_info(f"Initial switch to '{branch}' failed (dirty state); attempting reset and clean to recover.")
-            git_run(local_path, ["reset", "--hard", "HEAD"], capture_output=True)
-            git_run(local_path, ["clean", "-fd"], capture_output=True)
-            # Second attempt to switch after cleanup.
-            result = git_run(local_path, ["switch", branch], capture_output=True)
-            if result.returncode != 0:
-                log_error(f"Failed to switch {local_path} to branch '{branch}' even after cleanup: {result.stderr or result.stdout or 'no output'}")
-                raise SystemExit(f"Failed to switch {local_path} to branch '{branch}'.")
+            raise SystemExit(f"Failed to switch {local_path} to branch '{branch}'; preserve dirty work and reconcile manually. {result.stderr or result.stdout}")
         return
 
     if branch == base_branch:
@@ -160,7 +155,7 @@ def ensure_git_branch(local_path: Path, branch: str, *, base_branch: str) -> Non
 
     raise SystemExit(
         f"Required branch '{branch}' does not exist in {local_path}. "
-        "Phase 4/Tiferet must create child issue branches before downstream phase execution."
+        "Prepare the validated season root branch before phase execution."
     )
 
 def prepare_target_repo_checkout(repo: str) -> tuple[TargetRepoConfig, Path]:
@@ -203,51 +198,108 @@ def prepare_branch_context(
     branch_log_label: str,
     issue_data: dict[str, Any] | None = None,
 ) -> RunnerTargetContext:
-    """Resolve and verify the target repository checkout for the requested branch, including auto-merge from base."""
+    """Allow explicit branch overrides only when they match validated ownership."""
+    if not issue_data or not isinstance(issue_data.get("number"), int):
+        raise SystemExit("Explicit creative branch requires owning issue data for season validation.")
+    root = resolve_season_root(repo, issue_data["number"], issue_data)
     config, local_path = prepare_target_repo_checkout(repo)
-    log_info(f"{branch_log_label}: {branch}")
-    ensure_git_branch(local_path, branch, base_branch=config.main_branch)
-    verified_branch = current_branch(local_path)
-    if verified_branch != branch:
-        raise SystemExit(
-            f"Target repository branch verification failed for {repo}: "
-            f"expected '{branch}', found '{verified_branch}'."
-        )
-    log_info(f"Verified target repository branch loaded: {verified_branch}")
+    expected = f"{config.issue_branch_prefix}{root.number}"
+    if branch != expected:
+        raise SystemExit(f"Explicit branch {branch} conflicts with validated season branch {expected}.")
+    prepare_season_branch(local_path, branch, config.main_branch, root.ancestry, config.issue_branch_prefix, repo=repo)
+    return RunnerTargetContext(local_path=local_path, branch=branch)
 
-    # Auto-merge from base branch as requested for phases after Tiferet
-    parent_issue = extract_parent_issue(str(issue_data.get("body") or "")) if issue_data else None
-    base_branch = f"{config.issue_branch_prefix}{parent_issue}" if parent_issue else config.main_branch
-
-    if branch != base_branch:
-        log_info(f"Checking for updates from base branch '{base_branch}' to merge into '{branch}'")
-        git_run(local_path, ["fetch", "origin"])
-        
-        # Verify base branch exists on origin
-        origin_branch = f"origin/{base_branch}"
-        check_base = git_run(local_path, ["rev-parse", "--verify", origin_branch], capture_output=True)
-        if check_base.returncode != 0:
-            log_error(f"Base branch '{base_branch}' does not exist on origin. Cannot merge.")
-            raise SystemExit(f"Missing required base branch '{base_branch}' for issue #{issue}.")
-
-        merge_result = git_run(local_path, ["merge", origin_branch], capture_output=True)
-        if merge_result.returncode != 0:
-            log_error(f"Automatic merge from '{base_branch}' failed; human intervention required.")
-            if "CONFLICT" in (merge_result.stdout or "") or "CONFLICT" in (merge_result.stderr or ""):
-                log_error("Merge conflicts detected during branch setup.")
-            raise SystemExit(f"Failed to auto-merge '{base_branch}' into '{branch}'. Check for conflicts.")
-
-    return RunnerTargetContext(local_path=local_path, branch=verified_branch)
 
 def prepare_phase_execution_context(repo: str, phase: str, issue: int, issue_data: dict[str, Any] | None = None) -> RunnerTargetContext:
     """Resolve and verify the target repository checkout runner should use."""
-    branch = resolve_phase_execution_branch(repo, phase, issue)
-    return prepare_branch_context(
-        repo,
-        branch=branch,
-        branch_log_label=f"Resolved target branch for phase {phase.upper()}",
-        issue_data=issue_data,
-    )
+    if phase not in PRE_IMPLEMENTATION_PHASES | IMPLEMENTATION_PHASES:
+        raise SystemExit(f"Unknown phase '{phase}' for branch resolution.")
+    root = resolve_season_root(repo, issue, issue_data)
+    config, local_path = prepare_target_repo_checkout(repo)
+    branch = f"{config.issue_branch_prefix}{root.number}"
+    prepare_season_branch(local_path, branch, config.main_branch, root.ancestry, config.issue_branch_prefix, repo=repo)
+    log_info(f"Verified target repository branch loaded: {branch}")
+    return RunnerTargetContext(local_path=local_path, branch=branch)
+
+
+def prepare_season_branch(local_path: Path, branch: str, main: str, ancestry: tuple[int, ...], prefix: str, *, repo: str | None = None) -> None:
+    """Reuse a season branch; refuse legacy child commits missing from it."""
+    fetch = git_run(local_path, ["fetch", "origin"], capture_output=True)
+    if fetch.returncode:
+        raise SystemExit(f"Cannot verify remote season branches: {fetch.stderr}")
+    exists = branch_exists(local_path, f"refs/heads/{branch}")
+    remote_exists = branch_exists(local_path, f"refs/remotes/origin/{branch}")
+    target = branch if exists else f"origin/{branch}" if remote_exists else main
+    candidates = set(ancestry[:-1])
+    if repo is not None:
+        refs = git_run(local_path, ["for-each-ref", "--format=%(refname)", "refs/heads/", "refs/remotes/origin/"], capture_output=True)
+        if refs.returncode:
+            raise SystemExit("Cannot inspect legacy issue branches; reconciliation required.")
+        for ref in refs.stdout.splitlines():
+            for namespace in ("refs/heads/", "refs/remotes/origin/"):
+                stem = namespace + prefix
+                suffix = ref[len(stem):] if ref.startswith(stem) else ""
+                if suffix.isdigit() and int(suffix) != ancestry[-1] and int(suffix) not in candidates:
+                    owner = resolve_season_root(repo, int(suffix))
+                    if owner.number == ancestry[-1]:
+                        candidates.add(int(suffix))
+    for number in sorted(candidates):
+        for legacy in (f"refs/heads/{prefix}{number}", f"refs/remotes/origin/{prefix}{number}"):
+            if branch_exists(local_path, legacy):
+                merged = git_run(local_path, ["merge-base", "--is-ancestor", legacy, target], capture_output=True)
+                if merged.returncode:
+                    raise SystemExit(f"Legacy child work on {legacy} is not integrated into {branch}. Reconciliation required: inspect git log {target}..{legacy}, integrate deliberately, and preserve existing branches/PRs.")
+    if current_branch(local_path) != branch:
+        status = git_run(local_path, ["status", "--porcelain"], capture_output=True)
+        if status.returncode or status.stdout.strip():
+            raise SystemExit('Checkout has dirty work; refusing season branch switch. Reconciliation required.')
+    if not exists:
+        result = git_run(local_path, ["switch", "-c", branch, f"origin/{branch}" if remote_exists else main], capture_output=True)
+        if result.returncode:
+            raise SystemExit(f"Failed to create season branch {branch}: {result.stderr}")
+    else:
+        ensure_git_branch(local_path, branch, base_branch=main)
+    if current_branch(local_path) != branch:
+        raise SystemExit(f"Target repository branch verification failed: expected {branch}.")
+    if remote_exists:
+        integrated = git_run(local_path, ["merge-base", "--is-ancestor", f"origin/{branch}", branch], capture_output=True)
+        if integrated.returncode:
+            raise SystemExit(f"Season branch {branch} is behind or diverges from origin; reconcile without overwriting work.")
+
+
+def prepare_initial_season_work(local_path: Path, main: str, *, recovery: bool = False,
+                                recovery_paths: set[str] | None = None) -> None:
+    """Update from main once; recovery permits only journal-verified modifications."""
+    status = git_run(local_path, ["status", "--porcelain", "-z", "--untracked-files=all"], capture_output=True)
+    if status.returncode:
+        raise SystemExit("Cannot inspect season checkout dirty work; reconciliation required.")
+    entries = [entry for entry in status.stdout.split("\0") if entry]
+    allowed = recovery_paths or set()
+    for entry in entries:
+        flags, path = entry[:2], entry[3:]
+        if (not recovery or path not in allowed or len(entry) < 4 or entry[2] != " "
+                or not set(flags) <= {" ", "M"}):
+            raise SystemExit(f"Season checkout contains unrelated dirty work ({path}); reconcile before continuing.")
+    if recovery:
+        return
+    if not branch_exists(local_path, f"refs/remotes/origin/{main}"):
+        raise SystemExit(f"Cannot verify configured main branch origin/{main}.")
+    merged = git_run(local_path, ["merge", "--no-edit", f"origin/{main}"], capture_output=True)
+    if merged.returncode:
+        raise SystemExit(f"Main update failed; preserve and reconcile merge conflicts: {merged.stderr or merged.stdout}")
+
+
+def validate_season_pr(payload: object, main: str, title: str) -> str:
+    """Do not silently reuse an ambiguous or legacy PR for the shared season."""
+    if not isinstance(payload, list) or len(payload) > 1:
+        raise SystemExit("Ambiguous season PRs; human reconciliation required.")
+    if not payload:
+        return ""
+    pr = payload[0]
+    if not isinstance(pr, dict) or pr.get("baseRefName") != main or pr.get("title") != title or not pr.get("url"):
+        raise SystemExit("Existing season PR has incompatible base/title; preserve it and reconcile manually.")
+    return str(pr["url"])
+
 
 def extract_parent_issue(issue_body: str) -> int | None:
     """Parse the parent issue number from an issue body if it contains the parent-marker."""
@@ -269,37 +321,36 @@ def finalize_phase_delivery(
 ) -> str:
     """Commit and push phase changes, then return a summary suitable for a GitHub issue comment."""
     context = (
-        prepare_phase_execution_context(repo, phase, issue)
+        prepare_phase_execution_context(repo, phase, issue, issue_data=issue_data)
         if branch_override is None
-        else prepare_branch_context(repo, branch=branch_override, branch_log_label="Resolved explicit target branch")
+        else prepare_branch_context(repo, branch=branch_override, branch_log_label="Resolved explicit target branch", issue_data=issue_data)
     )
     branch = context.branch
     local_path = context.local_path
     config = resolve_target_repo_config(repo)
 
-    # Determine PR base branch. If this is a child issue, PR into the parent issue branch.
-    parent_issue = extract_parent_issue(str(issue_data.get("body") or "")) if issue_data else None
-    pr_base = f"{config.issue_branch_prefix}{parent_issue}" if parent_issue else config.main_branch
+    root = resolve_season_root(repo, issue, issue_data)
+    expected_branch = f"{config.issue_branch_prefix}{root.number}"
+    if branch != expected_branch:
+        raise SystemExit(f"Delivery requires season branch {expected_branch}, found {branch}.")
+    pr_base = config.main_branch
 
-    log_info(f"Preparing delivery for issue #{issue} on branch '{branch}' (PR base: '{pr_base}')")
-
-    # Step: Merge from updated parent/base branch before delivery as requested.
-    log_info(f"Merging latest changes from base branch '{pr_base}' into '{branch}' before delivery")
-    git_run(local_path, ["fetch", "origin"])
-    
-    # Verify base branch exists on origin
-    origin_base = f"origin/{pr_base}"
-    check_base = git_run(local_path, ["rev-parse", "--verify", origin_base], capture_output=True)
-    if check_base.returncode != 0:
-        log_error(f"Base branch '{pr_base}' does not exist on origin. Cannot merge before delivery.")
-        raise SystemExit(f"Missing required base branch '{pr_base}' for delivery of issue #{issue}.")
-
-    merge_result = git_run(local_path, ["merge", origin_base], capture_output=True)
-    if merge_result.returncode != 0:
-        log_error(f"Automatic merge from '{pr_base}' failed; human intervention required before delivery.")
-        if "CONFLICT" in (merge_result.stdout or "") or "CONFLICT" in (merge_result.stderr or ""):
-             log_error("Merge conflicts detected during delivery auto-merge.")
-        raise SystemExit(f"Failed to auto-merge '{pr_base}' into '{branch}' before delivery. Check for conflicts.")
+    pr_lookup_result = subprocess.run(
+        ["gh", "pr", "list", "--repo", repo, "--head", branch, "--state", "open", "--json", "number,title,url,baseRefName"],
+        cwd=local_path,
+        text=True,
+        capture_output=True,
+        timeout=120,
+    )
+    if pr_lookup_result.returncode != 0:
+        raise SystemExit(
+            f"Failed to query PRs for branch '{branch}' in {repo}.\n"
+            f"stdout:\n{pr_lookup_result.stdout}\n"
+            f"stderr:\n{pr_lookup_result.stderr}"
+        )
+    pr_payload = json.loads(pr_lookup_result.stdout or "[]")
+    pr_title = f"Season #{root.number}: {root.title[:120]}"
+    pr_url = validate_season_pr(pr_payload, pr_base, pr_title)
 
     if before_commit is not None:
         before_commit(local_path)
@@ -409,55 +460,37 @@ def finalize_phase_delivery(
             f"does not match origin/{branch} {remote_sha}."
         )
 
-    pr_lookup_result = subprocess.run(
-        ["gh", "pr", "list", "--repo", repo, "--head", branch, "--state", "open", "--json", "number,title,url"],
-        cwd=local_path,
-        text=True,
-        capture_output=True,
-        timeout=120,
-    )
-    if pr_lookup_result.returncode != 0:
-        raise SystemExit(
-            f"Failed to query PRs for branch '{branch}' in {repo}.\n"
-            f"stdout:\n{pr_lookup_result.stdout}\n"
-            f"stderr:\n{pr_lookup_result.stderr}"
-        )
-    pr_payload = json.loads(pr_lookup_result.stdout or "[]")
-    pr_url = ""
-    pr_title = f"Issue #{issue} [{phase_display}]: {pr_title_tail}"
-    if isinstance(pr_payload, list) and pr_payload:
-        first = pr_payload[0]
-        if isinstance(first, dict):
-            pr_url = str(first.get("url") or "").strip()
-
     if not pr_url:
         pr_body = (
-            f"Automated phase delivery PR for issue #{issue}.\n\n"
+            f"Shared delivery for season #{root.number}. Latest contribution: issue #{issue}.\n\n"
             f"Branch: `{branch}`\n"
             f"Phase: `{phase}` ({phase_display})\n\n"
-            f"Closes #{issue}"
+            f"Season completion is managed through issue dependency rollup."
         )
-        pr_create_result = subprocess.run(
-            [
-                "gh",
-                "pr",
-                "create",
-                "--repo",
-                repo,
-                "--base",
-                pr_base,
-                "--head",
-                branch,
-                "--title",
-                pr_title,
-                "--body",
-                pr_body,
-            ],
-            cwd=local_path,
-            text=True,
-            capture_output=True,
-            timeout=120,
-        )
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".md") as body_file:
+            body_file.write(pr_body)
+            body_file.flush()
+            pr_create_result = subprocess.run(
+                [
+                    "gh",
+                    "pr",
+                    "create",
+                    "--repo",
+                    repo,
+                    "--base",
+                    pr_base,
+                    "--head",
+                    branch,
+                    "--title",
+                    pr_title,
+                    "--body-file",
+                    body_file.name,
+                ],
+                cwd=local_path,
+                text=True,
+                capture_output=True,
+                timeout=120,
+            )
         if pr_create_result.returncode != 0:
             raise SystemExit(
                 f"Failed to create PR for branch '{branch}' in {repo}.\n"

@@ -45,7 +45,11 @@ def run_trigger_cli(mode: str = "creative-writer") -> None:
     recovery.add_argument("--performance-run", help="Resume an explicit performance UUID")
     recovery.add_argument("--new-performance", action="store_true", help="Start fresh sessions intentionally")
     parser.add_argument("--scene", help="Scene directory relative to target checkout (required for ambiguous issues)")
-    parser.add_argument("--codex-model", help="Optional model override, pinned within a performance")
+    parser.add_argument(
+        "--codex-model",
+        default=config.DEFAULT_CODEX_MODEL,
+        help="Model to use (default: %(default)s), pinned within a performance",
+    )
     parser.add_argument("--max-role-calls", type=int, default=120)
     parser.add_argument("--role-timeout", type=int, default=1200)
     parser.add_argument("--max-no-progress", type=int, default=6)

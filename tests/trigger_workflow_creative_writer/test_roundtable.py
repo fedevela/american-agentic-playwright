@@ -17,7 +17,7 @@ def direction(turn_id, speaker="alice", complete=False, observers=None):
             "next_speaker": None if complete else speaker,
             "character_prompt": "Choose whether to try the door." if not complete else "",
             "completed_moment_ids": ["BEAT 1"] if complete else [],
-            "previous_response_observers": observers or []}
+            "previous_item_observers": observers or []}
 
 
 class Model:
@@ -35,19 +35,22 @@ class Model:
         if self.collision and self.calls:
             sid = self.calls[0]["session"]
         on_session(sid)
-        self.calls.append({"role": role, "session": sid, "resume": session_id, "request": request})
+        self.calls.append({"role": role, "session": sid, "resume": session_id, "request": request,
+                           "cwd": kwargs["cwd"]})
         if self.fail:
             raise RuntimeError("native session missing")
         count = self.counts.get(sid, 0)
         self.counts[sid] = count + 1
         if role == "director":
             value = direction(request["turn_id"], ("alice", "bob", "alice", "bob")[count % 4],
-                              complete=count >= 4, observers=[] if count == 0 else ["alice", "bob"])
+                              complete=count >= 4, observers=[
+                                  {"item_id": item["item_id"], "observers": ["alice", "bob"]}
+                                  for item in (request.get("latest_response") or {}).get("items", [])
+                                  if item["category"] != "thought"])
         else:
             value = {"turn_id": request["turn_id"], "character_id": role,
-                     "inner_monologue": role + " inner sentinel",
-                     "outer_response": {"action": "Tries the handle." if role == "alice" else "",
-                                        "dialogue": "", "silence": role == "bob"}}
+                     "items": [{"category": "thought", "text": role + " inner sentinel"},
+                               {"category": "action", "text": "Tries the handle." if role == "alice" else "deliberate silence."}]}
         if self.mutate:
             self.mutate(value, request)
         turn_dir.mkdir(parents=True, exist_ok=True)
@@ -185,8 +188,8 @@ def test_invalid_structured_turn_is_not_accepted_or_delivered(setup, mutation):
             if mutation == "placeholder": value["stage_events"][0]["text"] = "TODO"
         else:
             if mutation == "bad-actor": value["character_id"] = "bob"
-            if mutation == "extra-inner": value["outer_response"]["inner_monologue"] = "leak"
-            if mutation == "empty-outer": value["outer_response"] = {"action": "", "dialogue": "", "silence": False}
+            if mutation == "extra-inner": value["items"][0]["inner_monologue"] = "leak"
+            if mutation == "empty-outer": value["items"] = []
     model.mutate = mutate
     deliveries = []
     with pytest.raises(ValueError):
@@ -212,7 +215,7 @@ def test_internal_skeleton_tags_in_public_turns_are_rejected_before_delivery(set
             if response["stage_events"]:
                 response["stage_events"][0]["text"] = tag
         else:
-            response["outer_response"][field] = tag
+            response["items"].append({"category": field, "text": tag})
 
     model.mutate = mutate
     deliveries = []
@@ -476,6 +479,7 @@ def test_fake_native_cli_end_to_end_resumes_private_sessions_and_queued_observat
     assert [r["request"]["role"] for r in records[4:]] == ["director", "alice", "director", "bob", "director"]
     for record in records:
         role = record["request"]["role"]
+        assert record["cwd"] == str(args["cwd"] if role == "director" else args["cwd"] / "bible" / "characters" / role)
         if record["resume"]:
             assert record["argv"][-2] == initial[role]
         if role != "director":
@@ -488,7 +492,7 @@ def test_fake_native_cli_end_to_end_resumes_private_sessions_and_queued_observat
     assert "alice inner sentinel" in json.dumps(records[2])
     assert "bob inner sentinel" in json.dumps(records[4])
     assert len(records[3]["request"]["observations"]) == 3
-    assert len(records[7]["request"]["observations"]) == 4
+    assert len(records[7]["request"]["observations"]) == 5
     script = (scene.parent.parent / "script.md").read_text()
     assert "sentinel" not in script
     assert script.count("Tries the handle.") == 2
@@ -556,6 +560,8 @@ def test_multi_moment_performance_requires_actual_action_in_each_and_preserves_t
     index = scene / "performance_context.json"
     handoff = json.loads(index.read_text())
     handoff["required_moment_ids"] = ["BEAT 1", "BEAT 2"]
+    for character in handoff["characters"].values():
+        character["moment_contexts"]["BEAT 2"] = "You perceive the hallway."
     index.write_text(json.dumps(handoff))
     def mutate(response, request):
         if request["role"] == "director" and request["latest_response"]:
@@ -572,7 +578,7 @@ def test_legitimate_spanish_todo_is_not_a_placeholder(setup):
     runtime, args, model, scene = setup
     def mutate(response, request):
         if request["role"] != "director":
-            response["outer_response"]["dialogue"] = "todo está bien"
+            response["items"].append({"category": "dialogue", "text": "todo está bien"})
     model.mutate = mutate
     runtime.perform_scene(**args)
     assert "todo está bien" in (scene.parent.parent / "script.md").read_text()

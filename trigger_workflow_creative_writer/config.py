@@ -94,9 +94,9 @@ PHASE_LABEL_METADATA = {
     },
 }
 
-for _scope in ("season", "episode", "act", "scene"):
+for _scope in ("season", "episode", "act", "scene", "undetermined"):
     PHASE_LABEL_METADATA[f"size:{_scope}"] = {
-        "description": f"Dramatic scope: {_scope}" + (" (human-created only)" if _scope == "season" else ""),
+        "description": f"Dramatic scope: {'scope to be discovered' if _scope == 'undetermined' else _scope}" + (" (human-created only)" if _scope == "season" else ""),
         "color": "C5DEF5",
     }
 
@@ -181,7 +181,8 @@ RUNNER_TYPE = "codex"  # Legacy provider session integrations are unimplemented.
 PERFORMANCE_RUN = None
 NEW_PERFORMANCE = False
 SCENE_PATH = None
-CODEX_MODEL = None
+DEFAULT_CODEX_MODEL = "gpt-5.6-luna"
+CODEX_MODEL = DEFAULT_CODEX_MODEL
 MAX_ROLE_CALLS = 120
 ROLE_TIMEOUT = 1200
 MAX_NO_PROGRESS = 6

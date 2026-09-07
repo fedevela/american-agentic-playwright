@@ -8,6 +8,7 @@ from typing import Any
 
 from .config import NEEDS_HUMAN_LABEL, NEXT_LABEL_MAP, PHASE_LABELS, PHASE_LABEL_METADATA, TIFERET_AUTO_ISSUE_PREFIX
 from .logging_utils import log_error, log_info
+from .validation import GENERATED_SCOPES, SCOPES
 
 
 SUB_ISSUE_VERIFICATION_ATTEMPTS = 5
@@ -462,7 +463,7 @@ def create_child_issues(
     keys: set[str] = set()
     for item in sub_issues:
         scope, readiness, key = (item.get(field) for field in ("scope", "readiness", "delivery_key"))
-        if scope not in {"episode", "act", "scene"} or readiness not in {"ready", "develop"}:
+        if scope not in GENERATED_SCOPES or readiness not in {"ready", "develop"}:
             raise SystemExit("Child assignments require structured scope and readiness; re-establish legacy work through Keter.")
         if readiness == "ready" and scope != "scene":
             raise SystemExit("Only scene assignments can be ready for Netzach.")
@@ -668,7 +669,7 @@ def _complete_parent_chain(repo: str, parent: dict[str, Any] | None,
         visited.add(parent_number)
         labels = {label.get("name") for label in parent.get("labels", []) if isinstance(label, dict)}
         scopes = {label for label in labels if isinstance(label, str) and label.startswith("size:")}
-        if len(scopes) != 1 or not scopes <= {"size:season", "size:episode", "size:act", "size:scene"}:
+        if len(scopes) != 1 or not scopes <= {f"size:{scope}" for scope in SCOPES}:
             return closed
         if any(isinstance(label, str) and label.startswith("phase:") for label in labels):
             return closed

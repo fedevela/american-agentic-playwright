@@ -144,12 +144,11 @@ def render_scene(scene: SceneMaterials, state: dict) -> str:
                 lines.append(_direction(event['text']))
                 continue
             name = scene.display_names[event['character_id']].upper()
-            outer = event['outer_response']
-            if outer['action'].strip():
-                lines.append(_direction(f'{name}: {outer["action"]}'))
-            if outer['dialogue'].strip():
-                lines.append(f'**{_plain(name)}**  \n{_dialogue(outer["dialogue"])}')
-            if outer['silence']:
-                lines.append(_direction(f'{name}: deliberate silence.'))
+            if event['category'] == 'action':
+                lines.append(_direction(f'{name}: {event["text"]}'))
+            elif event['category'] == 'dialogue':
+                lines.append(f'**{_plain(name)}**  \n{_dialogue(event["text"])}')
+            else:
+                raise ValueError('Public events may contain only dialogue or action items')
         lines.extend(transitions.get(mid, []))
     return '\n\n'.join(lines).strip() + '\n'

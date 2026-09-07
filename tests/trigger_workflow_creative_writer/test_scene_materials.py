@@ -36,6 +36,8 @@ def make_scene(root: Path, issue=42):
             "persona_paths": [str(persona.relative_to(root))],
             "known_context": f"{character} knows the room is locked",
             "private_context": f"{character} private sentinel",
+            "scene_context": f"{character} arrived to retrieve a coat",
+            "moment_contexts": {"BEAT 1": f"{character} hears the door lock"},
         }
     dramatic = {
         "scene_id": "locked-room", "sources": source_paths,
@@ -62,9 +64,10 @@ def make_scene(root: Path, issue=42):
         '<!-- SCENE locked-room END -->\n'
     )
     (scene / "AGENTS.md").write_text("Context sources: " + json.dumps(source_paths))
-    handoff = {"version": 2, "issue": issue, "scene_id": "locked-room",
+    handoff = {"version": 3, "issue": issue, "scene_id": "locked-room",
                "manuscript_path": "Script/Season_01/Episode_01/script.md",
                "required_moment_ids": ["BEAT 1"], "sources": source_paths,
+               "actor_safe_bible_paths": [],
                "characters": characters}
     for cid, character in handoff["characters"].items():
         character["display_name"] = cid.title()
@@ -208,14 +211,15 @@ def test_load_scene_rejects_neutral_heading_and_opening_placeholders(tmp_path):
         load_scene(tmp_path, 42)
 
 
-def test_version_one_handoff_explains_required_migration(tmp_path):
+@pytest.mark.parametrize("version", [1, 2])
+def test_legacy_handoff_explains_required_migration(tmp_path, version):
     from trigger_workflow_creative_writer.scene_materials import load_scene
     scene = make_scene(tmp_path)
     index = scene / "performance_context.json"
     data = json.loads(index.read_text())
-    data["version"] = 1
+    data["version"] = version
     index.write_text(json.dumps(data))
-    with pytest.raises(ValueError, match="version 2.*migration"):
+    with pytest.raises(ValueError, match="version 3.*migration"):
         load_scene(tmp_path, 42)
 
 
@@ -391,4 +395,129 @@ def test_handoff_persona_cannot_read_a_sibling_character(tmp_path):
     data['characters']['alice']['persona_paths'] = ['bible/characters/bob/hidden_objective.md']
     index.write_text(json.dumps(data))
     with pytest.raises(ValueError, match='another character'):
+        load_scene(tmp_path, 42)
+
+
+def test_actor_bootstrap_has_only_nominated_bible_and_surrounding_context(tmp_path):
+    from trigger_workflow_creative_writer.scene_materials import load_scene
+    scene = make_scene(tmp_path)
+    safe = tmp_path / "bible/public_world.md"
+    safe.write_text("The city closes its gates at dusk.")
+    (tmp_path / "bible/plot.md").write_text("FUTURE SECRET")
+    index = scene / "performance_context.json"
+    data = json.loads(index.read_text())
+    data["actor_safe_bible_paths"] = ["bible/public_world.md"]
+    index.write_text(json.dumps(data))
+    loaded = load_scene(tmp_path, 42)
+    actor = json.loads(loaded.character_contexts["alice"])
+    assert actor["issue"] == 42
+    assert actor["scene_id"] == "locked-room"
+    assert actor["manuscript_path"] == data["manuscript_path"]
+    assert actor["scene_context"] == "alice arrived to retrieve a coat"
+    assert actor["actor_safe_bible"] == {"bible/public_world.md": safe.read_text()}
+    assert "alice hears the door lock" not in loaded.character_contexts["alice"]
+    assert "Established continuity" not in loaded.character_contexts["alice"]
+    assert "FUTURE SECRET" not in loaded.character_contexts["alice"]
+    assert loaded.character_moment_contexts["alice"] == {"BEAT 1": "alice hears the door lock"}
+    assert loaded.character_directories["alice"] == tmp_path / "bible/characters/alice"
+    assert loaded.snapshots["bible/public_world.md"] == safe.read_text()
+    safe.write_text("The city gates now remain open.")
+    assert load_scene(tmp_path, 42).fingerprint != loaded.fingerprint
+
+
+@pytest.mark.parametrize("field,value", [
+    ("scene_context", ""), ("scene_context", None),
+    ("moment_contexts", {}), ("moment_contexts", {"BEAT 1": ""}),
+    ("moment_contexts", {"BEAT 1": "Current", "BEAT 2": "Unexpected"}),
+    ("moment_contexts", ["Current"]),
+])
+def test_actor_facing_context_requires_scene_and_exact_moment_coverage(tmp_path, field, value):
+    from trigger_workflow_creative_writer.scene_materials import load_scene
+    scene = make_scene(tmp_path)
+    index = scene / "performance_context.json"
+    data = json.loads(index.read_text())
+    data["characters"]["alice"][field] = value
+    index.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match=field):
+        load_scene(tmp_path, 42)
+
+
+@pytest.mark.parametrize("paths", [None, "bible/public.md", [None],
+    ["continuity.md"], ["bible/characters/bob/hidden_objective.md"]])
+def test_actor_safe_bible_requires_explicit_noncharacter_bible_paths(tmp_path, paths):
+    from trigger_workflow_creative_writer.scene_materials import load_scene
+    scene = make_scene(tmp_path)
+    index = scene / "performance_context.json"
+    data = json.loads(index.read_text())
+    data["actor_safe_bible_paths"] = paths
+    index.write_text(json.dumps(data))
+    with pytest.raises(ValueError):
+        load_scene(tmp_path, 42)
+
+
+@pytest.mark.parametrize("target", ["continuity.md", "bible/characters/bob/hidden_objective.md"])
+def test_actor_safe_bible_rejects_symlink_to_unapproved_location(tmp_path, target):
+    from trigger_workflow_creative_writer.scene_materials import load_scene
+    scene = make_scene(tmp_path)
+    (tmp_path / "bible/public.md").symlink_to(tmp_path / target)
+    index = scene / "performance_context.json"
+    data = json.loads(index.read_text())
+    data["actor_safe_bible_paths"] = ["bible/public.md"]
+    index.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="actor_safe_bible"):
+        load_scene(tmp_path, 42)
+
+
+@pytest.mark.parametrize("destination", ["bible/characters/bob", "elsewhere"])
+def test_character_directory_cannot_alias_other_context(tmp_path, destination):
+    from trigger_workflow_creative_writer.scene_materials import load_scene
+    make_scene(tmp_path)
+    own = tmp_path / "bible/characters/alice"
+    own.rename(tmp_path / "alice-original")
+    target = tmp_path / destination
+    if destination == "elsewhere":
+        (tmp_path / "alice-original").rename(target)
+    own.symlink_to(target, target_is_directory=True)
+    with pytest.raises(ValueError, match="character directory"):
+        load_scene(tmp_path, 42)
+
+
+def test_future_beat_context_stays_out_of_every_actor_bootstrap(tmp_path):
+    from trigger_workflow_creative_writer.scene_materials import load_scene
+    scene = make_scene(tmp_path)
+    index = scene / "performance_context.json"
+    data = json.loads(index.read_text())
+    data["required_moment_ids"].append("BEAT 2")
+    for cid, character in data["characters"].items():
+        character["moment_contexts"]["BEAT 2"] = f"{cid} future situation sentinel"
+    index.write_text(json.dumps(data))
+    brief_path = scene / "dramatic_action_brief.md"
+    brief = json.loads(re.search(r"```json\n(.*?)\n```", brief_path.read_text(), re.S)[1])
+    brief["moments"].append({**brief["moments"][0], "moment_id": "BEAT 2"})
+    brief_path.write_text("```json\n" + json.dumps(brief) + "\n```\n")
+    for path in (tmp_path / "skeleton.md", scene / "scene_skeleton.md"):
+        path.write_text(path.read_text() + "\n<!-- RESOLVES [BEAT 2] -->\n<ACTION focus='alice' />")
+    template = scene / "scene_template.md"
+    template.write_text(template.read_text() + "\n<!-- RESOLVES [BEAT 2] -->\n[INJECT HERE]\n")
+    loaded = load_scene(tmp_path, 42)
+    assert list(loaded.character_moment_contexts["alice"]) == ["BEAT 1", "BEAT 2"]
+    assert loaded.character_moment_contexts["alice"]["BEAT 2"] == "alice future situation sentinel"
+    assert all("future situation sentinel" not in context for context in loaded.character_contexts.values())
+    assert "alice future situation sentinel" in loaded.director_context
+    previous = loaded.fingerprint
+    data["characters"]["alice"]["moment_contexts"]["BEAT 2"] = "A changed future situation"
+    index.write_text(json.dumps(data))
+    assert load_scene(tmp_path, 42).fingerprint != previous
+
+
+@pytest.mark.parametrize("missing", ["actor_safe_bible_paths", "scene_context", "moment_contexts"])
+def test_actor_context_fields_cannot_be_implicitly_defaulted(tmp_path, missing):
+    from trigger_workflow_creative_writer.scene_materials import load_scene
+    scene = make_scene(tmp_path)
+    index = scene / "performance_context.json"
+    data = json.loads(index.read_text())
+    container = data if missing == "actor_safe_bible_paths" else data["characters"]["alice"]
+    del container[missing]
+    index.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match=missing):
         load_scene(tmp_path, 42)

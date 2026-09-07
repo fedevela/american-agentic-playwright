@@ -154,6 +154,26 @@ def run_labeled_issue_phase_with_mode(
         preview_phase_execution_plan(request)
         return
 
+    from .runner_utils import managed_repo_path, prepare_phase_execution_context, prepare_initial_season_work, resolve_target_repo_config
+    from .season_branches import checkout_lock
+    with checkout_lock(managed_repo_path(request.repo)):
+        context = prepare_phase_execution_context(request.repo, request.phase, request.issue, issue_data=request.issue_data)
+        recovering = request.phase == "9" and bool(config.PERFORMANCE_RUN)
+        allowed_recovery_paths = set()
+        if recovering:
+            from .roundtable import recovery_paths
+            allowed_recovery_paths = recovery_paths(
+                repo=request.repo, issue=request.issue, cwd=context.local_path,
+                state_root=config.WORKSPACE / "workspace" / "roundtable",
+                run_id=config.PERFORMANCE_RUN, scene_path=config.SCENE_PATH,
+            )
+        prepare_initial_season_work(context.local_path, resolve_target_repo_config(request.repo).main_branch,
+                                    recovery=recovering, recovery_paths=allowed_recovery_paths)
+        _execute_prepared_phase(request)
+
+
+def _execute_prepared_phase(request: PhaseExecutionRequest) -> None:
+    """Dispatch while the caller holds the checkout lock through delivery."""
     if request.phase in DISCUSSION_PHASES:
         log_info(f"Running discussion workflow for phase {request.phase.upper()}")
         execute_phase_with_needs_human_tagging(
@@ -330,7 +350,7 @@ def render_prompt_only_output(request: PhaseExecutionRequest, prompt: str) -> st
             "1. Prepare a commit message with the above prompt.",
             "2. Validate current-cycle source coverage, scope, readiness and ordered beats; pause for questions.",
             "3. Persist the accepted structured result and Python-rendered dramatic comment.",
-            "4. Reconcile and create ready scenes or recursive assignments, ownership dependencies and child branches.",
+            "4. Reconcile and create ready scenes or recursive assignments, ownership dependencies on the shared season branch.",
             "5. Generate the gh command to post the comment to the issue in md format.",
             "6. Remove the parent phase label from the parent issue.",
         ]
@@ -370,6 +390,11 @@ def label_for_phase_id(phase: str) -> str:
 
 def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
     """Render manual-mode instructions without running agent or mutating GitHub."""
+    from .season_branches import resolve_season_root
+    from .runner_utils import resolve_target_repo_config
+    root = resolve_season_root(request.repo, request.issue, request.issue_data)
+    target = resolve_target_repo_config(request.repo)
+    log_info(f"Validated season #{root.number}: {root.title}; shared branch {target.issue_branch_prefix}{root.number}; PR base {target.main_branch}")
     phase = request.phase
     if phase in DISCUSSION_PHASES:
         prompt, session_scope = build_phase_execution_prompt(request, build_comment_phase_prompt)
@@ -398,7 +423,7 @@ def preview_phase_execution_plan(request: PhaseExecutionRequest) -> None:
                     f"1. Run {config.RUNNER_TYPE} with the prompt above and capture the final assistant message as JSON.",
                     "2. Validate current-cycle source coverage, scope, readiness and ordered beats; pause for questions.",
                     "3. Persist the accepted structured result and Python-rendered dramatic comment.",
-                    "4. Reconcile and create ready scenes or recursive assignments, ownership dependencies and child branches.",
+                    "4. Reconcile and create ready scenes or recursive assignments, ownership dependencies on the shared season branch.",
                     "5. Post the generated child issue summary comment.",
                     "6. Remove the parent phase label from the parent issue.",
                 ]
@@ -497,7 +522,7 @@ def _phase_result(request: PhaseExecutionRequest, builder: Callable[..., str]) -
     payload = run_json_phase(prompt, repo=request.repo, issue=request.issue, phase=request.phase,
                              session_scope=session_scope, issue_data=request.issue_data)
     # Models supply dramatic content, never issue ownership or legacy transport tags.
-    for key in ('issue_ref', 'kind', 'version', 'phase'):
+    for key in ('issue_ref', 'season_ref', 'kind', 'version', 'phase'):
         payload.pop(key, None)
     inherited = cycles.source_context(request.issue_data)
     if request.phase == "1" and not set(inherited["canon_refs"]) <= set(payload.get("canon_refs", [])):
@@ -505,6 +530,8 @@ def _phase_result(request: PhaseExecutionRequest, builder: Callable[..., str]) -
     result = validate_result(payload, phase=request.phase, cycle_id=cycle["cycle_id"], scope=cycle["scope"],
                              accepted=accepted, inherited=inherited["anchors"] if inherited else [])
     result['issue_ref'] = cycles.issue_reference(request.issue_data)
+    if request.issue_data.get('_season_ref') is not None:
+        result['season_ref'] = dict(request.issue_data['_season_ref'])
     if result['outcome'] == 'develop':
         _restart_development(request, result, accepted)
         return None

@@ -190,11 +190,11 @@ def strip_microagent(microagent: str) -> str:
 def build_phase_2_story_requirements() -> list[str]:
     """Return shared dramatic exploration instructions for level two."""
     return [
-        "- Develop an independent lyrical exploration of the accepted current Keter brief.",
-        "- Give every artifact a structured scope: episode, act, or scene; season is assigned only by the partner.",
-        "- Scope describes the artifact's dramatic reach; level two explores material and does not create issues.",
-        "- Later assignments may create issues at episode, act, or scene scope; every branch ultimately reaches ready scene leaves, with intermediate scopes or same-scope development as needed.",
-        "- Explore possibility, resistance, motivation, visible action, imagery, scenes, and beats through this perspective.",
+        "- Explore the accepted current Keter brief independently, with one short sentence on one line per item. Keep the narrative field to one short orienting sentence.",
+        "- Give every artifact a structured scope: episode, act, scene, or undetermined; season is assigned only by the partner.",
+        "- Let dramatic purpose establish the material. Use undetermined (scope to be discovered) while its form remains open; level two explores material and does not create issues.",
+        "- Later assignments may create issues at episode, act, scene, or undetermined scope; every branch ultimately reaches ready scene leaves, with intermediate scopes or same-scope development as needed.",
+        "- Offer premise-level possibilities, resistance, or grounding through this perspective; each artifact contains a single conceptual idea.",
         "- Preserve source references and ancestry; keep beats inside scenes.",
         "- Leave unresolved divergent choices to the partner using a structured question outcome.",
     ]
@@ -213,12 +213,12 @@ def build_comment_phase_prompt(
 
     responsibilities = {
         "1": "Receive the human intention and inherited material. Establish a broad narrative stroke with precise pursuit, opposition, pressure, change, and dramatic question. Preserve canon naturally in the writing.",
-        "2A": "Discover generative possibilities and surprising action through Chokhmah.",
+        "2A": "Discover premise-level possibilities through Chokhmah.",
         "2B": "Explore resistance, consequence, and dramatic structure through Binah.",
-        "2C": "Explore motivation, relationships, emotional generosity, and imagery through Chesed.",
-        "3": "Synthesize all three current explorations into dramatic anchors, their relationships, possible scenes, ordered beat coverage, and material needing further development. Preserve the partner's authority over divergent choices.",
+        "2C": "Explore causal conditions, relationships, material circumstances, and stakes through Chesed.",
+        "3": "Synthesize all three current explorations into ordered elements for issue creation, supported by dramatic anchors and their relationships. Let each element express a milestone, circumstance, or dramatic change; exploration may discover its scene, act, or episode form later. Preserve the partner's authority over divergent choices.",
     }
-    instructions = [responsibilities[phase]]
+    instructions = ['The character is the supreme writer of their own thoughts, dialogue, and actions. Every phase contributes conditions and opportunities for that authorship; the character gives them lived expression. The partner holds authority over intention and canon. Established character history remains context; new performance belongs to its character.', responsibilities[phase]]
     if phase in {"2A", "2B", "2C"}:
         instructions.extend(build_phase_2_story_requirements())
     return f"""{strip_microagent(microagent)}
@@ -251,16 +251,23 @@ def build_tiferet_specification_prompt(
 
 {build_phase_prompt_input_context(label, issue, repo, phase, issue_data)}
 
+The character is the supreme writer of their own thoughts, dialogue, and actions. Every phase contributes conditions and opportunities for that authorship; the character gives them lived expression. The partner holds authority over intention and canon. Established character history remains context; new performance belongs to its character.
+
 Turn the accepted synthesis into concrete scene outlines and recursive assignments.
-Preserve its organization, source anchors, relationships, scope, and ancestry.
+Preserve its ordered elements, source anchors, relationships, scope, and ancestry.
+Create one assignment per accepted element, in order. Undetermined elements keep
+their dramatic purpose, prior outline and beat ideas, development_question and return_reason;
+placement may remain null. Python gives them size:undetermined and routes them to Keter.
+Keep the originating issue scope stable throughout its cycle. Its descendants may
+discover concrete scopes or continue undetermined; it remains their development container.
 A single result may contain ready scenes and material requiring further development.
 A ready scene needs an established outline, ordered nonempty beats covering its assigned
 anchors, episode ownership, act placement, and scene identity. Larger elements and unfinished
 scenes receive a specific development brief, an unresolved question, and the reason for returning.
 The same scope may need another cycle; do not force a sequence of smaller sizes.
-Issues may exist at episode, act, or scene scope, but every branch must ultimately
+Issues may exist at episode, act, scene, or undetermined scope, but every branch must ultimately
 reach ready scene leaves. Larger and unfinished scene assignments continue development.
-Generated artifacts use episode, act, or scene scope. Season is created only by the partner.
+Generated artifacts use episode, act, scene, or undetermined scope. Season is created only by the partner.
 Unresolved structural choices return for development or a question to the partner; do not silently rewrite them.
 
 Return raw structured JSON only, without code fences.
@@ -305,30 +312,33 @@ def build_implementation_phase_prompt(
     elif phase == "7":
         phase_requirements = [
             "- Phase 7 (Dramatic-Action Preparation): write dramatic_action_brief.md.",
-            "- Establish stimulus, knowledge, ignorance, concealment, objectives, emotion, stakes, relationships and available actions for each dramatic moment.",
+            "- Establish stimulus, sourced starting knowledge and emotion, stakes, relationships, and available affordances for each dramatic moment; character choices remain open.",
             "- Preserve canonical moment IDs and include non-speaking characters; do not predetermine discretionary responses or write final dialogue.",
             "- Use the microagent's JSON brief contract with existing source paths; missing context blocks completion.",
         ]
     elif phase == "8":
         phase_requirements = [
             "- Phase 8 (Performance Materials): preserve the attributed skeleton, do not draft dialogue or prose.",
-            "- Create scene_materials/<scene_id>/ with AGENTS.md, scene_skeleton.md, scene_template.md, copied dramatic_action_brief.md and a version 2 performance_context.json.",
+            "- Create scene_materials/<scene_id>/ with AGENTS.md, scene_skeleton.md, scene_template.md, copied dramatic_action_brief.md and a version 3 performance_context.json.",
             "- Insert the bounded scene_template.md once into the episode script.md as <!-- SCENE scene-id BEGIN --> through END; preserve front matter, act headings and every other scene region.",
             "- Never append a duplicate scene ID or replace an existing differing region automatically. The handoff manuscript_path must name that episode script.md.",
             "- Prepare real numbered Script/Season_<digits>/Episode_<digits>/scene_materials/<scene_id>/ directories outside season_template; use a [A-Za-z0-9_-]+ scene ID.",
             "- Use an uppercase ### SCENE <digits> — <UPPERCASE TITLE> heading and established opening directions in scene_template.md.",
             "- Include full director source references, stable IDs with nonempty single-line display_name, and separate own-character starting contexts.",
+            "- Explicitly nominate spoiler-free actor_safe_bible_paths (an empty list is valid); never include character folders or unreviewed omniscient sources.",
+            "- Give every actor a scene_context describing their surrounding issue/scene and moment_contexts for each beat from their perspective; Python supplies only the current beat, without future developments or other characters' secrets.",
             "- Apply the completion gate: matching scenes, cast, moments and existing sources; preserve source brief, skeleton constraints and the initial manuscript region exactly.",
         ]
     elif phase == "9":
         phase_requirements = [
             "- Phase 9 (Director's Roundtable): Python orchestrates separate native sessions and writes the public script.",
-            "- The omniscient director receives all prior context plus each fictional inner_monologue and outer_response.",
-            "- Characters receive only their own context and eligible observations; they choose action, dialogue or silence.",
+            "- Actors return ordered items with category thought, dialogue or action and text; any number and order of their own contributions is allowed. Thoughts stay private; deliberate silence is an action.",
+            "- The omniscient director receives complete fictional contributions and assigns previous_item_observers for every dialogue/action item by harness-issued item_id.",
+            "- Python launches/resumes each actor from bible/characters/<character_id>/ and supplies own context, approved bible files, actor-facing issue/scene and current-beat context, and eligible observations. The director runs from the story root.",
             "- Return schema-valid role turns; explicit completion and performed moment coverage are required before Python delivery.",
         ]
     requirements_block = ""
-    requirement_lines = [*terminal_discipline_requirements, *phase_requirements]
+    requirement_lines = ['The character is the supreme writer of their own thoughts, dialogue, and actions. Every phase contributes conditions and opportunities for that authorship; the character gives them lived expression. The partner holds authority over intention and canon. Established character history remains context; new performance belongs to its character.', *terminal_discipline_requirements, *phase_requirements]
     if requirement_lines:
         requirements_block = f"\n\nPhase-specific requirements:\n{chr(10).join(requirement_lines)}"
 

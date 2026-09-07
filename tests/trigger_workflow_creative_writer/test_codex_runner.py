@@ -77,7 +77,7 @@ def test_call_codex_initial_call_uses_stdin_and_absolute_artifacts(tmp_path: Pat
         str((turn_dir / "schema.json").resolve()),
         "--output-last-message",
         str((turn_dir / "response.txt").resolve()),
-        "--model",
+        "-m",
         "test-model",
         "-",
     ]

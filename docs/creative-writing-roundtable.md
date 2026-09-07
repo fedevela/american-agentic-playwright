@@ -43,7 +43,7 @@ language, not the public play format.
 
 8 creates `Episode_N/scene_materials/<scene_id>/` with `AGENTS.md`, a copied brief,
 byte-preserved `scene_skeleton.md`, immutable public `scene_template.md`, and the
-version-2 context index below. The template contains one Markdown scene heading,
+version-3 context index below. The template contains one Markdown scene heading,
 established opening directions, canonical beat markers and neutral speech placeholders.
 It has no front matter, act heading or boundary lines. The episode's `script.md`
 contains front matter and acts once, and a unique bounded region for every scene.
@@ -53,10 +53,10 @@ automatically overwrite a differing region or append a duplicate scene ID.
 
 9 is an omniscient director's roundtable. Python selects one native session per
 participant, queues observations, validates role outputs, and replaces only the selected region in the episode manuscript.
-Characters choose physical action, dialogue, or deliberate silence. The director
-receives every character's authored fictional inner monologue and outer response;
+Characters choose an ordered succession of thought, dialogue and action items,
+including deliberate silence as action. The director receives every complete contribution;
 other characters receive only eligible external observations. Phase 10 remains
-the separately triggered editorial revision stage, editing episode regions while preserving canonical beat traceability.
+the separately triggered editorial stage, writing scene-scoped revision notes while preserving performed text and canonical beat traceability.
 
 ## Phase 7 brief contract
 
@@ -111,11 +111,12 @@ Each real `scene_materials/<scene_id>/` directory contains `performance_context.
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "issue": 42,
   "scene_id": "locked-room",
   "manuscript_path": "Script/Season_01/Episode_01/script.md",
   "required_moment_ids": ["BEAT 1"],
+  "actor_safe_bible_paths": ["bible/public_world.md"],
   "sources": {
     "bible": ["bible/characters.md", "bible/world_rules.md"],
     "continuity": ["continuity.md"],
@@ -127,6 +128,8 @@ Each real `scene_materials/<scene_id>/` directory contains `performance_context.
     "alice": {
       "display_name": "Alice",
       "persona_paths": ["bible/characters/alice/objective.md", "bible/characters/alice/hidden_objective.md"],
+      "scene_context": "The surrounding issue concerns your attempt to leave this room.",
+      "moment_contexts": {"BEAT 1": "You perceive that the door is locked."},
       "known_context": "Own established knowledge and perceived starting situation",
       "private_context": "Own secret, immediate objective, emotion, stakes and constraints"
     }
@@ -140,9 +143,18 @@ assets, not just the two shown. The runtime always loads all seven dimensions:
 `objective.md`, `hidden_objective.md`, `conflict_with_others.md`,
 `conflict_with_self.md`, `conflict_with_environment.md`, `line_of_thought.md`, and
 `line_of_images.md`. Each `display_name` is established, nonempty single-line text;
-stable folder IDs still drive sessions and actor access boundaries. Actor bootstraps contain their own persona and
-starting context only; future private situations from unperformed moments are not
-injected as memories. The director gets the full brief and all indexed sources.
+stable folder IDs drive sessions and working directories. Actor bootstraps contain
+their own persona, surrounding issue/scene context and explicitly nominated safe bible files; future private situations from unperformed moments are not
+injected as memories. The director gets the full brief and all indexed sources. Every character has
+nonempty `scene_context` and `moment_contexts` covering exactly the required beat IDs.
+Python supplies only the current beat context on each actor turn, including resumed
+turns. It does not forward the raw issue or the future beat context map.
+
+`actor_safe_bible_paths` explicitly nominates material suitable for all actors, free
+of secrets and spoilers; `[]` is valid. Paths must remain within `bible/` and outside
+`bible/characters/`, including after symlink resolution. Python validates paths and
+fingerprints content; literary preparation is responsible for its meaning and safety.
+Never infer safe content merely from a filename.
 
 The manuscript path is checkout-relative, remains inside the checkout after resolving
 symlinks, and names `script.md` in the same episode that owns `scene_materials`.
@@ -177,6 +189,33 @@ placeholders are rejected. Canonical beat markers appear once in order.
 
 See the [complete neutral manuscript template](../examples/creative-project/Script/README.md).
 
+## Ordered role contract
+
+Actors return `turn_id`, `character_id`, and a nonempty `items` array:
+
+```json
+{"turn_id":"provided turn ID","character_id":"alice","items":[
+  {"category":"dialogue","text":"Did you hear that?"},
+  {"category":"thought","text":"I recognize the footsteps."},
+  {"category":"action","text":"Steps away from the door."},
+  {"category":"dialogue","text":"Stay here."}
+]}
+```
+
+Each text is nonempty; categories may repeat or be omitted without a prescribed
+order or count. All contributions belong to the selected actor. Python assigns
+stable `item_id` values from the accepted turn and item position, and records one
+private canonical stream plus derived public events. Thought-only interventions
+are valid but do not establish external beat performance.
+
+The next director response includes `previous_item_observers`, with exactly one
+`{item_id, observers}` entry for every preceding dialogue/action item. Empty witness
+lists are valid. Unknown, duplicate, missing and thought-item references are rejected.
+Python routes observations in authored item order, even if routing entries arrive
+in a different order, including on the final director turn. The manuscript receives
+only dialogue/action items in their original order. Thought records never enter
+observation queues or public delivery summaries.
+
 ## Recovery and boundaries
 
 Application manifests, original source snapshots, request journals and private
@@ -184,6 +223,10 @@ responses live under this engine's ignored
 `workspace/roundtable/<repo-slug>/<issue>/<run-UUID>/`, outside the delivered story.
 Codex maintains its own conversation history in its normal location. A run lock
 serializes calls and delivery. Explicit resumption checks source/config identity.
+The harness also holds the shared season checkout lock through the entire tick.
+An explicit resume may retain only the manuscript bytes authorized by its saved
+rendered hash; unrelated dirty files must be reconciled first. Fresh work updates
+from main before performance, while delivery reuses the shared season branch.
 
 The existing script hash guards cover the whole episode manuscript; external edits
 to any region during an unfinished run require reconciliation. Perform scenes
@@ -191,8 +234,8 @@ sequentially; this change adds no concurrent episode-write protocol.
 
 Scene inputs are checked against the original snapshot again after role calls,
 before rendering. Delivery rechecks that input fingerprint and the accepted
-rendered episode manuscript in the actual delivery checkout after preparation and upstream
-merges, before staging, committing, or pushing. Changed material stops delivery
+rendered episode manuscript in the actual delivery checkout after preparation,
+before staging, committing, or pushing. Changed material stops delivery
 and leaves its journal pending for reconciliation; comments and phase advancement
 remain inside the same run lock.
 
@@ -207,6 +250,9 @@ The rendered script includes accepted public performance and public production
 cues. Original actor objectives/subtext and unperformed action vessels remain in
 `scene_skeleton.md` and the director briefing, not the public script.
 
+Python launches and resumes actors with their own `bible/characters/<id>/` folder
+as cwd; the director uses the story root. Configuration and instruction fingerprints
+are tracked separately for each role. No additional sandbox is configured.
 Normal repository access is retained. Session separation and explicit routing
 enforce the application boundary, **not filesystem secrecy**. Characters are
 reminded on every initial and resumed turn that, within `bible/characters/`,
@@ -226,19 +272,20 @@ their existing validation contract; changing those is separate work.
 
 ## Migration
 
-Version-1 scene handoffs are rejected with a version-2 preparation instruction.
+Version-1 and version-2 scene handoffs are rejected with a version-3 preparation instruction.
 Editorially redistribute existing appearance, personality, interior voice, wants,
 fears, secrets and lexicon material into the seven dimensions; semantically different
 sheets must not be blindly renamed. This requires preserving established character
 meaning, voice and imagery, not just satisfying filenames.
 
 Instantiate the neutral episode scaffold with real numbers outside `season_template`.
-Preserve the full canonical beat definitions and ordered IDs. Prepare fresh version-2
+Preserve the full canonical beat definitions and ordered IDs. Prepare fresh version-3
 scene materials with established display names, an immutable Markdown scene template,
 an explicit episode manuscript destination and unique destination boundaries. Do not
 copy story content from the reference template or fabricate a ready handoff. An empty
-or placeholder manuscript is not ready for automated performance. Historical run and
-performance migration is outside this change; existing private checkpoints are not
+or placeholder manuscript is not ready for automated performance. New performance checkpoints use version 2 for ordered items. Legacy version-1
+checkpoints remain readable as history but cannot resume under the new response
+contract: start an intentional new performance. Existing checkpoints are never
 rewritten or automatically replayed.
 
 ## Verification
@@ -255,3 +302,14 @@ RUN_CODEX_LIVE_SMOKE=1 .venv/bin/python -m pytest tests/trigger_workflow_creativ
 
 The opt-in smoke test uses six real turns across three native sessions and leaves
 their histories in Codex's normal storage. `CODEX_SMOKE_MODEL` is an optional override.
+
+## Authorship and phase domains
+
+The character is the supreme writer of their own thoughts, dialogue, and actions.
+Preparation contributes circumstances, source-grounded context, dramatic purposes,
+and open performance vessels. The director supplies environmental events and invites
+responses; each character supplies their own expression. Phase 2 contributes one-line
+conceptual ideas, one short sentence per item, with a single orienting narrative sentence.
+Phase 10 writes scene-scoped revision_notes.md with editorial observations and questions
+for the originating characters, preserving performed script text. A separately requested
+character performance supplies any revised thoughts, dialogue, or actions.

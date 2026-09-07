@@ -121,39 +121,8 @@ def openhands_session_key(repo: str, issue: int, session_scope: str) -> str:
 
 
 def create_issue_branches_for_child_issues(repo: str, parent_issue: int, issue_numbers: list[int]) -> None:
-    """Create missing issue branches for Tiferet-created child issues, branching from the parent issue branch."""
-    from .runner_utils import ensure_git_branch, branch_exists, git_run, resolve_target_repo_config
-    config = resolve_target_repo_config(repo)
-    _, local_path = prepare_target_repo_checkout(repo)
-    
-    # The parent issue branch name (e.g. issue/51)
-    parent_branch = f"{config.issue_branch_prefix}{parent_issue}"
-    
-    if not branch_exists(local_path, parent_branch):
-        log_info(f"Parent branch '{parent_branch}' does not exist; creating it from '{config.main_branch}'.")
-        result = git_run(local_path, ["switch", "-c", parent_branch, config.main_branch], capture_output=True)
-        if result.returncode != 0:
-            raise SystemExit(f"Failed to create missing parent branch '{parent_branch}' from '{config.main_branch}'.")
-        log_info(f"Pushing new parent branch '{parent_branch}' to origin...")
-        git_run(local_path, ["push", "origin", parent_branch])
-
-    ensure_git_branch(local_path, parent_branch, base_branch=config.main_branch)
-
-    for issue_number in issue_numbers:
-        branch_name = f"{config.issue_branch_prefix}{issue_number}"
-        if branch_exists(local_path, branch_name):
-            log_info(f"Issue branch already exists: {branch_name}")
-            continue
-
-        log_info(f"Creating child issue branch '{branch_name}' from '{parent_branch}'")
-        result = git_run(local_path, ["switch", "-c", branch_name, parent_branch], capture_output=True)
-        if result.returncode != 0:
-            raise SystemExit(
-                f"Failed to create child issue branch '{branch_name}' from '{parent_branch}' "
-                f"in {local_path}."
-            )
-
-    ensure_git_branch(local_path, parent_branch, base_branch=config.main_branch)
+    """Compatibility hook: children share their validated season branch."""
+    log_info(f"Child issues of #{parent_issue} share the season branch; no child branches created.")
 
 
 def _run_openhands_command(

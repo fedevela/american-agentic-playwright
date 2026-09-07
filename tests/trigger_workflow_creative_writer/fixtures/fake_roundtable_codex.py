@@ -31,7 +31,7 @@ else:
 assert "--last" not in argv
 print(json.dumps({"type": "thread.started", "thread_id": sid}), flush=True)
 count = session["count"]
-record = {"argv": argv, "request": request, "session_id": sid, "resume": resume}
+record = {"argv": argv, "request": request, "session_id": sid, "resume": resume, "cwd": str(Path.cwd())}
 with (store / "requests.jsonl").open("a") as stream:
     stream.write(json.dumps(record) + "\n")
 if role == "director":
@@ -41,13 +41,15 @@ if role == "director":
                 "next_speaker": None if count >= 4 else ("alice", "bob")[count % 2],
                 "character_prompt": "Choose your next action." if count < 4 else "",
                 "completed_moment_ids": ["BEAT 1"] if count >= 4 else [],
-                "previous_response_observers": [] if count == 0 else ["alice", "bob"]}
+                "previous_item_observers": [{"item_id": item["item_id"], "observers": ["alice", "bob"]}
+                                            for item in (request.get("latest_response") or {}).get("items", [])
+                                            if item["category"] != "thought"]}
 else:
     response = {"turn_id": request["turn_id"], "character_id": role,
-                "inner_monologue": role + " inner sentinel",
-                "outer_response": {"action": "Tries the handle." if role == "alice" else "",
-                                   "dialogue": "I choose to stay." if role == "alice" and count else "",
-                                   "silence": role == "bob"}}
+                "items": [{"category": "thought", "text": role + " inner sentinel"},
+                          {"category": "action", "text": "Tries the handle." if role == "alice" else "deliberate silence."}]}
+    if role == "alice" and count:
+        response["items"].append({"category": "dialogue", "text": "I choose to stay."})
 session["count"] += 1
 session_path.write_text(json.dumps(session))
 Path(argv[argv.index("--output-last-message") + 1]).write_text(json.dumps(response))

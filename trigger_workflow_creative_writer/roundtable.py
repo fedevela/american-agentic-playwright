@@ -37,24 +37,31 @@ DIRECTOR_SCHEMA = _object({
     "moment_id": STRING, "private_direction": STRING,
     "stage_events": {"type": "array", "items": _object({"text": STRING, "observers": IDS})},
     "next_speaker": {"type": ["string", "null"]}, "character_prompt": STRING,
-    "completed_moment_ids": IDS, "previous_response_observers": IDS,
+    "completed_moment_ids": IDS,
+    "previous_item_observers": {"type": "array", "items": _object({"item_id": STRING, "observers": IDS})},
 })
 ACTOR_SCHEMA = _object({
-    "turn_id": STRING, "character_id": STRING, "inner_monologue": STRING,
-    "outer_response": _object({"action": STRING, "dialogue": STRING, "silence": {"type": "boolean"}}),
+    "turn_id": STRING, "character_id": STRING,
+    "items": {"type": "array", "items": _object({
+        "category": {"type": "string", "enum": ["thought", "dialogue", "action"]}, "text": STRING})},
 })
 
 DIRECTOR_RULES = """You are the omniscient fictional scene director. Your native session persists.
 Return ONLY the requested JSON object; do not write files, run tools, or perform delivery.
+The character is the supreme writer of their own thoughts, dialogue, and actions. Every phase contributes conditions and opportunities for that authorship; the character gives them lived expression. The partner holds authority over intention and canon. Established character history remains context; new performance belongs to its character.
+Stage events supply environmental changes and external circumstances. Character prompts
+invite choices; their speech, inner life, and movement are authored in actor turns.
 Use the full story canon, character secrets, and latest complete character response
-(including authored fictional inner monologue) to decide a playable next stimulus.
+(including authored fictional thoughts) to decide a playable next stimulus.
 Do not force dialogue: action, refusal, restraint and deliberate silence are valid.
 Your private_direction is private. Public narration and addressed prompts must not
 imply unrevealed secrets are already known in-story; reveal them explicitly through
 an observable in-scene event when justified. Assign each stage event its actual
-observers. previous_response_observers routes only the preceding character's outer
-response to its witnesses; do not repeat that action in stage_events. Use [] before
-the first actor response. Sleeping characters are not called until selected.
+observers. previous_item_observers must assign witnesses to EVERY dialogue/action
+item in latest_response exactly once, using its harness-issued item_id. Never route
+thoughts. An empty observer list means nobody else perceives that item. Use [] when
+there are no observable items. Do not repeat actor items in stage_events.
+Sleeping characters are not called until selected.
 Advance canonical moments in order. Completed moment IDs may only grow and must
 already have an actual external character performance. Complete only with all
 required moments covered and next_speaker=null. A continue needs a known speaker
@@ -64,13 +71,20 @@ Never output placeholders or empty dialogue vessels. Echo the provided turn_id.
 """
 ACTOR_RULES = """You perform one fictional character in one persistent native session.
 Return ONLY the requested JSON object; do not write files, run tools, or deliver.
-Author inner_monologue as fictional character text and outer_response in the same
-turn. Only the outer response reaches other characters and the script. Author-visible
+You are the supreme writer of your character’s thoughts, dialogue, and actions.
+Preparation offers circumstances and dramatic purposes; you choose their lived expression.
+Return a nonempty ordered items list. Each item has category thought, dialogue or
+action, and nonempty text. Write as many items as the intervention needs, in any
+order, repeating or omitting categories freely. All items are your own character's;
+never author another character's speech, thoughts or actions. Thoughts are authored
+fictional character text, not model reasoning. Only dialogue/action can reach other
+characters and the script; the director sees all items. Author-visible
 canon is not automatically your character's in-story knowledge. Use only your own
 known context and the supplied perceivable observations to update your state.
 Keep accumulated emotions, relationships, and decisions; do not reset to your initial
 state. Choose your own action: dialogue is optional, deliberate silence is valid.
-Provide a nonempty action or dialogue, or silence=true. Do not narrate another
+Represent deliberate silence as an action item. Thought-only turns are allowed but
+do not satisfy external beat performance. Do not narrate another
 character's private knowledge. Return regular speech without wrapper quotation marks;
 preserve intentionally quoted words. Dialogue may include inline *(parenthetical)*
 directions; separate action is a standalone stage direction. Do not include scene or
@@ -185,11 +199,13 @@ def _validate_turn(response, state, scene):
     if role != "director":
         if response["character_id"] != role:
             raise ValueError("Invalid character_id for pending participant")
-        outer = response["outer_response"]
-        if not (outer["action"].strip() or outer["dialogue"].strip() or outer["silence"]):
-            raise ValueError("Character must perform an external action, dialogue, or deliberate silence")
-        _public_text(outer["action"])
-        _public_text(outer["dialogue"])
+        if not response["items"]:
+            raise ValueError("Character items must be nonempty")
+        for item in response["items"]:
+            if not item["text"].strip():
+                raise ValueError("Character item text must be nonempty")
+            if item["category"] != "thought":
+                _public_text(item["text"])
         return
     mid = response["moment_id"]
     if mid not in scene.moment_ids:
@@ -206,9 +222,13 @@ def _validate_turn(response, state, scene):
     if index > previous_index and scene.moment_ids[previous_index] not in completed:
         raise ValueError("Previous moment must be performed and completed before advancement")
     cast = set(scene.character_contexts)
-    observer_lists = [response["previous_response_observers"]]
-    if state["latest_response"] is None and response["previous_response_observers"]:
-        raise ValueError("First director turn has no previous response observers")
+    expected_items = {item["item_id"] for item in (state["latest_response"] or {}).get("items", [])
+                      if item["category"] != "thought"}
+    routes = response["previous_item_observers"]
+    routed_items = [route["item_id"] for route in routes]
+    if len(routed_items) != len(set(routed_items)) or set(routed_items) != expected_items:
+        raise ValueError("Previous item routing must cover each observable item exactly once; never route thoughts")
+    observer_lists = [route["observers"] for route in routes]
     for event in response["stage_events"]:
         if not event["text"].strip():
             raise ValueError("Stage event must be nonempty")
@@ -247,6 +267,9 @@ def _request(state, scene):
         )
         request["observations"] = state["observations"][role][state["observation_cursors"][role]:]
         request["addressed_instruction"] = state["character_prompt"]
+        own = json.loads(scene.character_contexts[role])
+        request["scene_context"] = {key: own[key] for key in ("issue", "scene_id", "manuscript_path", "scene_context")}
+        request["current_moment_context"] = scene.character_moment_contexts[role][state["moment_id"]]
     return request
 
 
@@ -258,13 +281,19 @@ def _accept(state, response):
     if turn_id in state["accepted_turn_ids"]:
         raise ValueError("Duplicate accepted turn_id")
     if role == "director":
+        result["private_events"].append({"kind": "director", **copy.deepcopy(response)})
         latest = state["latest_response"]
         if latest is not None:
-            observed = {"kind": "character", "turn_id": latest["turn_id"],
-                        "moment_id": latest["moment_id"], "character_id": latest["character_id"],
-                        "outer_response": latest["outer_response"]}
-            for observer in response["previous_response_observers"]:
-                result["observations"][observer].append(observed)
+            routes = {route["item_id"]: route["observers"] for route in response["previous_item_observers"]}
+            # Traverse the canonical contribution, never the director's routing order.
+            for item in latest["items"]:
+                if item["category"] == "thought":
+                    continue
+                observed = {"kind": "character", "turn_id": latest["turn_id"],
+                            "moment_id": latest["moment_id"], "character_id": latest["character_id"],
+                            **item}
+                for observer in routes[item["item_id"]]:
+                    result["observations"][observer].append(observed)
         for event in response["stage_events"]:
             public = {"kind": "stage", "moment_id": response["moment_id"], "turn_id": turn_id, "text": event["text"]}
             result["public_events"].append(public)
@@ -279,12 +308,16 @@ def _accept(state, response):
         if response["status"] == "complete":
             result["status"] = "completed"
     else:
-        latest = dict(response, moment_id=state["moment_id"])
+        items = [{**item, "item_id": f"{turn_id}:{index}"}
+                 for index, item in enumerate(response["items"], 1)]
+        latest = dict(response, items=items, moment_id=state["moment_id"])
         result["latest_response"] = latest
-        result["public_events"].append({"kind": "character", "moment_id": state["moment_id"],
-                                        "turn_id": turn_id, "character_id": role,
-                                        "outer_response": response["outer_response"]})
-        if state["moment_id"] not in result["performed_moment_ids"]:
+        result["private_events"].append({"kind": "character", **copy.deepcopy(latest)})
+        public_items = [item for item in items if item["category"] != "thought"]
+        for item in public_items:
+            result["public_events"].append({"kind": "character", "moment_id": state["moment_id"],
+                                            "turn_id": turn_id, "character_id": role, **item})
+        if public_items and state["moment_id"] not in result["performed_moment_ids"]:
             result["performed_moment_ids"].append(state["moment_id"])
         result["observation_cursors"][role] = len(state["observations"][role])
         result["next_role"] = "director"
@@ -297,6 +330,35 @@ def _accept(state, response):
 
 def _render(scene, state):
     return render_scene(scene, state)
+
+
+def _performance_fingerprint(scene, cwd, model):
+    return {"scene": scene.fingerprint, "codex": codex_fingerprint(cwd, model=model),
+            "actors": {cid: codex_fingerprint(directory, model=model)
+                       for cid, directory in scene.character_directories.items()}}
+
+
+def recovery_paths(*, repo: str, issue: int, cwd: Path, state_root: Path,
+                   run_id: str, scene_path: str | None = None) -> set[str]:
+    """Name only the manuscript bytes explicitly authorized by a saved run."""
+    _uuid(run_id)
+    cwd = Path(cwd).resolve()
+    scene = load_scene(cwd, issue, scene_path)
+    slug = repo.replace("/", "__") + "-" + _hash(repo)[:10]
+    state = _read(Path(state_root) / slug / str(issue) / run_id / "manifest.json")
+    if (state.get("version") != 2 or state.get("repo") != repo or state.get("issue") != issue
+            or state.get("run_id") != run_id
+            or state.get("scene_path") != str(scene.directory.relative_to(cwd))):
+        raise ValueError("Recovery journal identity mismatch or legacy performance; reconcile before continuing")
+    rendered = state.get("rendered_script_hash")
+    current_hash = _hash(scene.manuscript_path.read_bytes().decode("utf-8"))
+    # The rendered hash is journaled before the atomic manuscript replacement.
+    # A crash between those writes legitimately leaves the initial clean bytes.
+    if current_hash == state.get("initial_script_hash"):
+        return set()
+    if rendered is None or current_hash != rendered:
+        raise ValueError("Manuscript differs from the recovery journal; reconcile before continuing")
+    return {str(scene.manuscript_path.relative_to(cwd))}
 
 
 def perform_scene(*, repo: str, issue: int, cwd: Path, state_root: Path,
@@ -319,7 +381,7 @@ def perform_scene(*, repo: str, issue: int, cwd: Path, state_root: Path,
         raise ValueError("Private performance state must live outside the delivered checkout")
     scene = load_scene(cwd, issue, scene_path)
     relative_scene = str(scene.directory.relative_to(cwd))
-    fingerprint = {"scene": scene.fingerprint, "codex": codex_fingerprint(cwd, model=model)}
+    fingerprint = _performance_fingerprint(scene, cwd, model)
     effective_model = fingerprint["codex"].get("effective_model") or model
     slug = repo.replace("/", "__") + "-" + _hash(repo)[:10]
     registry = state_root / slug / str(issue)
@@ -350,7 +412,7 @@ def perform_scene(*, repo: str, issue: int, cwd: Path, state_root: Path,
                 snapshots = json.dumps(scene.snapshots, sort_keys=True, ensure_ascii=False)
                 _atomic(run / "snapshots.json", snapshots, raw=True)
                 _atomic(run / "skeleton.md", scene.skeleton, raw=True)
-                state = {"version": 1, "repo": repo, "issue": issue, "scene_path": relative_scene,
+                state = {"version": 2, "repo": repo, "issue": issue, "scene_path": relative_scene,
                          "scene_id": scene.scene_id, "run_id": run_id, "fingerprint": fingerprint,
                          "snapshot_hash": _hash(snapshots), "skeleton_hash": _hash(scene.skeleton),
                          "initial_script_hash": _hash(scene.manuscript_path.read_bytes().decode("utf-8")),
@@ -358,12 +420,14 @@ def perform_scene(*, repo: str, issue: int, cwd: Path, state_root: Path,
                          "summary": None, "pending": None, "sessions": {}, "next_role": "director",
                          "moment_id": None, "completed_moment_ids": [], "performed_moment_ids": [],
                          "accepted_turn_ids": [], "accepted_turns": [], "calls": 0, "no_progress": 0,
-                         "latest_response": None, "character_prompt": "", "public_events": [],
+                         "latest_response": None, "character_prompt": "", "public_events": [], "private_events": [],
                          "observations": {cid: [] for cid in scene.character_contexts},
                          "observation_cursors": {cid: 0 for cid in scene.character_contexts}}
                 _atomic(run / "manifest.json", state)
             else:
                 state = _read(run / "manifest.json")
+        if state.get("version") != 2:
+            raise ValueError("Legacy performance requires an explicit new performance; preserve its historical checkpoint")
         if (state["repo"], state["issue"], state["scene_path"], state["run_id"]) != (repo, issue, relative_scene, run_id):
             raise ValueError("Performance registry identity mismatch")
         if state["fingerprint"] != fingerprint:
@@ -393,6 +457,9 @@ def perform_scene(*, repo: str, issue: int, cwd: Path, state_root: Path,
         if state["status"] == "delivered":
             return state
         while state["status"] == "running":
+            current_scene = load_scene(cwd, issue, relative_scene)
+            if _performance_fingerprint(current_scene, cwd, model) != fingerprint:
+                raise ValueError("Performance input/config fingerprint changed; start an intentional new performance")
             if state["calls"] >= max_calls:
                 raise ValueError(f"Total role call limit exhausted; resume run {run_id} with a larger limit")
             if state["no_progress"] >= max_no_progress:
@@ -417,10 +484,12 @@ def perform_scene(*, repo: str, issue: int, cwd: Path, state_root: Path,
                 state["pending"]["session_id"] = session_id
                 _atomic(run / "manifest.json", state)
 
-            raw = call_codex(json.dumps(request, ensure_ascii=False), cwd=cwd, turn_dir=turn_dir,
+            role_cwd = cwd if role == "director" else scene.character_directories[role]
+            role_model = effective_model if role == "director" else fingerprint["actors"][role].get("effective_model") or model
+            raw = call_codex(json.dumps(request, ensure_ascii=False), cwd=role_cwd, turn_dir=turn_dir,
                              schema=DIRECTOR_SCHEMA if role == "director" else ACTOR_SCHEMA,
                              session_id=state["sessions"].get(role), on_session=register,
-                             model=effective_model, timeout=timeout)
+                             model=role_model, timeout=timeout)
             _atomic(turn_dir / "raw_response.txt", raw, raw=True)
             if role not in state["sessions"]:
                 raise ValueError("Native session ID missing; reconciliation required")
@@ -432,8 +501,8 @@ def perform_scene(*, repo: str, issue: int, cwd: Path, state_root: Path,
             _validate_turn(response, state, scene)
             state = _accept(state, response)
             _atomic(run / "manifest.json", state)
-        if load_scene(cwd, issue, relative_scene).fingerprint != scene.fingerprint:
-            raise ValueError("Scene input fingerprint changed during performance; start an intentional new performance")
+        if _performance_fingerprint(load_scene(cwd, issue, relative_scene), cwd, model) != fingerprint:
+            raise ValueError("Scene input/config fingerprint changed during performance; start an intentional new performance")
         rendered_scene = _render(scene, state)
         _script_check(scene, state)
         rendered = replace_scene(scene.manuscript_path.read_bytes().decode("utf-8"),

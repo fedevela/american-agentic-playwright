@@ -21,17 +21,17 @@ The table describes narrative responsibilities and completion conditions. Runtim
 | Phase and persona | Functional contract | Incoming material | Responsibility and outcome | Narrative completion condition |
 | --- | --- | --- | --- | --- |
 | 1 — [Keter: intent](../../personas/creative-writer/keter_intentformation.md) | [Intent formation](phase_1_keter.md) | Human premise or show bible and established artifacts | Translate intent into a Narrative Brief, logline, theme, and sized Master Story Beats without inventing canon. | Sources exist and scope is clear enough for ideation; uncertainty requires clarification. |
-| 2A — [Chokhmah: expansion](../../personas/creative-writer/chokhmah_generativeexpansion.md) | [Generative expansion](phase_2A_chokhmah.md) | Keter's clarification only as task content | Expand plausible events, possibilities, and character arcs into semaphored beats. | Structured possibilities preserve the brief and established arc colors. |
-| 2B — [Binah: containment](../../personas/creative-writer/binah_criticalrestriction.md) | [Critical restriction](phase_2B_binah.md) | Keter's clarification only as task content | Express world rules, genre exclusions, and boundaries as Master Story Beats. | A structured list states what must remain true and what must be excluded. |
-| 2C — [Chesed: grounding](../../personas/creative-writer/chesed_mechanisticgrounding.md) | [Mechanistic grounding](phase_2C_chesed.md) | Keter's clarification only as task content | Ground the premise in wants, actions, reactions, pressures, and consequences. | Structured beats supply workable causes and conflict drivers. |
+| 2A — [Chokhmah: expansion](../../personas/creative-writer/chokhmah_generativeexpansion.md) | [Generative expansion](phase_2A_chokhmah.md) | Keter's clarification only as task content | Offer premise-level possibilities, one short sentence per item. | Structured possibilities preserve the brief and established arc colors. |
+| 2B — [Binah: containment](../../personas/creative-writer/binah_criticalrestriction.md) | [Critical restriction](phase_2B_binah.md) | Keter's clarification only as task content | Offer resistance, limits, and costs, one short sentence per item. | Each idea identifies a distinct pressure within established canon. |
+| 2C — [Chesed: grounding](../../personas/creative-writer/chesed_mechanisticgrounding.md) | [Mechanistic grounding](phase_2C_chesed.md) | Keter's clarification only as task content | Offer causal conditions, material circumstances, and stakes, one short sentence per item. | Concise ideas supply plausible conditions for later character discovery. |
 | 3 — [Gevurah: judgment](../../personas/creative-writer/gevurah_syntheticjudgment.md) | [Synthetic judgment](phase_3_gevurah.md) | Prior ideation outputs and available issue context | Converge the perspectives into chronological, numbered Master Story Beats; present divergent choices to the showrunner. | Retained beats preserve all four properties; unresolved yellow choices remain pending rather than silently becoming canon. |
 | 4 — [Tiferet: treatment](../../personas/creative-writer/tiferet_specificationharmony.md) | [Specification](phase_4_tiferet.md) | Authoritative Master Story Beats and available issue context | Decompose and group beats into a scene/sequence treatment and ordered child issues with verbatim parent traceability and pacing rationale. | Every assigned beat is accounted for in the treatment and child payload; structural flaws require feedback. |
 | 5 — [Netzach: endurance](../../personas/creative-writer/netzach_traceabilityendurance.md) | [Dramaturgical traceability](phase_5_netzach.md) | Scene treatment and assigned beat definitions | Map emotional and sensory requirements to camera, light, sound, action, and character objective/subtext constraints. | The dramaturgical checklist supports every assigned beat without drafting final prose. |
 | 6 — [Hod: articulation](../../personas/creative-writer/hod_analyticalarticulation.md) | [Scene skeleton](phase_6_hod.md) | Netzach's dramaturgical checklist | Build the chronological eight-tag skeleton with attributed properties and `RESOLVES` references. | Scene structure accounts for its beats; dialogue vessels contain no performed speech. |
-| 7 — [Yesod: dramatic preparation](../../personas/creative-writer/yesod_integrationfoundation.md) | [Dramatic-action brief](phase_7_yesod_orchestration.md) | Bible, continuity, treatment, constraints, and phase-6 skeleton | Prepare stimuli, knowledge, wants, concealment, stakes, relationships, and possible actions for all participants, including non-speaking characters. | `dramatic_action_brief.md` identifies existing sources and ordered moments, preserves the skeleton, and leaves discretionary responses unchosen. |
+| 7 — [Yesod: dramatic preparation](../../personas/creative-writer/yesod_integrationfoundation.md) | [Dramatic-action brief](phase_7_yesod_orchestration.md) | Bible, continuity, treatment, constraints, and phase-6 skeleton | Prepare stimuli, knowledge, wants, concealment, stakes, relationships, and available affordances for all participants, including non-speaking characters. | `dramatic_action_brief.md` identifies existing sources and ordered moments, preserves the skeleton, and leaves discretionary responses unchosen. |
 | 8 — [Yesod: preservation](../../personas/creative-writer/yesod_transmissionembodiment.md) | [Performance materials](phase_8_yesod_embodiment.md) | Phase-7 brief, unchanged skeleton, source and character assets | Assemble scene preparation, the public scene template, its bounded episode destination, and each actor's own starting context. | `AGENTS.md`, `performance_context.json`, and sources agree; the copied brief is unchanged and the selected episode region initially equals `scene_template.md`; `scene_skeleton.md` preserves phase 6. |
 | 9 — [Malkhut: performance](../../personas/creative-writer/malkhut_completionsovereignty.md) | [Director's roundtable](phase_9_malkhut.md) | Validated scene materials, preserved skeleton, and performance history within the run | Direct a many-turn performance in which characters act, speak, or choose silence; Python routes observations and renders public material. | All assigned moments are explicitly completed and the public script passes preservation checks before guarded delivery. Limits and malformed turns are failures. |
-| 10 — [Hod: revision](../../personas/creative-writer/hod_refactoringstructuralclarity.md) | [Editorial revision](phase_10_hod_refactoring.md) | Drafted script, continuity, and available issue context | Clarify pacing, character voice, emotional architecture, and subtext through stronger action and dialogue. | Revised pages stand alone while preserving the core story, inciting incident, climax, and thematic resolution unless the partner requests a plot change. |
+| 10 — [Hod: revision](../../personas/creative-writer/hod_refactoringstructuralclarity.md) | [Editorial revision](phase_10_hod_refactoring.md) | Drafted script, continuity, and available issue context | Write scene-scoped editorial notes and revision questions for the originating characters. | Performed text stays verbatim; notes preserve the core story and identify any pending character revision. |
 
 ### The Required Local Context (The Law of the World)
 
@@ -116,15 +116,28 @@ While the `[SIZE]` property measures *dramaturgical* weight, the swarm must rema
 
 ## Narrative Recursion and Implemented Handoffs
 
-The narrative design is recursive. Phases 1–4 clarify, explore, judge, and decompose `[XLARGE]`, `[LARGE]`, and `[MEDIUM]` material until it yields `[SMALL]` scenes. A child sequence may need another upstream cycle before the scene-making responsibilities of phases 5–9. Production duration informs decomposition without defining dramatic size by itself.
+The narrative design is recursive. Human-created roots use `size:season`; generated
+artifacts and issues use `size:episode`, `size:act`, or `size:scene`. All issue trees
+ultimately yield ready scene leaves. Python validates structured scope, source
+coverage and readiness; quoted size words never control routing.
 
-The implemented [label map](../../trigger_workflow_creative_writer/config.py) orders ordinary handoffs as `1 → 2A → 2B → 2C → 3 → 4`, then `5 → 6 → 7 → 8 → 9`. Each invocation executes one phase. Ideation runs sequentially by label, but [its task inputs](../../trigger_workflow_creative_writer/prompts.py) are isolated: 2A, 2B, and 2C each receive the extracted Keter clarification rather than the preceding ideator's output. Gevurah receives available issue comments to bring those perspectives together.
+The label order is `1 → 2A → 2B → 2C → 3 → 4`, then ready scenes enter
+`5 → 6 → 7 → 8 → 9`. Each exploration reads its current accepted Keter brief
+independently. Gevurah receives all three current explorations and Tiferet preserves
+its organization. Questions pause advancement until a partner reply and explicit tick.
 
-Tiferet is a special handoff, not a normal parent transition from 4 to 5. It returns a JSON parent comment and ordered child issues. Python validates the payload, creates child issues with parent/dependency links and branches, posts the summary, and clears the parent's labels except `phase:needsHuman`. In [child creation](../../trigger_workflow_creative_writer/github_ops.py), a literal `[SMALL]` anywhere in the child body assigns `phase:netzach`; otherwise the child receives `phase:keter`. This text check also matches parent beat quotations; it is not a semantic size parser. No general runtime size gate prevents a separately labeled non-small issue from entering phase 5.
+Tiferet creates ready scenes and/or recursive development assignments. Python owns
+parent links, dependencies, retry reconciliation and completion rollup; it removes
+only the active parent phase label. Phase 5 requires a validated ready scene.
+All descendants share the human season root's Git branch and PR to main.
+See [exploration contracts](../../docs/creative-writing-exploration.md).
 
-Malkhut has no automatic successor. Phase 10 is separately triggered editorial revision and also has no successor. Ordinary phases use fresh native conversations; only a phase-9 scene/run has the persistent director/actor roundtable.
-
-Some creative gates remain model instructions rather than runtime guarantees. [Codex](../../trigger_workflow_creative_writer/codex_runner.py) checks prerequisite existence, and explicit error/rejection responses in discussion/specification paths halt and mark the issue for human intervention. Tiferet rejection does not automatically relabel it to Keter. The [discussion handoff](../../trigger_workflow_creative_writer/core.py) does not recognize Keter's `[ACTION: ASK_QUESTION]` or Gevurah's pending yellow choices as pause signals; these remain unfinished creative work even if a label advances.
+Malkhut has no automatic successor. Phase 10 is separately triggered editorial
+revision. Ordinary phases use fresh conversations; only a phase-9 scene/run has
+persistent director/actor sessions. Actor turns contain ordered thought, dialogue
+and action items; Python routes witnesses per public item and renders the scene.
+Actors run from their own character folders with actor-facing scene/beat context
+and explicitly nominated safe bible sources. Thoughts stay private.
 
 Phases 7 and 8 have writing-specific artifact validators; phase 9 validates scene inputs, role responses, completion, and the public script against the preserved skeleton. Phases 5, 6, and 10 currently retain the [repository validation contract](../../trigger_workflow_creative_writer/runner_utils.py) (`npm run typecheck`, `npm run build`, `npm run test`, `npm run tests:e2e`). These are execution checks, not proof of narrative quality. See the [execution and recovery contract](../../docs/creative-writing-roundtable.md) for scene selection, explicit recovery, and delivery reconciliation.
 
@@ -148,17 +161,35 @@ The source tags use the bracketed format and properties below. Phase 6 establish
 *   **`<LIGHTING>` & `<AUDIO>`:** Governs visual texture, illumination, and the auditory layer.
     *   *Properties:* `mood` (required), `source` (optional).
     *   *Example:* `<LIGHTING mood="<MOOD_DESCRIPTION>" source="<LIGHT_SOURCE>">The visual atmosphere is established.</LIGHTING>`
-*   **`<ACTION>`:** The macro physical choreography of the characters.
+*   **`<ACTION>`:** Environmental conditions and open vessels for character movement.
     *   *Properties:* `focus` (required), `intent` (optional).
-    *   *Example:* `<ACTION focus="<CHARACTER_NAME>" intent="<PHYSICAL_INTENT>">The character takes a described physical action.</ACTION>`
-*   **`<PARENTHETICAL/>`:** The micro-performance beats. This is a self-closing tag.
+    *   *Example:* `<ACTION focus="<CHARACTER_NAME>" intent="<PHYSICAL_INTENT>">[INJECT HERE]</ACTION>`
+*   **`<PARENTHETICAL/>`:** A reserved character delivery vessel. Use a neutral placeholder during preparation. This is a self-closing tag.
     *   *Properties:* `character` (required), `action` (required).
-    *   *Example:* `<PARENTHETICAL character="<CHARACTER_NAME>" action="<MICRO_ACTION>" />`
+    *   *Example:* `<PARENTHETICAL character="<CHARACTER_NAME>" action="[INJECT HERE]" />`
 *   **`<DIALOGUE>`:** The vessel for the character's voice. This is the most complex tag and must remain empty until Phase 9.
     *   *Properties:* `character` (required - maps to the workspace persona), `objective` (required), `subtext` (required), `tone` (optional).
     *   *Example:* `<DIALOGUE character="<CHARACTER_NAME>" objective="<NARRATIVE_GOAL>" subtext="<EMOTIONAL_UNDERCURRENT>" tone="<VOCAL_TONE>"> [INJECT HERE] </DIALOGUE>`
 
 Each episode has one Markdown `script.md` for all scenes and beats. Scene-scoped
-preparation lives under `scene_materials/<scene_id>/`; the version-2 handoff names
+preparation lives under `scene_materials/<scene_id>/`; the version-3 handoff names
 its episode destination. See the [canonical blank format](../../examples/creative-project/Script/README.md)
 and [runtime contracts and migration](../../docs/creative-writing-roundtable.md).
+
+### Character authorship across phases
+
+The character is the supreme writer of their own thoughts, dialogue, and actions.
+Keter contributes intention; Chokhmah possibilities; Binah resistance; Chesed grounding;
+Gevurah synthesis; Tiferet assignments; Netzach continuity and sensory context; Hod
+spatial and temporal structure; Yesod playable context and faithful preparation;
+Malkhut environmental stimuli, turn selection, and observation routing. Revision Hod
+contributes editorial notes for the originating characters.
+
+All three phase-2 explorations use one short sentence on one line per item and one
+short orienting sentence in the narrative field. Scope and source references remain
+metadata. Outlines and beats express circumstances and dramatic purposes; characters
+create their expression. Character action and delivery tags remain neutral vessels
+until performance. Existing canon supplies context, while newly authored character
+performance originates in character turns. Revision notes live in
+scene_materials/<scene_id>/revision_notes.md; character changes await a separately
+requested performance, with the current episode script preserved verbatim.

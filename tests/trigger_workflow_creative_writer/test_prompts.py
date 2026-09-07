@@ -62,12 +62,12 @@ class PhaseWorkflowNamingTests(unittest.TestCase):
         self.assertEqual(determine_phase_from_label("phase:malkhut"), "9")
         self.assertEqual(determine_phase_from_label("phase:hod-refactoring"), "10")
 
-    def test_branch_name_for_phase_uses_main_before_implementation_and_issue_branch_after(self) -> None:
-        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "2B", 12), "main")
-        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "4", 12), "main")
-        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "5", 12), "issue/12")
-        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "9", 12), "issue/12")
-        self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", "10", 12), "issue/12")
+    def test_branch_name_for_phase_uses_validated_season_for_all_phases(self) -> None:
+        from unittest.mock import patch
+        from trigger_workflow_creative_writer.season_branches import SeasonRoot
+        with patch("trigger_workflow_creative_writer.runner_utils.resolve_season_root", return_value=SeasonRoot(1, "Season", (12, 1))):
+            for phase in ("2B", "4", "5", "9", "10"):
+                self.assertEqual(resolve_phase_execution_branch("fedevela/particle-life-3d", phase, 12), "issue/1")
 
     def test_session_scope_for_phase_isolated_for_all_phases(self) -> None:
         self.assertEqual(conversation_scope_for_phase("1"), "phase-1")
@@ -261,7 +261,9 @@ class PromptBuilderTests(unittest.TestCase):
         )
         self.assertIn("scene_template.md", prompt)
         self.assertIn("script.md", prompt)
-        self.assertIn("version 2", prompt)
+        self.assertIn("version 3", prompt)
+        self.assertIn("actor_safe_bible_paths", prompt)
+        self.assertIn("moment_contexts", prompt)
         self.assertIn("scene_materials/<scene_id>", prompt)
 
     def test_phase_9_prompt_requires_omniscient_director_and_python_orchestration(self) -> None:
@@ -274,7 +276,9 @@ class PromptBuilderTests(unittest.TestCase):
             {"title": "Example", "body": "Original body", "comments": []},
         )
         self.assertIn("Phase 9 (Director", prompt)
-        self.assertIn("inner_monologue", prompt)
+        self.assertIn("ordered", prompt)
+        self.assertIn("thought", prompt)
+        self.assertIn("previous_item_observers", prompt)
         self.assertIn("Python", prompt)
 
     def test_phase_five_receives_validated_beats_and_shared_manuscript_placement(self) -> None:
@@ -333,3 +337,31 @@ class PromptBuilderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CharacterAuthorshipTests(unittest.TestCase):
+    def test_every_phase_stack_assigns_performance_to_character(self):
+        from trigger_workflow_creative_writer.config import LABEL_PHASE_MAP
+        for label, phase in LABEL_PHASE_MAP.items():
+            with self.subTest(phase=phase):
+                content = read_microagent_for_label(label, phase)
+                self.assertIn("The character is the supreme writer", content)
+                self.assertIn("thoughts, dialogue, and actions", content)
+
+    def test_phase_two_contract_and_prompts_agree_on_one_line_ideas(self):
+        for phase in ("2A", "2B", "2C"):
+            with self.subTest(phase=phase):
+                content = read_microagent_for_label("", phase)
+                prompt = build_comment_phase_prompt("", 12, "owner/repo", content, phase, cycle_issue("1"))
+                self.assertIn("one short sentence on one line per item", prompt)
+                self.assertNotIn("independent lyrical possibility with scenes and internal beats", prompt)
+                self.assertNotIn("Use lyrical narrative", prompt)
+
+    def test_live_roles_and_revision_preserve_character_authorship(self):
+        from trigger_workflow_creative_writer.roundtable import ACTOR_RULES, DIRECTOR_RULES
+        self.assertIn("The character is the supreme writer", DIRECTOR_RULES)
+        self.assertIn("supreme writer", ACTOR_RULES)
+        revision = read_microagent_for_label("", "10")
+        self.assertIn("editorial notes", revision)
+        self.assertNotIn("sharper dialogue", revision)
+        self.assertNotIn("replace by", revision)

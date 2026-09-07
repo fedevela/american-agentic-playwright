@@ -38,7 +38,11 @@ def test_cli_disabled_even_for_preview(provider):
     assert "Synchronizing" not in result.stdout
 
 
-def test_manual_malkhut_describes_sessions_and_writing_gates_without_launch(capsys):
+def test_manual_malkhut_describes_sessions_and_writing_gates_without_launch(capsys, monkeypatch):
+    from trigger_workflow_creative_writer import season_branches, runner_utils
+    from pathlib import Path
+    monkeypatch.setitem(runner_utils.TARGET_REPO_CONFIG_MAP, "owner/story", runner_utils.TargetRepoConfig(Path("/tmp/story"), "main", "issue/"))
+    monkeypatch.setattr(season_branches, "resolve_season_root", lambda *a, **k: season_branches.SeasonRoot(1, "Story", (42, 1)))
     from trigger_workflow_creative_writer.models import PhaseExecutionRequest
     request = PhaseExecutionRequest("phase:malkhut", 42, "owner/story", "Director", "9", {"title": "Story", "body": "", "comments": []})
     core.preview_phase_execution_plan(request)

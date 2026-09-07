@@ -40,6 +40,12 @@ class OpenHandsRunnerTests(unittest.TestCase):
     incorrect branch verification, or violating the no-resume session policy.
     """
 
+    def setUp(self):
+        from trigger_workflow_creative_writer.season_branches import SeasonRoot
+        patcher = patch("trigger_workflow_creative_writer.runner_utils.resolve_season_root", return_value=SeasonRoot(21, "Season Title", (21,)))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     @patch(
         "trigger_workflow_creative_writer.openhands_runner.openhands_env",
         return_value={"LLM_MODEL": "env-model", "LLM_BASE_URL": "https://llm.example"},
@@ -130,7 +136,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as exc:
             ensure_git_branch(Path("/tmp/repo"), "issue/55", base_branch="main")
 
-        self.assertIn("Phase 4/Tiferet must create child issue branches", str(exc.exception))
+        self.assertIn("Prepare the validated season root branch", str(exc.exception))
 
     @patch("trigger_workflow_creative_writer.runner_utils.git_run")
     @patch("trigger_workflow_creative_writer.runner_utils.ensure_git_branch")
@@ -158,18 +164,8 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         create_issue_branches_for_child_issues("owner/repo", 100, [101, 102])
 
-        self.assertEqual(git_run_mock.call_count, 3)
-        git_run_mock.assert_any_call(
-            local_path,
-            ["switch", "-c", "issue/100", "main"],
-            capture_output=True,
-        )
-        git_run_mock.assert_any_call(
-            local_path,
-            ["switch", "-c", "issue/101", "issue/100"],
-            capture_output=True,
-        )
-        self.assertEqual(ensure_git_branch_mock.call_count, 2)
+        git_run_mock.assert_not_called()
+        ensure_git_branch_mock.assert_not_called()
 
     @patch("trigger_workflow_creative_writer.runner_utils.git_run", return_value=subprocess.CompletedProcess(args=["git"], returncode=0, stdout="", stderr=""))
     @patch("trigger_workflow_creative_writer.runner_utils.log_info")
@@ -216,7 +212,6 @@ class OpenHandsRunnerTests(unittest.TestCase):
         messages = [call.args[0] for call in log_info_mock.call_args_list]
         self.assertIn(f"Verified source repository path exists: {local_path}", messages)
         self.assertIn(f"Verified managed repository path exists: {managed_path}", messages)
-        self.assertIn("Resolved target branch for phase 5: issue/21", messages)
         self.assertIn("Verified target repository branch loaded: issue/21", messages)
 
     @patch("trigger_workflow_creative_writer.runner_utils.ensure_managed_repo_checkout")
@@ -290,6 +285,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
 
         self.assertIn("Managed checkout path mismatch", str(exc.exception))
 
+    @patch("trigger_workflow_creative_writer.runner_utils.git_run", return_value=subprocess.CompletedProcess(args=["git"], returncode=0, stdout="", stderr=""))
     @patch("trigger_workflow_creative_writer.runner_utils.ensure_managed_repo_checkout")
     @patch("trigger_workflow_creative_writer.runner_utils.current_branch", side_effect=["main", "main"])
     @patch("trigger_workflow_creative_writer.runner_utils.ensure_git_branch")
@@ -302,6 +298,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         ensure_git_branch_mock,
         current_branch_mock,
         ensure_managed_repo_checkout_mock,
+        git_run_mock,
     ) -> None:
         del branch_name_for_phase_mock
         del ensure_git_branch_mock
@@ -366,9 +363,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
             branch="issue/21",
         )
         subprocess_run_mock.side_effect = [
-            subprocess.CompletedProcess(args=["git", "fetch", "origin"], returncode=0, stdout="", stderr=""),
-            subprocess.CompletedProcess(args=["git", "rev-parse", "--verify", "origin/main"], returncode=0, stdout="def456\n", stderr=""),
-            subprocess.CompletedProcess(args=["git", "merge", "origin/main"], returncode=0, stdout="Already up to date.\n", stderr=""),
+            subprocess.CompletedProcess(args=["gh", "pr", "list"], returncode=0, stdout="[]", stderr=""),
             subprocess.CompletedProcess(args=["git", "status"], returncode=0, stdout=" M src/app.ts\n", stderr=""),
             subprocess.CompletedProcess(args=["git", "add"], returncode=0, stdout="", stderr=""),
             subprocess.CompletedProcess(args=["git", "commit"], returncode=0, stdout="[issue/21 abc123] msg", stderr=""),
@@ -380,7 +375,6 @@ class OpenHandsRunnerTests(unittest.TestCase):
                 stdout="abc123full\trefs/heads/issue/21\n",
                 stderr="",
             ),
-            subprocess.CompletedProcess(args=["gh", "pr", "list"], returncode=0, stdout="[]", stderr=""),
             subprocess.CompletedProcess(
                 args=["gh", "pr", "create"],
                 returncode=0,
@@ -402,7 +396,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
         self.assertIn("PR: https://github.com/owner/repo/pull/21", summary)
         self.assertIn("Commit: `abc123`", summary)
         self.assertIn("- `src/app.ts`", summary)
-        self.assertEqual(subprocess_run_mock.call_count, 13)
+        self.assertEqual(subprocess_run_mock.call_count, 10)
 
     @patch("trigger_workflow_creative_writer.runner_utils.prepare_phase_execution_context")
     @patch("trigger_workflow_creative_writer.runner_utils.subprocess.run")
@@ -417,9 +411,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
             branch="issue/21",
         )
         subprocess_run_mock.side_effect = [
-            subprocess.CompletedProcess(args=["git", "fetch", "origin"], returncode=0, stdout="", stderr=""),
-            subprocess.CompletedProcess(args=["git", "rev-parse", "--verify", "origin/main"], returncode=0, stdout="def456\n", stderr=""),
-            subprocess.CompletedProcess(args=["git", "merge", "origin/main"], returncode=0, stdout="Already up to date.\n", stderr=""),
+            subprocess.CompletedProcess(args=["gh", "pr", "list"], returncode=0, stdout='[{"url":"https://github.com/owner/repo/pull/21", "title":"Season #21: Season Title", "baseRefName":"main"}]', stderr=""),
             subprocess.CompletedProcess(args=["git", "status"], returncode=0, stdout=" M src/app.ts\n", stderr=""),
             subprocess.CompletedProcess(args=["git", "add"], returncode=0, stdout="", stderr=""),
             subprocess.CompletedProcess(args=["git", "commit"], returncode=0, stdout="[issue/21 abc123] msg", stderr=""),
@@ -431,7 +423,6 @@ class OpenHandsRunnerTests(unittest.TestCase):
                 stdout="abc123full\trefs/heads/issue/21\n",
                 stderr="",
             ),
-            subprocess.CompletedProcess(args=["gh", "pr", "list"], returncode=0, stdout='[{"url":"https://github.com/owner/repo/pull/21"}]', stderr=""),
             subprocess.CompletedProcess(args=["git", "rev-parse"], returncode=0, stdout="abc123\n", stderr=""),
             subprocess.CompletedProcess(args=["git", "show"], returncode=0, stdout="src/app.ts\n", stderr=""),
         ]
@@ -443,7 +434,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
             issue_title="[AUTO/TIFERET] Example Child Issue",
         )
 
-        commit_call = subprocess_run_mock.call_args_list[5]
+        commit_call = subprocess_run_mock.call_args_list[3]
         commit_cmd = commit_call.args[0]
         self.assertEqual(commit_cmd[0:3], ["git", "commit", "-m"])
         self.assertEqual(commit_cmd[3], "phase:6 issue #21: Example Child Issue")
@@ -461,9 +452,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
             branch="issue/21",
         )
         subprocess_run_mock.side_effect = [
-            subprocess.CompletedProcess(args=["git", "fetch", "origin"], returncode=0, stdout="", stderr=""),
-            subprocess.CompletedProcess(args=["git", "rev-parse", "--verify", "origin/main"], returncode=0, stdout="def456\n", stderr=""),
-            subprocess.CompletedProcess(args=["git", "merge", "origin/main"], returncode=0, stdout="Already up to date.\n", stderr=""),
+            subprocess.CompletedProcess(args=["gh", "pr", "list"], returncode=0, stdout="[]", stderr=""),
             subprocess.CompletedProcess(args=["git", "status"], returncode=0, stdout=" M src/app.ts\n", stderr=""),
             subprocess.CompletedProcess(args=["git", "add"], returncode=0, stdout="", stderr=""),
             subprocess.CompletedProcess(args=["git", "commit"], returncode=0, stdout="[issue/21 abc123] msg", stderr=""),
@@ -484,7 +473,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
             )
 
         self.assertIn("Human intervention required", str(exc.exception))
-        self.assertEqual(subprocess_run_mock.call_count, 7)
+        self.assertEqual(subprocess_run_mock.call_count, 5)
 
     @patch("trigger_workflow_creative_writer.runner_utils.prepare_phase_execution_context")
     @patch("trigger_workflow_creative_writer.runner_utils.subprocess.run")
@@ -520,9 +509,7 @@ class OpenHandsRunnerTests(unittest.TestCase):
             branch="issue/21",
         )
         subprocess_run_mock.side_effect = [
-            subprocess.CompletedProcess(args=["git", "fetch", "origin"], returncode=0, stdout="", stderr=""),
-            subprocess.CompletedProcess(args=["git", "rev-parse", "--verify", "origin/main"], returncode=0, stdout="def456\n", stderr=""),
-            subprocess.CompletedProcess(args=["git", "merge", "origin/main"], returncode=0, stdout="Already up to date.\n", stderr=""),
+            subprocess.CompletedProcess(args=["gh", "pr", "list"], returncode=0, stdout="[]", stderr=""),
             subprocess.CompletedProcess(args=["git", "status"], returncode=0, stdout=" M src/app.ts\n", stderr=""),
             subprocess.CompletedProcess(args=["git", "add"], returncode=0, stdout="", stderr=""),
         ]
