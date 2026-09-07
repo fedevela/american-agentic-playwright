@@ -16,6 +16,7 @@ from trigger_workflow_creative_writer.runner_utils import resolve_phase_executio
 from trigger_workflow_creative_writer.prompts import (
     build_implementation_phase_prompt,
     build_comment_phase_prompt,
+    build_issue_runtime_context,
     build_phase_2_story_requirements,
     build_phase_prompt_input_context,
     build_tiferet_specification_prompt,
@@ -71,6 +72,22 @@ class PromptBuilderTests(unittest.TestCase):
     mandatory for Gevurah and Tiferet, and whether downstream implementation
     phases preserve the canonical requirement text they inherit from Tiferet.
     """
+
+    @patch(
+        "trigger_workflow_creative_writer.prompts.REQUIRED_CHARACTER_ARTIFACTS",
+        ["custom_dimension.md"],
+    )
+    def test_runtime_context_builds_character_artifact_list_from_validation_contract(self) -> None:
+        context = build_issue_runtime_context(
+            "phase:keter",
+            12,
+            "owner/repo",
+            "1",
+            {"title": "Example", "body": "Body"},
+        )
+
+        self.assertIn("6. `bible/characters/[character_name]/custom_dimension.md`", context)
+        self.assertNotIn("appearance.md", context)
 
     def test_phase_1_prompt_enforces_observable_acceptance_signals(self) -> None:
         prompt = build_comment_phase_prompt(
@@ -275,6 +292,20 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("performance_context.json", prompt)
         self.assertIn("completion gate", prompt)
         self.assertIn("preserve", prompt)
+
+    def test_phase_8_prompt_requires_episode_manuscript_and_version_two_handoff(self) -> None:
+        prompt = build_implementation_phase_prompt(
+            "phase:yesod-embodiment",
+            12,
+            "owner/repo",
+            "Yesod embodiment microagent",
+            "8",
+            {"title": "Example", "body": "Original body", "comments": []},
+        )
+        self.assertIn("scene_template.md", prompt)
+        self.assertIn("script.md", prompt)
+        self.assertIn("version 2", prompt)
+        self.assertIn("scene_materials/<scene_id>", prompt)
 
     def test_phase_9_prompt_requires_omniscient_director_and_python_orchestration(self) -> None:
         prompt = build_implementation_phase_prompt(

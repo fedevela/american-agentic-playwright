@@ -5,8 +5,8 @@ partner's material; the current files contain only headings and an empty diagram
 
 - [Project](project.md): title, premise, audience, format, and selling points.
 - [Characters](characters.md): cast overview, narrative functions, and factions.
-- [Character profiles](characters/character_id/): detailed appearance, personality,
-  interior voice, wants, fears, secrets, and spoken lexicon for each character.
+- [Character profiles](characters/character_id/): seven dramatic dimensions covering
+  objectives, conflicts, thought, and visual expression for each character.
 - [Dramatic arcs](dramatic_arcs.md): character trajectories and named plot threads.
 - [World rules](world_rules.md): setting, constraints, societies, and locations.
 - [Theme](theme.md): central question, argument, and supporting themes.
@@ -21,17 +21,17 @@ The seven profile files describe complementary aspects of a character:
 
 | File | Purpose |
 | --- | --- |
-| `appearance.md` | Physical presentation, clothing, gestures, and how the character carries themselves. |
-| `personality.md` | Disposition, strengths, flaws, and recurring behavior. |
-| `interiorvoice.md` | Unfiltered thought and perception before they become spoken dialogue. |
-| `wants.md` | The conscious goal they pursue and the deeper need they must confront. |
-| `fears.md` | What frightens them and how they avoid facing it. |
-| `secrets.md` | What they conceal from others or themselves, creating subtext and tension. |
-| `lexicon.md` | Spoken vocabulary, rhythm, idioms, verbal habits, and words they would never use. |
+| `objective.md` | The goal the character knowingly pursues, their stakes, and the tactics they choose. |
+| `hidden_objective.md` | The concealed or unconscious goal, its secrets, and the cost of exposure. |
+| `conflict_with_others.md` | Opposing interpersonal aims, relationship pressures, and social behavior. |
+| `conflict_with_self.md` | Contradictory desires, fears, values, self-deception, and behavior under pressure. |
+| `conflict_with_environment.md` | Material, social, institutional, and world-rule obstacles that constrain action. |
+| `line_of_thought.md` | Perception, inner reasoning, and the vocabulary, rhythm, and habits of speech. |
+| `line_of_images.md` | Appearance, clothing, gesture, sensory associations, and recurring visual motifs. |
 
 Treatments and performance materials belong in `Script/`, outside this bible.
-Use the [season outline](../Script/Season_01/README.md) for the season logline,
-synopsis, and episode index, and the [episode outline](../Script/Season_01/Episode_01/README.md)
+Use the [season outline](../Script/season_template/Season_N/README.md) for the season logline,
+synopsis, and episode index, and the [episode outline](../Script/season_template/Season_N/Episode_N/README.md)
 for episode synopses, character progression, and tension points. Link these outlines
 to the canonical arcs rather than maintaining competing versions of them.
 

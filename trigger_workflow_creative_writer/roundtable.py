@@ -21,6 +21,8 @@ import uuid
 from . import config
 from .codex_runner import call_codex, codex_fingerprint
 from .scene_materials import load_scene
+from .play_format import render_scene, validate_public_text
+from .manuscript import replace_scene
 
 
 def _object(properties):
@@ -57,6 +59,7 @@ Advance canonical moments in order. Completed moment IDs may only grow and must
 already have an actual external character performance. Complete only with all
 required moments covered and next_speaker=null. A continue needs a known speaker
 and nonempty character_prompt. Preserve production and dramatic constraints.
+Public stage text must be plain text, without scene/beat markers, HTML or placeholders.
 Never output placeholders or empty dialogue vessels. Echo the provided turn_id.
 """
 ACTOR_RULES = """You perform one fictional character in one persistent native session.
@@ -68,7 +71,11 @@ known context and the supplied perceivable observations to update your state.
 Keep accumulated emotions, relationships, and decisions; do not reset to your initial
 state. Choose your own action: dialogue is optional, deliberate silence is valid.
 Provide a nonempty action or dialogue, or silence=true. Do not narrate another
-character's private knowledge. Preserve addressed constraints and echo turn_id.
+character's private knowledge. Return regular speech without wrapper quotation marks;
+preserve intentionally quoted words. Dialogue may include inline *(parenthetical)*
+directions; separate action is a standalone stage direction. Do not include scene or
+beat markers, HTML, headings or template placeholders in public fields.
+Preserve addressed constraints and echo turn_id.
 """
 
 
@@ -153,9 +160,9 @@ def _read(path):
 
 
 def _script_check(scene, state):
-    script = scene.directory / "script.md"
+    script = scene.manuscript_path
     try:
-        current = _hash(script.read_text(encoding="utf-8"))
+        current = _hash(script.read_bytes().decode("utf-8"))
     except OSError as exc:
         raise ValueError("Scene script unexpectedly changed or is missing") from exc
     allowed = {state["initial_script_hash"]}
@@ -166,11 +173,7 @@ def _script_check(scene, state):
 
 
 def _public_text(text):
-    if (re.search(r"\[\s*(?:INJECT\s+HERE|TODO|TBD)\s*\]", text, re.I)
-            or re.search(r"^\s*(?:TODO|TBD)(?:\s*:.*)?\s*$", text, re.M)):
-        raise ValueError("Unresolved placeholder in public performance")
-    if re.search(r"<DIALOGUE\b[^>]*(?:/\s*>|>\s*</DIALOGUE\s*>)", text, re.I):
-        raise ValueError("Empty dialogue vessel in public performance")
+    validate_public_text(text)
 
 
 def _validate_turn(response, state, scene):
@@ -292,55 +295,8 @@ def _accept(state, response):
     return result
 
 
-def _production_constraints(skeleton):
-    # Actor objectives/subtext and unperformed prescribed choices remain available
-    # in immutable source snapshots, but are not part of the public performance.
-    skeleton = re.sub(r"<(DIALOGUE|ACTION|PARENTHETICAL)\b[^>]*(?:/\s*>|>.*?</\1\s*>)", "", skeleton, flags=re.I | re.S)
-    allowed = "SCENE_HEADING|CAMERA|LIGHTING|AUDIO|TRANSITION"
-    pattern = rf"<!--\s*RESOLVES\s*\[BEAT\s+[^\]]+\]\s*-->|<({allowed})\b[^>]*(?:/\s*>|>.*?</\1\s*>)"
-    public = "\n".join(match.group(0) for match in re.finditer(pattern, skeleton, re.I | re.S))
-    _public_text(public)
-    return public
-
-
 def _render(scene, state):
-    if state["status"] not in {"completed", "delivered"} or set(state["completed_moment_ids"]) != set(scene.moment_ids) or set(state["performed_moment_ids"]) != set(scene.moment_ids):
-        raise ValueError("Scene is incomplete: explicit completion and actual moment performance required")
-    constraints = _production_constraints(scene.skeleton)
-    # Place each original moment's production constraints where that moment starts.
-    pieces = re.split(r"<!--\s*RESOLVES\s*\[(BEAT\s+[^\]]+)\]\s*-->", constraints)
-    per_moment = {pieces[i]: pieces[i + 1].strip() for i in range(1, len(pieces), 2)}
-    transition_pattern = r"<TRANSITION\b[^>]*(?:/\s*>|>.*?</TRANSITION\s*>)"
-    transitions = {mid: re.findall(transition_pattern, value, re.I | re.S) for mid, value in per_moment.items()}
-    per_moment = {mid: re.sub(transition_pattern, "", value, flags=re.I | re.S).strip() for mid, value in per_moment.items()}
-    lines = [pieces[0].strip()] if pieces[0].strip() else []
-    emitted = set()
-    previous_moment = None
-    for event in state["public_events"]:
-        mid = event["moment_id"]
-        if mid not in emitted:
-            if previous_moment is not None:
-                lines.extend(transitions.get(previous_moment, []))
-            lines.append(f"<!-- RESOLVES [{mid}] -->")
-            if per_moment.get(mid):
-                lines.append(per_moment[mid])
-            emitted.add(mid)
-            previous_moment = mid
-        if event["kind"] == "stage":
-            lines.append(event["text"])
-        else:
-            outer = event["outer_response"]
-            if outer["action"].strip():
-                lines.append(f"{event['character_id']}: {outer['action']}")
-            if outer["dialogue"].strip():
-                lines.append(f"{event['character_id']}: “{outer['dialogue']}”")
-            if outer["silence"]:
-                lines.append(f"{event['character_id']}: [deliberate silence]")
-    if previous_moment is not None:
-        lines.extend(transitions.get(previous_moment, []))
-    rendered = "\n\n".join(lines).strip() + "\n"
-    _public_text(rendered)
-    return rendered
+    return render_scene(scene, state)
 
 
 def perform_scene(*, repo: str, issue: int, cwd: Path, state_root: Path,
@@ -397,7 +353,7 @@ def perform_scene(*, repo: str, issue: int, cwd: Path, state_root: Path,
                 state = {"version": 1, "repo": repo, "issue": issue, "scene_path": relative_scene,
                          "scene_id": scene.scene_id, "run_id": run_id, "fingerprint": fingerprint,
                          "snapshot_hash": _hash(snapshots), "skeleton_hash": _hash(scene.skeleton),
-                         "initial_script_hash": _hash((scene.directory / "script.md").read_text(encoding="utf-8")),
+                         "initial_script_hash": _hash(scene.manuscript_path.read_bytes().decode("utf-8")),
                          "rendered_script_hash": None, "status": "running", "delivery": None,
                          "summary": None, "pending": None, "sessions": {}, "next_role": "director",
                          "moment_id": None, "completed_moment_ids": [], "performed_moment_ids": [],
@@ -478,13 +434,15 @@ def perform_scene(*, repo: str, issue: int, cwd: Path, state_root: Path,
             _atomic(run / "manifest.json", state)
         if load_scene(cwd, issue, relative_scene).fingerprint != scene.fingerprint:
             raise ValueError("Scene input fingerprint changed during performance; start an intentional new performance")
-        rendered = _render(scene, state)
+        rendered_scene = _render(scene, state)
         _script_check(scene, state)
+        rendered = replace_scene(scene.manuscript_path.read_bytes().decode("utf-8"),
+                                 scene.scene_id, rendered_scene)
         state["rendered_script_hash"] = _hash(rendered)
         # Journal the permitted final hash before rendering, so either side of the
         # atomic script replacement remains recoverable after a process crash.
         _atomic(run / "manifest.json", state)
-        _atomic(scene.directory / "script.md", rendered, raw=True)
+        _atomic(scene.manuscript_path, rendered, raw=True)
         if deliver is not None:
             state["delivery"] = "pending"
             _atomic(run / "manifest.json", state)

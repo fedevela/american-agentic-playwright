@@ -28,5 +28,7 @@ YOUR PRECISE DIRECTIVES
 - Define the exact `objective` and `subtext` properties for the primary characters in the scene.
 - Ensure the sensory language directly supports the thematic intent of the assigned Master Story Beats.
 
+Keep each full canonical beat definition and ID intact. These constraints feed the internal attributed skeleton; public scenes and all beats will share one episode Markdown manuscript. Do not create beat folders or separate beat manuscripts.
+
 YOUR NARRATIVE PRODUCTS
 - A deterministic checklist of required dramaturgical artifacts, including all mandatory properties (mood, shot, objective, subtext), mapped directly to the Master Story Beat IDs they are meant to resolve.

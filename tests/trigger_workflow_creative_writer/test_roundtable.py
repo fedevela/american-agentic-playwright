@@ -117,7 +117,7 @@ def test_persistent_sessions_route_only_observable_deltas_and_render_public_scri
         assert "director private sentinel" not in text
     assert "alice inner sentinel" in json.dumps(model.calls[2]["request"])
     assert len(actors[1]["request"]["observations"]) >= 3
-    script = (scene / "script.md").read_text()
+    script = (scene.parent.parent / "script.md").read_text()
     assert script.count("Tries the handle.") == 2
     assert "silence" in script.lower()
     assert "<!-- RESOLVES [BEAT 1] -->" in script
@@ -173,7 +173,7 @@ def test_uncertain_pending_turn_never_replays(setup, failure):
 @pytest.mark.parametrize("mutation", ["unknown-observer", "duplicate-observer", "bad-turn", "bad-actor", "extra-inner", "wrong-type", "early-complete", "unknown-moment", "placeholder", "empty-outer"])
 def test_invalid_structured_turn_is_not_accepted_or_delivered(setup, mutation):
     runtime, args, model, scene = setup
-    initial = (scene / "script.md").read_text()
+    initial = (scene.parent.parent / "script.md").read_text()
     def mutate(value, request):
         if request["role"] == "director":
             if mutation == "unknown-observer": value["stage_events"][0]["observers"] = ["nobody"]
@@ -191,7 +191,7 @@ def test_invalid_structured_turn_is_not_accepted_or_delivered(setup, mutation):
     deliveries = []
     with pytest.raises(ValueError):
         runtime.perform_scene(**args, deliver=lambda: deliveries.append(True))
-    assert not deliveries and (scene / "script.md").read_text() == initial
+    assert not deliveries and (scene.parent.parent / "script.md").read_text() == initial
     _, state = manifest(args)
     assert state["pending"]
 
@@ -209,7 +209,8 @@ def test_changed_inputs_config_and_output_fail_closed(setup):
     with pytest.raises(ValueError, match="fingerprint"):
         runtime.perform_scene(**args, run_id=state["run_id"])
     source.write_text(original)
-    (scene / "script.md").write_text("human draft")
+    manuscript = scene.parent.parent / "script.md"
+    manuscript.write_text(manuscript.read_text() + "\nhuman draft")
     with pytest.raises(ValueError, match="script.*changed"):
         runtime.perform_scene(**args, run_id=state["run_id"])
 
@@ -218,18 +219,18 @@ def test_repeated_canonical_marker_rejected_before_session_allocation(setup):
     runtime, args, model, scene = setup
     skeleton = (scene / "scene_skeleton.md").read_text()
     skeleton += '\n<CAMERA>Hold on the door.</CAMERA>\n<!-- RESOLVES [BEAT 1] -->\n<AUDIO>Clock ticks.</AUDIO>'
-    for path in (args["cwd"] / "skeleton.md", scene / "scene_skeleton.md", scene / "script.md"):
+    for path in (args["cwd"] / "skeleton.md", scene / "scene_skeleton.md"):
         path.write_text(skeleton)
     with pytest.raises(ValueError, match="Repeated canonical marker.*BEAT 1"):
         runtime.perform_scene(**args)
     assert model.calls == []
     assert not args["state_root"].exists()
-    assert (scene / "script.md").read_text() == skeleton
+    assert (scene / "scene_skeleton.md").read_text() == skeleton
 
 
 def test_source_changed_during_role_call_is_rejected_before_render_and_delivery(setup):
     runtime, args, model, scene = setup
-    original_script = (scene / "script.md").read_text()
+    original_script = (scene.parent.parent / "script.md").read_text()
     def change_source(value, request):
         if value.get("status") == "complete":
             (args["cwd"] / "continuity.md").write_text("Changed during performance")
@@ -238,7 +239,7 @@ def test_source_changed_during_role_call_is_rejected_before_render_and_delivery(
     with pytest.raises(ValueError, match="fingerprint.*changed"):
         runtime.perform_scene(**args, deliver=lambda: deliveries.append(True))
     assert deliveries == []
-    assert (scene / "script.md").read_text() == original_script
+    assert (scene.parent.parent / "script.md").read_text() == original_script
     _, state = manifest(args)
     assert state["rendered_script_hash"] is None
     assert state["delivery"] is None
@@ -365,14 +366,13 @@ def test_schema_failure_preserves_parsed_private_response(setup):
 
 
 def test_second_scene_is_not_blocked_by_first_unfinished_run(setup):
-    import shutil
     runtime, args, model, scene = setup
+    second = add_second_scene(args['cwd'], scene)
     with pytest.raises(ValueError, match="limit"):
-        runtime.perform_scene(**args, max_calls=1)
-    second = scene.parent / "SHORT_2"
-    shutil.copytree(scene, second)
+        runtime.perform_scene(**args, scene_path=str(scene.relative_to(args['cwd'])), max_calls=1)
+    model.mutate = lambda value, request: value.update(moment_id='BEAT 2')
     with pytest.raises(ValueError, match="limit"):
-        runtime.perform_scene(**args, scene_path="SEASON_1/SHORT_2", max_calls=1)
+        runtime.perform_scene(**args, scene_path=str(second.relative_to(args['cwd'])), max_calls=1)
     assert len(model.calls) == 2
 
 
@@ -409,7 +409,9 @@ def test_renderer_keeps_public_production_cues_but_not_unperformed_vessels(setup
 <ACTION focus="alice">Unperformed prescribed leap.</ACTION>
 <PARENTHETICAL>private parenthetical sentinel</PARENTHETICAL>
 <TRANSITION>Cut.</TRANSITION>'''
-    scene = SimpleNamespace(moment_ids=["BEAT 1"], skeleton=skeleton)
+    scene = SimpleNamespace(moment_ids=["BEAT 1"], skeleton=skeleton,
+                            scene_template='### SCENE 1 — ROOM\n\n<!-- RESOLVES [BEAT 1] -->\n[INJECT HERE]\n',
+                            display_names={'alice': 'Alice', 'bob': 'Bob'})
     script = runtime._render(scene, state)
     assert "sentinel" not in script
     assert "Unperformed prescribed leap" not in script
@@ -460,7 +462,7 @@ def test_fake_native_cli_end_to_end_resumes_private_sessions_and_queued_observat
     assert "bob inner sentinel" in json.dumps(records[4])
     assert len(records[3]["request"]["observations"]) == 3
     assert len(records[7]["request"]["observations"]) == 4
-    script = (scene / "script.md").read_text()
+    script = (scene.parent.parent / "script.md").read_text()
     assert "sentinel" not in script
     assert script.count("Tries the handle.") == 2
     assert script.count("deliberate silence") == 2
@@ -469,7 +471,7 @@ def test_fake_native_cli_end_to_end_resumes_private_sessions_and_queued_observat
 
 def test_deleted_native_session_pauses_without_replacement(native_setup):
     runtime, args, store, scene = native_setup
-    initial_script = (scene / "script.md").read_text()
+    initial_script = (scene.parent.parent / "script.md").read_text()
     with pytest.raises(ValueError, match="limit"):
         runtime.perform_scene(**args, max_calls=2)
     _, state = manifest(args)
@@ -482,7 +484,7 @@ def test_deleted_native_session_pauses_without_replacement(native_setup):
     assert paused["sessions"] == state["sessions"]
     with pytest.raises(ValueError, match="reconcil"):
         runtime.perform_scene(**args, run_id=state["run_id"])
-    assert (scene / "script.md").read_text() == initial_script
+    assert (scene.parent.parent / "script.md").read_text() == initial_script
 
 
 def test_disabled_provider_rejected_before_creating_private_registry(setup, monkeypatch):
@@ -513,7 +515,7 @@ def test_multi_moment_performance_requires_actual_action_in_each_and_preserves_t
     runtime, args, model, scene = setup
     # Extend the handoff and both canonical skeleton references together.
     skeleton = (scene / "scene_skeleton.md").read_text() + '\n<TRANSITION>Beat one cut.</TRANSITION>\n<!-- RESOLVES [BEAT 2] -->\n<SCENE_HEADING>Hallway</SCENE_HEADING>'
-    for path in (args["cwd"] / "skeleton.md", scene / "scene_skeleton.md", scene / "script.md"):
+    for path in (args["cwd"] / "skeleton.md", scene / "scene_skeleton.md"):
         path.write_text(skeleton)
     for path in (args["cwd"] / "dramatic_action_brief.md", scene / "dramatic_action_brief.md"):
         text = path.read_text()
@@ -522,6 +524,8 @@ def test_multi_moment_performance_requires_actual_action_in_each_and_preserves_t
         moment["moment_id"] = "BEAT 2"
         brief["moments"].append(moment)
         path.write_text("# Dramatic action brief\n\n```json\n" + json.dumps(brief) + "\n```\n")
+    template = scene / "scene_template.md"
+    template.write_text(template.read_text() + "\n<!-- RESOLVES [BEAT 2] -->\n[INJECT HERE]\n")
     index = scene / "performance_context.json"
     handoff = json.loads(index.read_text())
     handoff["required_moment_ids"] = ["BEAT 1", "BEAT 2"]
@@ -533,7 +537,7 @@ def test_multi_moment_performance_requires_actual_action_in_each_and_preserves_t
     model.mutate = mutate
     result = runtime.perform_scene(**args)
     assert result["performed_moment_ids"] == ["BEAT 1", "BEAT 2"]
-    script = (scene / "script.md").read_text()
+    script = (scene.parent.parent / "script.md").read_text()
     assert script.index("Tries the handle.") < script.index("Beat one cut.") < script.index("<!-- RESOLVES [BEAT 2] -->")
 
 
@@ -544,7 +548,7 @@ def test_legitimate_spanish_todo_is_not_a_placeholder(setup):
             response["outer_response"]["dialogue"] = "todo está bien"
     model.mutate = mutate
     runtime.perform_scene(**args)
-    assert "todo está bien" in (scene / "script.md").read_text()
+    assert "todo está bien" in (scene.parent.parent / "script.md").read_text()
 
 
 @pytest.mark.parametrize("placeholder", ["[TODO]", "[TBD]", "[INJECT HERE]", "TODO", "TBD", "TODO: fill this"])
@@ -552,3 +556,66 @@ def test_explicit_placeholder_markers_are_rejected(setup, placeholder):
     runtime, _, _, _ = setup
     with pytest.raises(ValueError, match="placeholder"):
         runtime._public_text(placeholder)
+
+
+def add_second_scene(root, scene):
+    """Create independent preparation with its own skeleton and beat in one episode."""
+    import shutil
+    second = scene.parent / 'second-room'
+    shutil.copytree(scene, second)
+    skeleton = (second / 'scene_skeleton.md').read_text().replace('BEAT 1', 'BEAT 2')
+    (root / 'second_skeleton.md').write_text(skeleton)
+    (second / 'scene_skeleton.md').write_text(skeleton)
+    template = (second / 'scene_template.md').read_text().replace('SCENE 1', 'SCENE 2').replace('BEAT 1', 'BEAT 2')
+    (second / 'scene_template.md').write_text(template)
+    for name in ('performance_context.json', 'dramatic_action_brief.md', 'AGENTS.md'):
+        path = second / name
+        path.write_text(path.read_text().replace('locked-room', 'second-room').replace('BEAT 1', 'BEAT 2').replace('"skeleton.md"', '"second_skeleton.md"'))
+    manuscript = scene.parent.parent / 'script.md'
+    with manuscript.open('a') as stream:
+        stream.write('\n<!-- SCENE second-room BEGIN -->\n' + template + '<!-- SCENE second-room END -->\n')
+    return second
+
+
+def test_two_scene_performances_preserve_one_episode_and_each_other(setup):
+    from trigger_workflow_creative_writer.manuscript import scene_body
+    runtime, args, model, first = setup
+    second = add_second_scene(args['cwd'], first)
+    manuscript = first.parent.parent / 'script.md'
+    original = manuscript.read_text()
+    first_initial = scene_body(original, 'locked-room')
+    second_initial = scene_body(original, 'second-room')
+    runtime.perform_scene(**args, scene_path=str(first.relative_to(args['cwd'])))
+    after_first = manuscript.read_text()
+    first_rendered = scene_body(after_first, 'locked-room')
+    assert first_rendered != first_initial
+    assert scene_body(after_first, 'second-room') == second_initial
+    assert after_first == original.replace(first_initial, first_rendered)
+    def second_moment(response, request):
+        if request['role'] == 'director':
+            response['moment_id'] = 'BEAT 2'
+            response['completed_moment_ids'] = ['BEAT 2'] if response['status'] == 'complete' else []
+    model.mutate = second_moment
+    runtime.perform_scene(**args, scene_path=str(second.relative_to(args['cwd'])))
+    final = manuscript.read_text()
+    second_rendered = scene_body(final, 'second-room')
+    assert second_rendered != second_initial
+    assert scene_body(final, 'locked-room') == first_rendered
+    assert final == after_first.replace(second_initial, second_rendered)
+    assert final.count('<!-- RESOLVES [BEAT 1] -->') == 1
+    assert final.count('<!-- RESOLVES [BEAT 2] -->') == 1
+    assert 'sentinel' not in final and '[INJECT HERE]' not in final
+    assert not (first / 'script.md').exists() and not (second / 'script.md').exists()
+
+
+def test_episode_crlf_front_matter_and_neighbor_survive_performance(setup):
+    from trigger_workflow_creative_writer.manuscript import scene_body
+    runtime, args, _, first = setup
+    add_second_scene(args['cwd'], first)
+    manuscript = first.parent.parent / 'script.md'
+    original = manuscript.read_text().replace('\n', '\r\n')
+    manuscript.write_bytes(original.encode())
+    initial_body = scene_body(original, 'locked-room')
+    runtime.perform_scene(**args, scene_path=str(first.relative_to(args['cwd'])))
+    final = manuscript.read_bytes().decode()
+    assert final == original.replace(initial_body, scene_body(final, 'locked-room'))

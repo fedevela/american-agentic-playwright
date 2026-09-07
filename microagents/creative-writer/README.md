@@ -29,7 +29,7 @@ The table describes narrative responsibilities and completion conditions. Runtim
 | 5 — [Netzach: endurance](../../personas/creative-writer/netzach_traceabilityendurance.md) | [Dramaturgical traceability](phase_5_netzach.md) | Scene treatment and assigned beat definitions | Map emotional and sensory requirements to camera, light, sound, action, and character objective/subtext constraints. | The dramaturgical checklist supports every assigned beat without drafting final prose. |
 | 6 — [Hod: articulation](../../personas/creative-writer/hod_analyticalarticulation.md) | [Scene skeleton](phase_6_hod.md) | Netzach's dramaturgical checklist | Build the chronological eight-tag skeleton with attributed properties and `RESOLVES` references. | Scene structure accounts for its beats; dialogue vessels contain no performed speech. |
 | 7 — [Yesod: dramatic preparation](../../personas/creative-writer/yesod_integrationfoundation.md) | [Dramatic-action brief](phase_7_yesod_orchestration.md) | Bible, continuity, treatment, constraints, and phase-6 skeleton | Prepare stimuli, knowledge, wants, concealment, stakes, relationships, and possible actions for all participants, including non-speaking characters. | `dramatic_action_brief.md` identifies existing sources and ordered moments, preserves the skeleton, and leaves discretionary responses unchosen. |
-| 8 — [Yesod: preservation](../../personas/creative-writer/yesod_transmissionembodiment.md) | [Performance materials](phase_8_yesod_embodiment.md) | Phase-7 brief, unchanged skeleton, source and character assets | Assemble the scene folder, source index, initial script, and each actor's own starting context. | `AGENTS.md`, `performance_context.json`, and sources agree; the copied brief is unchanged and `script.md` initially equals `scene_skeleton.md`. |
+| 8 — [Yesod: preservation](../../personas/creative-writer/yesod_transmissionembodiment.md) | [Performance materials](phase_8_yesod_embodiment.md) | Phase-7 brief, unchanged skeleton, source and character assets | Assemble scene preparation, the public scene template, its bounded episode destination, and each actor's own starting context. | `AGENTS.md`, `performance_context.json`, and sources agree; the copied brief is unchanged and the selected episode region initially equals `scene_template.md`; `scene_skeleton.md` preserves phase 6. |
 | 9 — [Malkhut: performance](../../personas/creative-writer/malkhut_completionsovereignty.md) | [Director's roundtable](phase_9_malkhut.md) | Validated scene materials, preserved skeleton, and performance history within the run | Direct a many-turn performance in which characters act, speak, or choose silence; Python routes observations and renders public material. | All assigned moments are explicitly completed and the public script passes preservation checks before guarded delivery. Limits and malformed turns are failures. |
 | 10 — [Hod: revision](../../personas/creative-writer/hod_refactoringstructuralclarity.md) | [Editorial revision](phase_10_hod_refactoring.md) | Drafted script, continuity, and available issue context | Clarify pacing, character voice, emotional architecture, and subtext through stronger action and dialogue. | Revised pages stand alone while preserving the core story, inciting incident, climax, and thematic resolution unless the partner requests a plot change. |
 
@@ -43,8 +43,8 @@ performed scripts live outside the bible. Reserve `AGENTS.md` for agent instruct
 The canonical template is the [creative-project reference](../../examples/creative-project/README.md).
 Copy its contents into a story repository, or copy only its `bible/` directory
 when adding a bible to an existing project.
-It includes the bible and a `Script/Season_01/Episode_01/Scene_01/Beat_01/` hierarchy
-preserved with `.gitkeep`. Populate the canon before running the writing workflow.
+It includes the bible and a neutral `Script/season_template/Season_N/Episode_N/` scaffold
+with one blank episode manuscript. Populate canon before running the writing workflow.
 
 To migrate an existing story, rename `agents_artifacts/` to `bible/` and move the
 root cast roster `agents.md` to `bible/characters.md`. Update paths in source indexes,
@@ -61,19 +61,20 @@ The following 12 artifact types must be provided by the script caller in the loc
 3. `bible/world_rules.md`: The physical, societal, and magical constraints.
 4. `bible/theme.md`: The central argument or thesis.
 5. `bible/relationships.drawio`: The established dynamics between characters.
-6. `bible/characters/<character_name>/appearance.md`
-7. `bible/characters/<character_name>/personality.md`
-8. `bible/characters/<character_name>/interiorvoice.md`
-9. `bible/characters/<character_name>/wants.md`
-10. `bible/characters/<character_name>/fears.md`
-11. `bible/characters/<character_name>/secrets.md`
-12. `bible/characters/<character_name>/lexicon.md`
+6. `bible/characters/<character_name>/objective.md`
+7. `bible/characters/<character_name>/hidden_objective.md`
+8. `bible/characters/<character_name>/conflict_with_others.md`
+9. `bible/characters/<character_name>/conflict_with_self.md`
+10. `bible/characters/<character_name>/conflict_with_environment.md`
+11. `bible/characters/<character_name>/line_of_thought.md`
+12. `bible/characters/<character_name>/line_of_images.md`
 
-Existing story repositories must split their combined motivations-and-fears sheet into
-`wants.md` (primary want and deep need) and `fears.md` (greatest fear and avoidance
-tactics). Both are required; the old combined sheet is not a substitute. Update any
-explicit persona paths in scene handoffs and start a new performance after migration,
-since the canonical context has changed.
+Existing story repositories must editorially redistribute their character material
+across these seven dimensions. The legacy appearance, personality, interior voice,
+wants, fears, secrets, and lexicon files are not substitutes and should not be blindly
+renamed because their meanings overlap multiple dimensions. Update any explicit persona
+paths in scene handoffs and start a new performance after migration, since the canonical
+context has changed.
 
 Phase 1 (Keter) will halt execution via an Artifact Validation Gate if it cannot locate these established constraints.
 
@@ -156,3 +157,8 @@ The source tags use the bracketed format and properties below. Phase 6 establish
 *   **`<DIALOGUE>`:** The vessel for the character's voice. This is the most complex tag and must remain empty until Phase 9.
     *   *Properties:* `character` (required - maps to the workspace persona), `objective` (required), `subtext` (required), `tone` (optional).
     *   *Example:* `<DIALOGUE character="<CHARACTER_NAME>" objective="<NARRATIVE_GOAL>" subtext="<EMOTIONAL_UNDERCURRENT>" tone="<VOCAL_TONE>"> [INJECT HERE] </DIALOGUE>`
+
+Each episode has one Markdown `script.md` for all scenes and beats. Scene-scoped
+preparation lives under `scene_materials/<scene_id>/`; the version-2 handoff names
+its episode destination. See the [canonical blank format](../../examples/creative-project/Script/README.md)
+and [runtime contracts and migration](../../docs/creative-writing-roundtable.md).

@@ -30,6 +30,8 @@ do not reset emotion or knowledge to the opening situation at every turn.
 Explicit completion requires all assigned dramatic moments actually performed.
 Missing participants, malformed responses and limits are failures, not completion.
 
+Python renders only this scene’s bounded region in the episode script.md, preserving front matter, act headings, neighboring scenes and their beats. Use established display names for uppercase speaker cues. Return regular speech without wrapper quotes; preserve intentionally quoted words and inline *(parenthetical)* directions. Separate action and deliberate silence become stage directions. Public fields must contain no scene/beat markers, placeholders or internal tags. Preserve the canonical beat order and full definitions in preparation sources.
+
 YOUR NARRATIVE PRODUCTS
 A completed public script rendered by Python, checked against the preserved skeleton.
 Private role outputs stay in the engine's ignored performance state. Phase 10 remains

@@ -21,18 +21,78 @@ class TestArtifactValidation:
         with pytest.raises(SystemExit):
             validate_required_artifacts(tmp_path)
 
-    @pytest.mark.parametrize("missing", ["wants.md", "fears.md"])
-    def test_combined_legacy_sheet_cannot_replace_split_artifacts(self, tmp_path, missing):
+    def test_validation_accepts_the_seven_character_dimensions(self, tmp_path):
         for artifact in REQUIRED_ARTIFACTS:
             path = tmp_path / artifact
             path.parent.mkdir(parents=True, exist_ok=True)
             path.touch()
         character = tmp_path / "bible/characters/test_char"
         character.mkdir(parents=True)
-        for name in ("appearance.md", "personality.md", "interiorvoice.md", "wants.md",
-                     "fears.md", "secrets.md", "lexicon.md", "motivations_and_fears.md"):
+        for name in (
+            "objective.md",
+            "hidden_objective.md",
+            "conflict_with_others.md",
+            "conflict_with_self.md",
+            "conflict_with_environment.md",
+            "line_of_thought.md",
+            "line_of_images.md",
+        ):
+            (character / name).touch()
+
+        validate_required_artifacts(tmp_path)
+
+    def test_legacy_character_profile_cannot_replace_the_seven_dimensions(self, tmp_path):
+        for artifact in REQUIRED_ARTIFACTS:
+            path = tmp_path / artifact
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+        character = tmp_path / "bible/characters/test_char"
+        character.mkdir(parents=True)
+        for name in (
+            "appearance.md",
+            "personality.md",
+            "interiorvoice.md",
+            "wants.md",
+            "fears.md",
+            "secrets.md",
+            "lexicon.md",
+        ):
+            (character / name).touch()
+
+        with pytest.raises(SystemExit):
+            validate_required_artifacts(tmp_path)
+
+    @pytest.mark.parametrize(
+        "missing",
+        [
+            "objective.md",
+            "hidden_objective.md",
+            "conflict_with_others.md",
+            "conflict_with_self.md",
+            "conflict_with_environment.md",
+            "line_of_thought.md",
+            "line_of_images.md",
+        ],
+    )
+    def test_validation_rejects_each_missing_character_dimension(self, tmp_path, missing):
+        for artifact in REQUIRED_ARTIFACTS:
+            path = tmp_path / artifact
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+        character = tmp_path / "bible/characters/test_char"
+        character.mkdir(parents=True)
+        for name in (
+            "objective.md",
+            "hidden_objective.md",
+            "conflict_with_others.md",
+            "conflict_with_self.md",
+            "conflict_with_environment.md",
+            "line_of_thought.md",
+            "line_of_images.md",
+        ):
             if name != missing:
                 (character / name).touch()
+
         with pytest.raises(SystemExit):
             validate_required_artifacts(tmp_path)
 
@@ -101,7 +161,7 @@ class TestArtifactValidation:
         char_dir = tmp_path / "bible" / "characters" / "test_char"
         char_dir.mkdir(parents=True, exist_ok=True)
         for char_artifact in REQUIRED_CHARACTER_ARTIFACTS:
-            if char_artifact == "appearance.md":
+            if char_artifact == "objective.md":
                 continue
             (char_dir / char_artifact).touch()
 

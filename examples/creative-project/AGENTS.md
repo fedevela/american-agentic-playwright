@@ -11,7 +11,10 @@ The placeholder `character_id` must be replaced before performance.
 
 Develop treatments and scene materials under `Script/`, outside the bible. Preserve
 established canon and trace each scene's responsibilities to its assigned story beats.
-Create performance handoffs at scene level only when their real inputs are ready.
+Keep one Markdown manuscript per episode. Store immutable scene preparation in
+`Episode_N/scene_materials/<scene_id>/`, with a version-2 handoff naming the bounded
+episode destination. Instantiate real episodes outside `season_template`; the blank
+scaffold is never performance-ready. Create handoffs only when their real inputs are ready.
 
 During roundtable performance, each character is instructed to access only its own
 folder within `bible/characters/` and to use only its own context and eligible

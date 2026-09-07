@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .artifact_validation import REQUIRED_CHARACTER_ARTIFACTS
 from .config import (
     BASE_PERSONA_FILE,
     DISCUSSION_PHASES,
@@ -143,6 +144,10 @@ def build_issue_runtime_context(
     """Build prompt context from the live issue payload."""
     title = issue_data.get("title", "Untitled")
     body = issue_data.get("body", "").strip()
+    character_artifact_lines = "\n".join(
+        f"{number}. `bible/characters/[character_name]/{filename}`"
+        for number, filename in enumerate(REQUIRED_CHARACTER_ARTIFACTS, start=6)
+    )
     context = f"""## Runtime Context
 - Repository: {repo}
 - Trigger label: {label}
@@ -156,13 +161,7 @@ The creative engine requires the following 12 standardized artifacts to be prese
 3. `bible/world_rules.md`
 4. `bible/theme.md`
 5. `bible/relationships.drawio`
-6. `bible/characters/[character_name]/appearance.md`
-7. `bible/characters/[character_name]/personality.md`
-8. `bible/characters/[character_name]/interiorvoice.md`
-9. `bible/characters/[character_name]/wants.md`
-10. `bible/characters/[character_name]/fears.md`
-11. `bible/characters/[character_name]/secrets.md`
-12. `bible/characters/[character_name]/lexicon.md`
+{character_artifact_lines}
 
 **Memory Check Directive:** Before proceeding with any generation, you must verify that you have successfully read and loaded all of the above artifacts into your working memory. If they are not in your context, you must read them from the local file system now.
 
@@ -381,9 +380,13 @@ def build_implementation_phase_prompt(
     elif phase == "8":
         phase_requirements = [
             "- Phase 8 (Performance Materials): preserve the attributed skeleton, do not draft dialogue or prose.",
-            "- Write scene AGENTS.md, scene_skeleton.md, identical initial script.md, copied dramatic_action_brief.md and performance_context.json.",
-            "- Include full director source references and separate own-character starting contexts.",
-            "- Apply the completion gate: matching scenes, cast, moments and existing sources; preserve source brief and all skeleton constraints.",
+            "- Create scene_materials/<scene_id>/ with AGENTS.md, scene_skeleton.md, scene_template.md, copied dramatic_action_brief.md and a version 2 performance_context.json.",
+            "- Insert the bounded scene_template.md once into the episode script.md as <!-- SCENE scene-id BEGIN --> through END; preserve front matter, act headings and every other scene region.",
+            "- Never append a duplicate scene ID or replace an existing differing region automatically. The handoff manuscript_path must name that episode script.md.",
+            "- Prepare real numbered Script/Season_<digits>/Episode_<digits>/scene_materials/<scene_id>/ directories outside season_template; use a [A-Za-z0-9_-]+ scene ID.",
+            "- Use an uppercase ### SCENE <digits> — <UPPERCASE TITLE> heading and established opening directions in scene_template.md.",
+            "- Include full director source references, stable IDs with nonempty single-line display_name, and separate own-character starting contexts.",
+            "- Apply the completion gate: matching scenes, cast, moments and existing sources; preserve source brief, skeleton constraints and the initial manuscript region exactly.",
         ]
     elif phase == "9":
         phase_requirements = [

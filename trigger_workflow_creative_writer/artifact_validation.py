@@ -13,13 +13,13 @@ REQUIRED_ARTIFACTS = [
 ]
 
 REQUIRED_CHARACTER_ARTIFACTS = [
-    "appearance.md",
-    "personality.md",
-    "interiorvoice.md",
-    "wants.md",
-    "fears.md",
-    "secrets.md",
-    "lexicon.md",
+    "objective.md",
+    "hidden_objective.md",
+    "conflict_with_others.md",
+    "conflict_with_self.md",
+    "conflict_with_environment.md",
+    "line_of_thought.md",
+    "line_of_images.md",
 ]
 
 def validate_required_artifacts(workspace_path: Path) -> None:

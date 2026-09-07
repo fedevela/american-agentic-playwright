@@ -50,13 +50,13 @@ def execute_malkhut_performance_phase(request: PhaseExecutionRequest) -> None:
     relative_scene = str(scene.directory.relative_to(context.local_path.resolve()))
 
     def deliver() -> str:
-        rendered_script = (scene.directory / "script.md").read_bytes()
+        rendered_script = scene.manuscript_path.read_bytes()
 
         def before_commit(checkout) -> None:
             final_scene = load_scene(checkout, request.issue, relative_scene)
             if final_scene.scene_id != scene.scene_id or final_scene.fingerprint != scene.fingerprint:
                 raise ValueError("Scene input fingerprint changed before delivery; reconciliation required")
-            if (final_scene.directory / "script.md").read_bytes() != rendered_script:
+            if final_scene.manuscript_path.read_bytes() != rendered_script:
                 raise ValueError("Rendered script changed before delivery; reconciliation required")
 
         summary = finalize_delivery(

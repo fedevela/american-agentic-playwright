@@ -36,5 +36,7 @@ YOUR PRECISE DIRECTIVES
 - Split overly long, meandering scenes into tighter, focused sequences.
 - Verify pacing and emotional resonance.
 
+Revise the selected bounded scene regions in the episode’s single Markdown script.md. Preserve front matter, act headings, neighboring regions and canonical RESOLVES IDs in order, with full beat definitions still traceable to their sources. Retain bold uppercase cues, hard line breaks before speech and italic parenthetical stage directions. Scene templates are immutable preparation, not the revised publication source. Do not create scene manuscripts or beat folders; structural changes to scene boundaries require the partner’s requested scope.
+
 YOUR NARRATIVE PRODUCTS
 - Revised script pages or prose in which the narrative architecture is invisible but deeply felt through pacing, action, and dialogue.

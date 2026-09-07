@@ -22,7 +22,7 @@ python trigger.py --mode creative-writer --phase 9 --repo owner/story --issue 42
 python trigger.py --mode creative-writer --phase 9 --repo owner/story --issue 42 --performance-run RUN_UUID
 ```
 
-Use `--scene SEASON_1/EPISODE_1/SHORT_1` when an issue has multiple scene handoffs.
+Use `--scene Script/Season_01/Episode_01/scene_materials/locked-room` when an issue has multiple scene handoffs.
 `--new-performance` deliberately starts fresh sessions; it does not erase earlier
 performances. `--performance-run` and `--new-performance` are mutually exclusive.
 `--codex-model` overrides the configured model. Limits are `--max-role-calls 120`,
@@ -37,16 +37,26 @@ relationship pressures, available physical/conversational possibilities, and
 dependencies. Canonical `[BEAT …]` identifiers remain traceability keys; they do
 not prescribe discretionary responses. No final dialogue or changed act seams.
 
-8 creates the scene hierarchy and its `AGENTS.md`, copies the brief, and saves the
-phase-6 skeleton unchanged as both `scene_skeleton.md` and `script.md`. It creates
-the machine-readable context index below. No finished prose or dialogue.
+5 identifies the dramatic and production constraints for the assigned canonical
+beats. 6 preserves these as an internal attributed skeleton; its tags are preparation
+language, not the public play format.
+
+8 creates `Episode_N/scene_materials/<scene_id>/` with `AGENTS.md`, a copied brief,
+byte-preserved `scene_skeleton.md`, immutable public `scene_template.md`, and the
+version-2 context index below. The template contains one Markdown scene heading,
+established opening directions, canonical beat markers and neutral speech placeholders.
+It has no front matter, act heading or boundary lines. The episode's `script.md`
+contains front matter and acts once, and a unique bounded region for every scene.
+Phase-8 readiness requires the selected region to equal its scene template exactly;
+other scenes may be blank, prepared or performed. Preserve other regions and never
+automatically overwrite a differing region or append a duplicate scene ID.
 
 9 is an omniscient director's roundtable. Python selects one native session per
-participant, queues observations, validates role outputs, and writes the script.
+participant, queues observations, validates role outputs, and replaces only the selected region in the episode manuscript.
 Characters choose physical action, dialogue, or deliberate silence. The director
 receives every character's authored fictional inner monologue and outer response;
 other characters receive only eligible external observations. Phase 10 remains
-the separately triggered editorial revision stage.
+the separately triggered editorial revision stage, editing episode regions while preserving canonical beat traceability.
 
 ## Phase 7 brief contract
 
@@ -97,13 +107,14 @@ repeated markers are rejected before participant sessions are allocated.
 
 ## Phase 8 context index
 
-Each scene directory contains `performance_context.json`:
+Each real `scene_materials/<scene_id>/` directory contains `performance_context.json`:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "issue": 42,
   "scene_id": "locked-room",
+  "manuscript_path": "Script/Season_01/Episode_01/script.md",
   "required_moment_ids": ["BEAT 1"],
   "sources": {
     "bible": ["bible/characters.md", "bible/world_rules.md"],
@@ -114,7 +125,8 @@ Each scene directory contains `performance_context.json`:
   },
   "characters": {
     "alice": {
-      "persona_paths": ["bible/characters/alice/personality.md", "bible/characters/alice/secrets.md"],
+      "display_name": "Alice",
+      "persona_paths": ["bible/characters/alice/objective.md", "bible/characters/alice/hidden_objective.md"],
       "known_context": "Own established knowledge and perceived starting situation",
       "private_context": "Own secret, immediate objective, emotion, stakes and constraints"
     }
@@ -124,9 +136,46 @@ Each scene directory contains `performance_context.json`:
 
 Index sources and scene/moment/cast identifiers must agree with the brief.
 `AGENTS.md` must identify every indexed source path. Include all relevant persona
-assets, not just the two shown. Actor bootstraps contain their own persona and
+assets, not just the two shown. The runtime always loads all seven dimensions:
+`objective.md`, `hidden_objective.md`, `conflict_with_others.md`,
+`conflict_with_self.md`, `conflict_with_environment.md`, `line_of_thought.md`, and
+`line_of_images.md`. Each `display_name` is established, nonempty single-line text;
+stable folder IDs still drive sessions and actor access boundaries. Actor bootstraps contain their own persona and
 starting context only; future private situations from unperformed moments are not
 injected as memories. The director gets the full brief and all indexed sources.
+
+The manuscript path is checkout-relative, remains inside the checkout after resolving
+symlinks, and names `script.md` in the same episode that owns `scene_materials`.
+It is mutable output and must never appear in immutable source roles. Templates
+under any `season_template` directory are excluded from discovery and explicit
+selection. `--scene` continues to select a preparation-directory path.
+
+Scene IDs use only `[A-Za-z0-9_-]+`. The manuscript wraps each scene body with unique,
+balanced, non-nested complete marker lines outside fenced examples:
+
+```markdown
+<!-- SCENE locked-room BEGIN -->
+### SCENE 1 — ROOM
+
+<!-- RESOLVES [BEAT 1] -->
+**ALICE**\
+I heard the lock. *(listens)* Did you?
+
+> *(BOB: deliberate silence.)*
+<!-- SCENE locked-room END -->
+```
+
+Speaker cues use uppercase display names and a hard line break immediately before
+speech. Speech has no renderer-added quotation marks; intentionally quoted words
+and inline `*(parenthetical)*` directions remain. Public actions, stage events and
+silence become blockquoted italic parentheticals. Established CAMERA/LIGHTING/AUDIO
+cues become labeled directions in their own moments; transitions close those moments.
+No production cue is invented. Private direction, inner monologues, objectives,
+subtext and raw skeleton tags do not enter the manuscript. Public plain text is
+escaped against Markdown/HTML structure; reserved scene/beat markers and unresolved
+placeholders are rejected. Canonical beat markers appear once in order.
+
+See the [complete neutral manuscript template](../examples/creative-project/Script/README.md).
 
 ## Recovery and boundaries
 
@@ -136,9 +185,13 @@ responses live under this engine's ignored
 Codex maintains its own conversation history in its normal location. A run lock
 serializes calls and delivery. Explicit resumption checks source/config identity.
 
+The existing script hash guards cover the whole episode manuscript; external edits
+to any region during an unfinished run require reconciliation. Perform scenes
+sequentially; this change adds no concurrent episode-write protocol.
+
 Scene inputs are checked against the original snapshot again after role calls,
 before rendering. Delivery rechecks that input fingerprint and the accepted
-rendered script in the actual delivery checkout after preparation and upstream
+rendered episode manuscript in the actual delivery checkout after preparation and upstream
 merges, before staging, committing, or pushing. Changed material stops delivery
 and leaves its journal pending for reconciliation; comments and phase advancement
 remain inside the same run lock.
@@ -170,6 +223,23 @@ verbatim recall. Cross-scene continuity comes from artifacts, not reused actors.
 Validation for phases 7–9 checks artifacts, identifiers, explicit completion and
 performed moment coverage. It does not use npm tests. Phases 5–6 and 10 retain
 their existing validation contract; changing those is separate work.
+
+## Migration
+
+Version-1 scene handoffs are rejected with a version-2 preparation instruction.
+Editorially redistribute existing appearance, personality, interior voice, wants,
+fears, secrets and lexicon material into the seven dimensions; semantically different
+sheets must not be blindly renamed. This requires preserving established character
+meaning, voice and imagery, not just satisfying filenames.
+
+Instantiate the neutral episode scaffold with real numbers outside `season_template`.
+Preserve the full canonical beat definitions and ordered IDs. Prepare fresh version-2
+scene materials with established display names, an immutable Markdown scene template,
+an explicit episode manuscript destination and unique destination boundaries. Do not
+copy story content from the reference template or fabricate a ready handoff. An empty
+or placeholder manuscript is not ready for automated performance. Historical run and
+performance migration is outside this change; existing private checkpoints are not
+rewritten or automatically replayed.
 
 ## Verification
 

@@ -12,7 +12,10 @@ SDLC providers/defaults are unchanged.
 - Phases 7/8 prepare dramatic action and preserve performance materials; phase 9 is
   the director's roundtable, not validation-only. Phase 10 remains separate revision.
 - `codex_runner.py` owns native CLI calls; ordinary phases always start fresh.
-- `scene_materials.py` validates the phase-7 brief and phase-8 context index.
+- `scene_materials.py` validates the phase-7 brief and version-2 phase-8 context index.
+- One episode `script.md` contains every scene and beat; scene-scoped preparation
+  lives in `scene_materials/<scene_id>/`. `manuscript.py` locates bounded regions
+  and `play_format.py` renders public Markdown without private actor fields.
 - `roundtable.py` owns separate persistent director/character sessions for a specific
   scene/run, observation routing, checkpoints, completion and guarded delivery.
 - Director receives all fictional inner monologues; actors receive only own context

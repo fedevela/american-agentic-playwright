@@ -74,7 +74,7 @@ def delivery_boundary(tmp_path, monkeypatch):
             if boundary.change:
                 boundary.change(boundary.merges, Path(cwd))
         elif operation == "status":
-            output = " M SEASON_1/SHORT_1/script.md\n"
+            output = " M Script/Season_01/Episode_01/script.md\n"
         elif operation == "rev-parse":
             output = "abc123\n"
         elif operation == "ls-remote":
@@ -82,7 +82,7 @@ def delivery_boundary(tmp_path, monkeypatch):
         elif operation == "gh pr list":
             output = '[{"number": 42, "title": "Story", "url": "https://github.com/owner/story/pull/42"}]'
         elif operation == "show":
-            output = "SEASON_1/SHORT_1/script.md\n"
+            output = "Script/Season_01/Episode_01/script.md\n"
         elif operation not in {"fetch", "add", "commit", "push"}:
             pytest.fail(f"Unexpected external command: {command}")
         return subprocess.CompletedProcess(command, 0, output, "")
@@ -98,15 +98,16 @@ def delivery_boundary(tmp_path, monkeypatch):
     return boundary
 
 
-@pytest.mark.parametrize("changed_file", ["continuity.md", "SEASON_1/SHORT_1/script.md"])
+@pytest.mark.parametrize("changed_file", ["continuity.md", "Script/Season_01/Episode_01/script.md"])
 @pytest.mark.parametrize("merge_number", [2, 3])
 def test_phase9_merge_changes_abort_before_staging_and_leave_delivery_pending(delivery_boundary, changed_file, merge_number):
     boundary = delivery_boundary
     def merge_change(count, checkout):
         if count == merge_number:
-            (checkout / changed_file).write_text("Upstream changed accepted material")
+            path = checkout / changed_file
+            path.write_text(path.read_text() + "\nUpstream changed accepted material")
     boundary.change = merge_change
-    with pytest.raises(ValueError, match="fingerprint.*changed|script.*changed"):
+    with pytest.raises(ValueError, match="fingerprint.*changed|script.*changed|Expected one scene handoff"):
         router.execute_malkhut_performance_phase(request())
     assert boundary.merges == 3
     assert not {"add", "commit", "push", "comment", "advance"}.intersection(boundary.events)
@@ -151,17 +152,20 @@ def test_phase9_guard_uses_actual_delivery_checkout_and_scene_identity(delivery_
             if change == "source":
                 (checkout / "continuity.md").write_text("Changed in actual delivery checkout")
             elif change == "script":
-                (checkout / "SEASON_1/SHORT_1/script.md").write_text("Changed in actual delivery checkout")
+                path = checkout / "Script/Season_01/Episode_01/script.md"
+                path.write_text(path.read_text() + "\nChanged in actual delivery checkout")
             elif change == "scene-id":
                 for name in ("performance_context.json", "dramatic_action_brief.md"):
-                    path = checkout / "SEASON_1/SHORT_1" / name
+                    path = checkout / "Script/Season_01/Episode_01/scene_materials/locked-room" / name
                     path.write_text(path.read_text().replace("locked-room", "another-scene"))
+                scene_dir = checkout / "Script/Season_01/Episode_01/scene_materials/locked-room"
+                scene_dir.rename(scene_dir.with_name("another-scene"))
     boundary.change = merge_into_actual_checkout
     if change is None:
         router.execute_malkhut_performance_phase(request())
         assert boundary.events[-2:] == ["comment", "advance"]
     else:
-        with pytest.raises(ValueError, match="fingerprint.*changed|script.*changed"):
+        with pytest.raises(ValueError, match="fingerprint.*changed|script.*changed|Expected one scene handoff"):
             router.execute_malkhut_performance_phase(request())
         assert not {"add", "commit", "push", "comment", "advance"}.intersection(boundary.events)
     assert boundary.merges == 3

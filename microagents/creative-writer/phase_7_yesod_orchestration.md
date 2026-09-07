@@ -26,6 +26,8 @@ prior-phase issue comments as source files when no file exists.
 Use nonempty descriptions, including explicit 'none established' where appropriate.
 Do not treat speculative interpretation as established fact.
 
+Keep preparation scene-scoped and preserve full canonical beat definitions. The eventual destination is one bounded scene region inside the episode’s script.md; all beats remain within that manuscript, without beat folders or separate scene manuscripts.
+
 YOUR NARRATIVE PRODUCTS
 dramatic_action_brief.md covering stimuli, knowledge, wants, concealment and possible
 actions for all participants. The source skeleton remains unchanged.

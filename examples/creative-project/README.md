@@ -8,30 +8,23 @@ no characters, plot, or performance-ready scene materials yet.
 creative-project/
 ├── AGENTS.md
 ├── bible/
-│   ├── README.md
-│   ├── project.md
-│   ├── characters.md
-│   ├── dramatic_arcs.md
-│   ├── world_rules.md
-│   ├── theme.md
-│   ├── relationships.drawio
-│   └── characters/
-│       └── character_id/
-│           ├── appearance.md
-│           ├── personality.md
-│           ├── interiorvoice.md
-│           ├── wants.md
-│           ├── fears.md
-│           ├── secrets.md
-│           └── lexicon.md
+│   ├── README.md, project.md, characters.md, dramatic_arcs.md
+│   ├── world_rules.md, theme.md, relationships.drawio
+│   └── characters/character_id/
+│       ├── objective.md
+│       ├── hidden_objective.md
+│       ├── conflict_with_others.md
+│       ├── conflict_with_self.md
+│       ├── conflict_with_environment.md
+│       ├── line_of_thought.md
+│       └── line_of_images.md
 └── Script/
-    └── Season_01/
+    ├── README.md
+    └── season_template/Season_N/
         ├── README.md
-        └── Episode_01/
+        └── Episode_N/
             ├── README.md
-            └── Scene_01/
-                └── Beat_01/
-                    └── .gitkeep
+            └── script.md
 ```
 
 Copy this directory's contents into a story repository. Read the
@@ -40,17 +33,15 @@ with the human partner's established material before starting generation.
 Rename `character_id` to a stable character ID and repeat its seven-file profile
 for each character. Introduce those IDs in the cast overview.
 
-The numbered Script branch demonstrates the hierarchy. Add seasons, episodes,
-scenes, and beats as needed, retaining the same naming convention. The empty
-`.gitkeep` preserves the leaf and its ancestor directories in Git; it carries no
-story content and may be removed once the beat contains real material.
+Instantiate the neutral `season_template` outside that directory with real season
+and episode numbers. Each episode has one Markdown `script.md` containing all acts,
+scenes and beats. Follow the [manuscript format](Script/README.md).
 
-Treatments, skeletons, and performed scripts belong outside the bible. During
-preparation, each scene receives its own `AGENTS.md`, `dramatic_action_brief.md`,
-`performance_context.json`, `scene_skeleton.md`, and initial `script.md`. These are
-generated when real scene material is available. Beat folders organize material;
-they do not replace canonical beat IDs or runtime handoff files. The runtime
-locates scenes by their handoff files, not by this directory naming convention.
+Treatments and performance preparation belong outside the bible. Real scene inputs
+live under `Episode_N/scene_materials/<scene_id>/`: `AGENTS.md`,
+`dramatic_action_brief.md`, `performance_context.json`, `scene_skeleton.md`, and
+`scene_template.md`. The preserved skeleton and public scene template are immutable
+preparation, not additional manuscripts. No ready-to-run handoff is supplied here.
 
 File presence alone does not make an empty bible sufficient for writing. The
 human partner must supply its canon, and scene preparation must complete before
@@ -60,10 +51,9 @@ performance can begin.
 
 The Markdown templates provide empty sections for project identity, audience,
 format, world, themes and aesthetics, cast profiles, and dramatic arcs. The
-[season outline](Script/Season_01/README.md) holds the season synopsis and episode
-index; the [episode outline](Script/Season_01/Episode_01/README.md) holds its synopsis,
-character progression, and narrative turns. Scene and beat folders remain empty
-until actual dramatic material is available.
+[season outline](Script/season_template/Season_N/README.md) holds the season synopsis and episode
+index; the [episode outline](Script/season_template/Season_N/Episode_N/README.md) holds its synopsis,
+character progression, and narrative turns. Its scene index links directly to headings in the episode manuscript.
 
 The section coverage draws on `prompt_biblia_cicatriz_perfecta.txt`, a user-provided
 season-bible prompt. Only its organizational requirements were used; no story facts

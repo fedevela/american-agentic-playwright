@@ -22,6 +22,8 @@
 
 ## Episode Index
 
+- [Episode N outline](Episode_N/README.md) — [manuscript](Episode_N/script.md)
+
 ## Episode Count and Duration — References to Project Specifications
 
 ## Sources and Open Questions
