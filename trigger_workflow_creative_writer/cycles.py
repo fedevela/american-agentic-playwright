@@ -1,7 +1,6 @@
 """Issue-backed exploration cycles and attributed recursive scene assignments."""
 from __future__ import annotations
 
-import base64
 from copy import deepcopy
 import json
 import re
@@ -9,29 +8,50 @@ from uuid import uuid4
 
 from .validation import SCOPES, require, validate_result, validate_element
 
-RECORD = re.compile(r'<!-- creative-record:([A-Za-z0-9_=-]+) -->')
+from . import story_records
+
 PHASES = ('1','2A','2B','2C','3','4')
 
 
 def encode_record(record: dict) -> str:
-    data = json.dumps(record, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
-    return '<!-- creative-record:' + base64.urlsafe_b64encode(data).decode() + ' -->'
+    return story_records.render(record)
 
 
-def decode_records(body: str) -> list[dict]:
-    records = []
-    for match in RECORD.finditer(body):
-        try:
-            value = json.loads(base64.urlsafe_b64decode(match.group(1)).decode())
-        except (ValueError, UnicodeError) as exc:
-            raise SystemExit('Malformed creative record; reconcile before continuing') from exc
-        require(isinstance(value, dict) and value.get('version') == 1, 'unsupported creative record version')
-        records.append(value)
-    return records
+def decode_records(body: str, *, location: dict | None = None) -> list[dict]:
+    return story_records.read(body, location=location)
 
 
 def issue_records(issue_data: dict) -> list[dict]:
-    return [r for comment in issue_data.get('comments', []) for r in decode_records(str(comment.get('body') or ''))]
+    result = []
+    active = None
+    for comment in issue_data.get('comments', []):
+        location = None
+        if issue_data.get('_repo') and type(comment.get('id')) is int:
+            location = {'repo': issue_data['_repo'], 'issue': issue_data['number'], 'comment': comment['id']}
+        for record in decode_records(str(comment.get('body') or ''), location=location):
+            if record['kind'] == 'cycle':
+                active = record
+            elif record['kind'] == 'result' and 'cycle_id' not in record:
+                record.setdefault('scope', issue_scope(issue_data))
+                if record.get('phase') == '1':
+                    # The Keter comment starts the run. Reuse its existing anchor
+                    # namespace for validators; no separate cycle record is stored.
+                    anchors = record.get('anchors', [])
+                    namespace = anchors[0]['id'].split(':', 1)[0] if anchors else f"comment-{comment['id']}"
+                    active = {'kind': 'cycle', 'cycle_id': namespace, 'scope': record['scope']}
+                    result.append(active)
+                require(active is not None, 'phase output has no preceding Keter comment')
+                record['cycle_id'] = active['cycle_id']
+            result.append(record)
+            if record['kind'] == 'result' and record.get('outcome') == 'develop':
+                # The development direction already lives in this result. Its
+                # GitHub comment provides a stable restart boundary on retries.
+                active = {'kind': 'cycle', 'cycle_id': f"comment-{comment['id']}-next",
+                          'scope': record['scope'], 'prior_cycle': record['cycle_id'],
+                          'development_question': record['development_question'],
+                          'return_reason': record['return_reason']}
+                result.append(active)
+    return result
 
 
 def issue_scope(issue_data: dict) -> str:
@@ -55,6 +75,8 @@ def bind_issue(issue_data: dict, repo: str, number: int) -> None:
     require(issue_data.get('number', number) == number, 'fetched issue number differs from requested issue')
     require(issue_data.get('_repo', repo) == repo, 'fetched repository differs from requested repository')
     issue_data.update(number=number, _repo=repo)
+    from .github_ops import ensure_story_source_root
+    ensure_story_source_root(repo, number)
 
 
 def check_issue_reference(record: dict, issue_data: dict) -> None:
@@ -82,20 +104,11 @@ def current_cycle(issue_data: dict) -> dict | None:
 
 def new_cycle(issue_data: dict, *, development: dict | None = None) -> dict:
     if development:
-        development = deepcopy(development)
-        work = development.get('prior_work', {})
-        if '3' in work:
-            sources = work['3']['anchors']
-        elif any(p in work for p in ('2A','2B','2C')):
-            sources = [a for p in ('2A','2B','2C') for a in work.get(p,{}).get('artifacts',[])]
-        else:
-            sources = work.get('1',{}).get('anchors',[])
-        prior = source_context(issue_data)
-        development['sources'] = deepcopy(sources or prior['anchors'])
-        development['ancestry'] = prior['ancestry'] + [deepcopy(a) for r in work.values() for a in r.get('anchors',[]) + r.get('artifacts',[])]
-        development['canon_refs'] = sorted({c for r in work.values() for c in r.get('canon_refs',[])} | set(prior['canon_refs']))
-    result = {'kind':'cycle','version':1,'cycle_id':str(uuid4()),'scope':issue_scope(issue_data),
-              'development':development}
+        development = {'prior_cycle': development['prior_result']['cycle_id'],
+                       'development_question': development['development_question'],
+                       'return_reason': development['return_reason']}
+    result = {'kind':'cycle','version':1,'cycle_id':uuid4().hex[:12],'scope':issue_scope(issue_data),
+              **(development or {})}
     owner = issue_reference(issue_data)
     if owner is not None:
         result['issue_ref'] = owner
@@ -106,12 +119,20 @@ def new_cycle(issue_data: dict, *, development: dict | None = None) -> dict:
 
 def source_context(issue_data: dict) -> dict:
     cycle = current_cycle(issue_data)
-    development = cycle.get('development') if cycle else None
-    if development:
-        return {'anchors':development.get('sources',[]), 'ancestry':development.get('ancestry',[]),
-                'canon_refs':development.get('canon_refs',[])}
+    if cycle and cycle.get('prior_cycle'):
+        prior = [r for r in issue_records(issue_data) if r.get('kind') == 'result'
+                 and r.get('cycle_id') == cycle['prior_cycle'] and r.get('outcome') == 'complete']
+        sources = next((r['anchors'] for r in reversed(prior) if r.get('phase') == '3'), None)
+        if sources is None:
+            sources = [a for r in prior if r.get('phase') in {'2A', '2B', '2C'} for a in r.get('artifacts', [])]
+        if not sources:
+            sources = next((r['anchors'] for r in reversed(prior) if r.get('phase') == '1'), [])
+        if sources:
+            return {'anchors': sources}
+        # A development return before any completed local phase still inherits
+        # the assigned parent event; restarting must not erase that source.
     inherited = inherited_assignment(issue_data)
-    return inherited or {'anchors':[], 'ancestry':[], 'canon_refs':[]}
+    return inherited or {'anchors': []}
 
 
 def current_result(issue_data: dict, phase: str) -> dict | None:
@@ -126,112 +147,108 @@ def current_result(issue_data: dict, phase: str) -> dict | None:
     return result
 
 
+def assignment_reference(body: str) -> dict | None:
+    links = re.findall(r'\[Parent assignment\]\(https://github\.com/([^/]+/[^/]+)/issues/(\d+)\?element=([A-Za-z0-9_.:-]+)#issuecomment-(\d+)\)', body)
+    require(len(links) <= 1, 'ambiguous parent assignment link')
+    if not links:
+        return None
+    repo, parent, element, comment = links[0]
+    return {'parent_issue': int(parent), 'source_comment': int(comment),
+            'element_id': element, '_repo': repo}
+
+
+def assignment_keys(body: str) -> list[str]:
+    reference = assignment_reference(body)
+    if reference:
+        return [f"{reference['parent_issue']}:{reference['element_id']}"]
+    return re.findall(r'^Assignment key: ([A-Za-z0-9_.:-]+)$', body, re.MULTILINE)
+
+
 def inherited_assignment(issue_data: dict) -> dict | None:
     records = [r for r in decode_records(str(issue_data.get('body') or '')) if r.get('kind') == 'assignment']
     require(len(records) <= 1, 'ambiguous recursive assignment')
-    if not records:
+    link = assignment_reference(str(issue_data.get('body') or ''))
+    if not records and link is None:
         return None
-    assignment = validate_assignment(records[0])
-    require(issue_scope(issue_data) == assignment['element']['scope'], 'child size label differs from accepted assignment scope')
-    parent = assignment.get('parent_ref')
-    if parent and issue_data.get('_repo') is not None:
-        require(parent['repo'] == issue_data['_repo'], 'recursive assignment belongs to another repository')
-        require(parent['number'] != issue_data.get('number'), 'issue cannot own its own recursive assignment')
-    return assignment
+    assignment = link or records[0]
+    if link:
+        require(link['_repo'].lower() == str(issue_data.get('_repo', '')).lower(),
+                'parent assignment must belong to this repository')
+    from .github_ops import fetch_assignment_source
+    parent_data = fetch_assignment_source(issue_data, assignment['parent_issue'])
+    all_results = [r for r in issue_records(parent_data) if r.get('kind') == 'result']
+    deliveries = [r for r in all_results if r.get('phase') == '4'
+                  and r.get('_source', {}).get('comment') == assignment['source_comment']]
+    require(len(deliveries) == 1, 'parent assignment source is missing or ambiguous')
+    assignment['cycle_id'] = deliveries[0]['cycle_id']
+    results = [r for r in all_results if r.get('cycle_id') == assignment['cycle_id']]
+    synthesis = next((r for r in reversed(results) if r.get('phase') == '3' and r.get('outcome') == 'complete'), None)
+    delivery = next((r for r in reversed(results) if r.get('phase') == '4' and r.get('outcome') == 'complete'
+                     and r.get('_source', {}).get('comment') == assignment['source_comment']), None)
+    require(synthesis is not None and delivery is not None, 'assignment source is missing; inspect the parent issue')
+    matches = [e for e in synthesis.get('elements', []) if e['id'] == assignment['element_id']]
+    outlines = [a for a in delivery.get('assignments', []) if a['element_id'] == assignment['element_id']]
+    require(len(matches) == len(outlines) == 1, 'assignment element is missing or ambiguous in parent issue')
+    element = deepcopy(matches[0])
+    element['outline'] = outlines[0]['outline']
+    element['scope'] = outlines[0].get('scope', element['scope'])
+    require(issue_scope(issue_data) == element['scope'], 'child size differs from its parent element')
+    selected = {b.get('pivotal_beat_id') for b in element.get('beats', []) if b.get('is_pivotal')}
+    anchors = []
+    for original in synthesis['anchors']:
+        beats = [b for b in original.get('pivotal_beats', []) if b['id'] in selected]
+        if beats:
+            anchor = deepcopy(original)
+            anchor['pivotal_beats'] = deepcopy(beats)
+            anchors.append(anchor)
+    assignment.update(element=element, anchors=anchors)
+    assignment.update(scope=element['scope'], readiness=element['readiness'])
+    return validate_assignment(assignment)
 
 
 def accepted_results(issue_data: dict) -> dict:
     cycle = current_cycle(issue_data)
     if not cycle:
         return {}
-    inherited = source_context(issue_data)
-    sources = inherited['anchors']
     accepted = {}
     for phase in PHASES:
         result = current_result(issue_data, phase)
-        if result:
-            check_issue_reference(result, issue_data)
         if result and result.get('outcome') == 'complete':
-            if phase == '1':
-                require(set(inherited['canon_refs']) <= set(result.get('canon_refs', [])), 'inherited canon references must be preserved')
-            accepted[phase] = validate_result(result, phase=phase, cycle_id=cycle['cycle_id'], scope=cycle['scope'],
-                                               accepted=accepted, inherited=sources)
-            owner = issue_reference(issue_data)
-            if owner is not None:
-                accepted[phase]['issue_ref'] = owner
+            # Published prose is the working material. Do not replay historical
+            # validations or reconstruct a provenance graph at every tick.
+            result['issue_ref'] = issue_reference(issue_data)
             if issue_data.get('_season_ref') is not None:
-                accepted[phase]['season_ref'] = deepcopy(issue_data['_season_ref'])
+                result['season_ref'] = deepcopy(issue_data['_season_ref'])
+            if phase != '1' and '1' in accepted:
+                result['reference_prefix'] = accepted['1'].get('reference_prefix')
+            if phase == '4':
+                require('3' in accepted, 'Tiferet needs visible Gevurah elements')
+                result['anchors'] = deepcopy(accepted['3']['anchors'])
+                result['elements'] = deepcopy(accepted['3']['elements'])
+                outlines = {a['element_id']: a['outline'] for a in result.get('assignments', [])}
+                require(list(outlines) == [e['id'] for e in result['elements']], 'Tiferet assignments differ from visible elements')
+                for element in result['elements']:
+                    element['outline'] = outlines[element['id']]
+                    assignment = next(a for a in result['assignments'] if a['element_id'] == element['id'])
+                    element['scope'] = assignment.get('scope', element['scope'])
+            accepted[phase] = result
     return accepted
 
 
-def partner_replies(issue_data: dict, phase: str) -> list[dict]:
-    latest = current_result(issue_data, phase)
-    if not latest or latest.get('outcome') != 'question':
-        return []
-    after = False
-    replies = []
-    for comment in issue_data.get('comments', []):
-        body = str(comment.get('body') or '')
-        records = decode_records(body)
-        if latest in records:
-            after = True
-            replies = []
-            continue
-        author = comment.get('author') or {}
-        login = str(author.get('login') or '')
-        if after and body.strip() and not records and '<!-- phase:' not in body and login and not login.endswith('[bot]') and author.get('type') != 'Bot':
-            replies.append({'author':login, 'body':body, 'url':comment.get('url','')})
-    return replies
-
-
-def waiting_for_partner(issue_data: dict, phase: str) -> bool:
-    result = current_result(issue_data, phase)
-    return bool(result and result.get('outcome') == 'question' and not partner_replies(issue_data, phase))
-
-
-def prompt_context(issue_data: dict, phase: str) -> dict:
-    cycle = current_cycle(issue_data)
-    if cycle is None:
-        require(phase == '1', 'legacy work requires a new Keter cycle before exploration or scene preparation')
-        cycle = {'cycle_id':'preview-cycle','scope':issue_scope(issue_data)}
-    accepted = accepted_results(issue_data)
-    context = {'cycle_id':cycle['cycle_id'],'scope':cycle['scope']}
-    owner = issue_reference(issue_data)
-    if owner is not None:
-        context['issue_ref'] = owner
-    if phase in {'2A','2B','2C'}:
-        require('1' in accepted, 'current accepted Keter brief is required; restart through Keter')
-        context['keter'] = accepted['1']
-    else:
-        # History stays explicitly attributed and separate from the accepted current inputs.
-        context['history'] = [{'author':(c.get('author') or {}).get('login','unknown'),
-                               'body': c.get('body','')} for c in issue_data.get('comments', [])
-                              if not any(r.get('cycle_id') == cycle['cycle_id'] for r in decode_records(str(c.get('body') or '')))]
-        if phase == '1':
-            context.update(intention={'title':issue_data.get('title',''),'body':issue_data.get('body','')},
-                           inherited=inherited_assignment(issue_data), development=cycle.get('development'),
-                           source_material=source_context(issue_data))
-        elif phase == '3':
-            require(all(p in accepted for p in ('1','2A','2B','2C')), 'Gevurah requires Keter and all three current explorations')
-            context.update(keter=accepted['1'], explorations={p:accepted[p] for p in ('2A','2B','2C')})
-        elif phase == '4':
-            require('3' in accepted, 'Tiferet requires the accepted current Gevurah synthesis; restart through Keter')
-            context['synthesis'] = accepted['3']
-    latest = current_result(issue_data, phase)
-    if latest and latest.get('outcome') == 'question':
-        context.update(prior_attempt=latest, partner_replies=partner_replies(issue_data, phase))
-    return context
-
-
 REFERENCE_ID = re.compile(r'([A-Za-z0-9_-]+):(?:(1|2A|2B|2C|3):a([1-9][0-9]*)|e([1-9][0-9]*)(?::b([1-9][0-9]*))?)')
+PIVOTAL_REFERENCE_ID = re.compile(r'(?<![A-Za-z0-9_-])BEAT-([A-Za-z0-9_-]+)-(1|2A|2B|2C|3)-([1-9][0-9]*)(?![A-Za-z0-9_-])')
 REFERENCE_PHASES = {'1': 'K', '2A': 'CH', '2B': 'B', '2C': 'C', '3': 'G'}
 
 
 def public_reference_map(result: dict, ancestry: list | None = None) -> dict[str, str]:
-    """Local display aliases; encoded canonical identities remain authoritative."""
+    """Compact display labels link to canonical identifiers in visible Markdown."""
+    from .beat_ids import is_readable
     prefix = (result.get('reference_prefix') or {}).get('code', 'Reference')
-    matches = list(REFERENCE_ID.finditer(json.dumps([result, ancestry or []], ensure_ascii=False)))
-    earlier = sorted({m[1] for m in matches} - {result['cycle_id']})
+    serialized = json.dumps([result, ancestry or []], ensure_ascii=False)
+    matches = list(REFERENCE_ID.finditer(serialized))
+    pivotal_matches = [match for match in PIVOTAL_REFERENCE_ID.finditer(serialized)
+                       if not is_readable(match[0])]
+    earlier = sorted({m[1] for m in matches + pivotal_matches} - {result['cycle_id']})
     labels = {result['cycle_id']: prefix}
     labels.update({identity: f'{prefix}-H{index}' for index, identity in enumerate(earlier, 1)})
     aliases = {}
@@ -240,6 +257,9 @@ def public_reference_map(result: dict, ancestry: list | None = None) -> dict[str
         if match[5]:
             suffix += '-B' + match[5]
         aliases[match[0]] = labels[match[1]] + '-' + suffix
+    for match in pivotal_matches:
+        history = f'H{earlier.index(match[1]) + 1}-' if match[1] != result['cycle_id'] else ''
+        aliases[match[0]] = f'BEAT-{history}{REFERENCE_PHASES[match[2]]}{match[3]}'
     # Also hide bare internal exploration identities in model-authored prose.
     aliases.update({identity: f'{label} exploration' for identity, label in labels.items()})
     return aliases
@@ -259,134 +279,69 @@ def display_scope(scope: str) -> str:
 
 def render_result(result: dict, *, reference_map: dict[str, str] | None = None, issue_label: str = "Issue") -> str:
     aliases = reference_map if reference_map is not None else public_reference_map(result)
-    prefix = result.get('reference_prefix')
-    lines = [result['narrative'], '', f"Exploration: {display_scope(result['scope'])} · {result['outcome']}"]
-    if result.get('issue_ref'):
-        owner = result['issue_ref']
-        lines += [f"{issue_label}: {owner['repo']}#{owner['number']} · {display_scope(owner['scope'])}"]
-    if prefix:
-        lines += [f"Reference prefix: {prefix['code']} — {prefix['meaning']}"]
-    if any(re.search(r'-H[0-9]+-', alias) for alias in aliases.values()):
-        lines += ['Earlier exploration references: H1, H2, … distinguish earlier explorations locally in this comment.']
-    for key in ('axes',):
-        for name, content in result.get(key, {}).items():
-            lines += ['', f'**{name.replace("_"," ").capitalize()}**', content]
-    if result.get('elements'):
-        lines += ['', '### Elements for issue creation', '', 'E means element. Each accepted element becomes one issue.']
-    for item in result.get('elements', []):
-        lines += ['', f"#### {item['id']}: {item['title']} · {display_scope(item['scope'])} · {item['readiness']}",
-                  item['content']]
-        if item['source_refs']:
-            lines.append('Source anchors: ' + ', '.join(item['source_refs']))
-        lines.append(item.get('outline',''))
-        for beat in item.get('beats') or []:
-            lines += [f"- {beat['id']}: {beat['content']}", '  Beat references: ' + ', '.join(beat['source_refs'])]
-        if item.get('development_question'):
-            lines += ['Development question: ' + item['development_question'], 'Return reason: ' + item['return_reason']]
-    supporting = result.get('phase') in {'3', '4'} and bool(result.get('anchors'))
-    if supporting:
-        lines += ['', '<details>', '<summary>Supporting dramatic anchors</summary>', '', 'G identifies a supporting Gevurah anchor.']
-    for item in result.get('anchors', []) + result.get('artifacts', []):
-        scope = f" · {display_scope(item['scope'])}" if 'scope' in item else ''
-        lines += ['', f"#### {item['id']}{scope}", item['content']]
-        if item['source_refs']:
-            lines.append('Source anchors: ' + ', '.join(item['source_refs']))
-    if supporting:
-        lines += ['', '</details>', '']
-    if result.get('development_question'):
-        lines += ['Development question: ' + result['development_question'], 'Return reason: ' + result['return_reason']]
-    lines += ['', *[f'Question for the partner: {q}' for q in result.get('questions',[])], '']
-    return readable_references('\n'.join(lines), aliases) + '\n' + encode_record(result)
+    wire = deepcopy(result)
+    if wire.get('phase') == '4' and wire.get('outcome') == 'complete':
+        wire.pop('anchors', None)
+        wire.pop('elements', None)
+    return story_records.render(wire, aliases)
+
+
+def child_description(element: dict) -> str:
+    """Describe the assigned story work before the routing record."""
+    lines = [f"## {element['title']}", '', element['content'], '',
+             '### Story outline', '', element['outline'], '', '### Assigned beats', '']
+    for number, beat in enumerate(element['beats'], 1):
+        pivotal = f" **Pivotal — {beat['pivotal_beat_id']}.**" if beat['is_pivotal'] else ''
+        lines.extend([f"{number}.{pivotal} {beat['content']}", ''])
+    for field, heading in (('development_question', 'Question to develop'),
+                           ('return_reason', 'Why further development is needed')):
+        if element.get(field):
+            lines.extend([f'### {heading}', '', element[field], ''])
+    return '\n'.join(lines)
 
 
 def child_assignments(result: dict, *, parent_issue: int, accepted: dict, inherited: dict | None = None) -> list[dict]:
     require(result.get('phase') == '4' and result.get('outcome') == 'complete', 'only accepted Tiferet creates assignments')
-    owner = result.get('issue_ref')
-    if owner is not None:
-        require(owner.get('number') == parent_issue and owner.get('scope') == result['scope'], 'parent issue differs from accepted result owner')
-    ancestry = deepcopy(inherited.get('ancestry', []) if inherited else [])
-    ancestry += [deepcopy(a) for r in accepted.values() for a in r.get('anchors',[]) + r.get('artifacts',[])]
-    aliases = public_reference_map(result, ancestry)
     children = []
+    locator = story_records.source(result)
     for element in result['elements']:
-        assignment = {'kind':'assignment', 'version':1, 'cycle_id':result['cycle_id'], 'parent_issue':parent_issue,
-                      'element':deepcopy(element), 'anchors':[deepcopy(a) for a in result['anchors'] if a['id'] in element['source_refs']],
-                      'canon_refs':result['canon_refs'], 'ancestry':ancestry,
-                      'accepted':deepcopy({**accepted,'4':result}), 'inherited':deepcopy(inherited['anchors'] if inherited else [])}
-        season = result.get('season_ref') or (inherited or {}).get('season_ref')
-        if season is not None:
-            assignment['season_ref'] = deepcopy(season)
-        if owner is not None:
-            assignment['parent_ref'] = deepcopy(owner)
-        public = render_result({**result,'anchors':assignment['anchors'],'elements':[element]}, reference_map=aliases, issue_label='Source issue')
-        public = f"Assignment scope: {display_scope(element['scope'])} · {element['readiness']}\n\n" + public
-        # Body contains one assignment record; phase results belong to comments on their source issue.
-        public = public.rsplit('\n',1)[0]
-        placement = element.get('placement')
-        if placement:
-            public += f"\nEpisode manuscript: `{placement['episode']}/script.md`\nAct: {placement['act']}\nScene: {placement['scene_id']}"
-        public += '\nAncestry: ' + ', '.join(aliases.get(a['id'], a['id']) for a in ancestry)
-        public += '\nCanon references: ' + ', '.join(result['canon_refs'])
-        children.append({'title':element['title'],'body':public + '\n\n' + encode_record(assignment),
-                         'scope':element['scope'],'readiness':element['readiness'],
-                         'delivery_key':f"{parent_issue}:{element['id']}"})
+        require(element['scope'] in {'episode', 'act', 'scene'}, 'child assignments require an estimated size below season')
+        url = story_records.source_url(locator).replace('#issuecomment-', f"?element={element['id']}#issuecomment-")
+        public = (child_description(element) + '\n'
+                  f"[Parent assignment]({url})\n")
+        children.append({'title': element['title'], 'body': public,
+                         'scope': element['scope'], 'readiness': element['readiness'],
+                         'delivery_key': f"{parent_issue}:{element['id']}"})
     return children
 
 
 def validate_assignment(assignment: dict) -> dict:
-    """Both development and ready assignments must retain their accepted provenance."""
+    """Check the immediate visible parent element, not its whole creative history."""
     element = assignment.get('element')
-    require(isinstance(element, dict), 'assignment lacks an accepted element; re-establish through Keter')
-    parent = assignment.get('parent_ref')
-    if parent is not None:
-        require(isinstance(parent, dict) and parent.get('number') == assignment.get('parent_issue'), 'assignment parent identity mismatch')
-    # Recheck the source cycle; a pasted prose label or a tampered ready flag is insufficient.
-    accepted = {}
-    for phase in PHASES:
-        original = assignment.get('accepted',{}).get(phase)
-        require(isinstance(original,dict), 'assignment lacks accepted source cycle; re-establish through Keter')
-        require(original.get('outcome') == 'complete' and original.get('phase') == phase, 'assignment source cycle must contain accepted complete phase results')
-        require(original.get('scope') == assignment['accepted']['1'].get('scope'), 'accepted source cycle scope mismatch')
-        if parent is not None:
-            require(original.get('issue_ref') == parent, 'accepted source issue differs from assignment parent')
-        accepted[phase] = validate_result(original,phase=phase,cycle_id=assignment['cycle_id'],scope=original.get('scope'),
-                                           accepted=accepted,inherited=assignment.get('inherited',[]))
-    matches = [e for e in accepted['4']['elements'] if e['id'] == element.get('id')]
-    require(matches == [element], 'assignment differs from accepted organization')
-    anchors = [a for a in accepted['4']['anchors'] if a['id'] in element['source_refs']]
-    require(assignment.get('anchors') == anchors, 'assignment source anchors differ from accepted organization')
-    validate_element(element, {a['id'] for a in anchors})
-    ancestry = assignment.get('ancestry')
-    require(isinstance(ancestry, list), 'assignment ancestry must be preserved')
-    nodes = {}
-    for node in ancestry:
-        require(isinstance(node, dict) and isinstance(node.get('id'), str), 'invalid ancestry node')
-        require(node['id'] not in nodes or nodes[node['id']] == node, 'conflicting ancestry node')
-        nodes[node['id']] = node
-    required_nodes = [a for r in accepted.values() for a in r.get('anchors', []) + r.get('artifacts', [])]
-    required_nodes += assignment.get('inherited', [])
-    require(all(nodes.get(a['id']) == a for a in required_nodes), 'assignment lost accepted source ancestry')
-    # Follow the whole source chain, not only the immediate parent's anchors.
-    checked, visiting = set(), set()
-    def visit(identifier: str) -> None:
-        require(identifier in nodes, 'assignment ancestry has a missing source')
-        require(identifier not in visiting, 'assignment ancestry contains a reference cycle')
-        if identifier in checked:
-            return
-        visiting.add(identifier)
-        refs = nodes[identifier].get('source_refs')
-        require(isinstance(refs, list) and all(isinstance(ref, str) for ref in refs), 'invalid ancestry source references')
-        for ref in refs:
-            visit(ref)
-        visiting.remove(identifier)
-        checked.add(identifier)
-    for node in required_nodes:
-        visit(node['id'])
+    require(isinstance(element, dict), 'assignment needs its visible parent element')
+    validate_element(element, require_pivotal=True)
+    known = {b['id'] for a in assignment.get('anchors', []) for b in a.get('pivotal_beats', [])}
+    require(all(b.get('pivotal_beat_id') in known for b in element['beats'] if b['is_pivotal']),
+            'assignment pivotal beat is missing from the parent synthesis')
     return assignment
 
 
+def is_ready_scene_result(result: dict) -> bool:
+    elements = result.get('elements', [])
+    return (result.get('scope') == 'scene' and result.get('phase') == '4'
+            and result.get('outcome') == 'complete' and len(elements) == 1
+            and elements[0].get('scope') == 'scene' and elements[0].get('readiness') == 'ready')
+
+
 def ready_assignment(issue_data: dict) -> dict:
-    assignment = inherited_assignment(issue_data)
+    local = accepted_results(issue_data).get('4')
+    if local is not None:
+        require(is_ready_scene_result(local), 'local Tiferet material must resolve to one ready scene before preparation')
+        assignment = validate_assignment({'element': deepcopy(local['elements'][0]),
+                                         'anchors': deepcopy(local['anchors']),
+                                         '_source': story_records.source(local)})
+    else:
+        assignment = inherited_assignment(issue_data)
     require(assignment is not None, 'legacy work must be re-established through Keter before scene preparation')
     require(issue_scope(issue_data) == 'scene', 'ready assignment requires size:scene')
     require(assignment['element'].get('readiness') == 'ready', 'issue needs a validated ready-scene assignment; return through Keter')

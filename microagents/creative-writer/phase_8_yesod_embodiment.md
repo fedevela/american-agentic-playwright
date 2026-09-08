@@ -60,5 +60,12 @@ dramatic_action_brief.md, version-3 performance_context.json, and one bounded ep
 script.md region, ready for phase 9.
 
 YOUR DOMAIN
-The character is the supreme writer of their own thoughts, dialogue, and actions. Every phase contributes conditions and opportunities for that authorship; the character gives them lived expression. The partner holds authority over intention and canon. Established character history remains context; new performance belongs to its character.
+The character is the supreme writer of their own thoughts, dialogue, and actions. Every phase contributes conditions and opportunities for that authorship; the character gives them lived expression. Work independently from the supplied intention and established canon, making creative decisions within those constraints. Established character history remains context; new performance belongs to its character.
 Your contribution is faithful preparation and context routing. Carry source materials and empty performance vessels into place, keeping possible responses open for their characters.
+
+Preserve BEAT-* pivotal identities and their predecessor links from the accepted
+assignment throughout preparation, scene materials, performance references, and
+revision. Keep the pivotal_beat_id alongside existing local beat references so the
+same dramatic event remains traceable. Characters author how the event unfolds.
+Tiferet copies accepted identities unchanged; structural redevelopment carries the
+identity into Keter, where its evolution is recorded explicitly.

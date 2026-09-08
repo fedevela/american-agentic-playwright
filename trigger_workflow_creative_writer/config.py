@@ -149,7 +149,7 @@ FUNCTIONAL_MICROAGENT_FILE_MAP = {
     "10": "phase_10_hod_refactoring.md",
 }
 
-BASE_PERSONA_FILE = "daneel.md"
+BASE_PERSONA_FILE = "creative-writer/daneel.md"
 
 # Canonical label -> phase-id mapping used throughout routing and prompt selection.
 LABEL_PHASE_MAP = {

@@ -302,7 +302,11 @@ def validate_season_pr(payload: object, main: str, title: str) -> str:
 
 
 def extract_parent_issue(issue_body: str) -> int | None:
-    """Parse the parent issue number from an issue body if it contains the parent-marker."""
+    """Read the parent assignment link, or an existing parent marker."""
+    from .cycles import assignment_reference
+    reference = assignment_reference(issue_body)
+    if reference:
+        return reference['parent_issue']
     import re
     match = re.search(r"Parent issue: #(\d+)", issue_body)
     if match:

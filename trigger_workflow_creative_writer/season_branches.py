@@ -4,7 +4,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 import fcntl
-import json
 from pathlib import Path
 import re
 
@@ -58,24 +57,13 @@ def resolve_season_root(repo: str, issue: int, issue_data: dict | None = None) -
         if parent is None:
             raise SystemExit(f'Issue #{issue} has no validated parent leading to a season root.')
         parent_number = parent['number']
-        if markers != [str(parent_number)]:
+        if (markers and markers != [str(parent_number)]) or (not markers and assignment is None):
             raise SystemExit(f'Issue #{issue} has missing or conflicting parent ownership markers.')
         if assignment is not None and (assignment.get('parent_issue') != parent_number or assignment.get('parent_ref', {}).get('repo', repo) != repo):
             raise SystemExit('Assignment parent ownership conflicts with GitHub parent.')
         parent_data = github_ops.fetch_issue_data(repo, parent_number)
-        records = []
-        for comment in parent_data.get('comments', []):
-            for encoded in re.findall(r'<!-- creative-child-record:(.*?) -->', str(comment.get('body') or '')):
-                try:
-                    record = json.loads(encoded)
-                except ValueError as exc:
-                    raise SystemExit('Invalid parent ownership record.') from exc
-                if not isinstance(record, dict):
-                    raise SystemExit('Invalid parent ownership record.')
-                if record.get('number') == issue or record.get('id') == data.get('id'):
-                    records.append(record)
-        if not records or any(record != records[0] for record in records) or not github_ops._owns_child_delivery(parent_number, [data], [{'body': '<!-- creative-child-record:' + json.dumps(records[0]) + ' -->'}]):
-            raise SystemExit(f'Issue #{issue} lacks consistent recorded parent delivery ownership.')
+        if assignment is None or not github_ops._owns_child_delivery(parent_number, [data]):
+            raise SystemExit(f'Issue #{issue} lacks a valid parent assignment link.')
         issue, data = parent_number, parent_data
 
 

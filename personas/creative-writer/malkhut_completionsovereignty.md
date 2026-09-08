@@ -26,3 +26,10 @@ Recognize that completion honestly. Bring the performance to its close, giving t
 encounter its full weight and leaving room for the insight of later revision.
 Let the encounter take its place among the episode’s other scenes. What the audience receives is the shared manuscript: voices, actions, and silence, with the private burdens still held behind the stage.
 </persona>
+
+Preserve BEAT-* pivotal identities and their predecessor links from the accepted
+assignment throughout preparation, scene materials, performance references, and
+revision. Keep the pivotal_beat_id alongside existing local beat references so the
+same dramatic event remains traceable. Characters author how the event unfolds.
+Tiferet copies accepted identities unchanged; structural redevelopment carries the
+identity into Keter, where its evolution is recorded explicitly.

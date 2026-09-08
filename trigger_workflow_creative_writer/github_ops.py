@@ -50,8 +50,80 @@ def run_gh(args: list[str], *, capture_output: bool = False) -> subprocess.Compl
     )
 
 
+# Cache GitHub issues for this tick; only the active issue and verified parents
+# supply assignment material. No recursive story-record resolver is used.
+_STORY_ROOT = None
+_STORY_ALLOWED = None
+_STORY_ISSUES = {}
+
+
+def reset_story_sources(repo: str, issue: int) -> None:
+    global _STORY_ROOT, _STORY_ALLOWED, _STORY_ISSUES
+    _STORY_ROOT = (repo, issue)
+    _STORY_ALLOWED = None
+    _STORY_ISSUES = {}
+
+
+def _check_story_source(repo: str, issue: int) -> None:
+    global _STORY_ALLOWED
+    if _STORY_ROOT is None:
+        raise SystemExit('Story source resolution requires an active issue.')
+    if _STORY_ALLOWED is None:
+        root_repo, number = _STORY_ROOT
+        allowed = []
+        while number is not None:
+            if number in allowed or len(allowed) >= 100:
+                raise SystemExit('Invalid story parent chain.')
+            allowed.append(number)
+            parent = _fetch_parent_issue(root_repo, number)
+            number = parent['number'] if parent else None
+        _STORY_ALLOWED = allowed
+    if repo != _STORY_ROOT[0] or issue not in _STORY_ALLOWED:
+        raise SystemExit(f'Story source {repo}#{issue} is outside the active issue and its parent chain.')
+
+
+def ensure_story_source_root(repo: str, issue: int) -> None:
+    if _STORY_ROOT is None:
+        reset_story_sources(repo, issue)
+
+
+def fetch_assignment_source(issue_data: dict, parent_number: int) -> dict:
+    repo = issue_data['_repo']
+    parent = _fetch_parent_issue(repo, issue_data['number'])
+    if parent is None or parent['number'] != parent_number:
+        raise SystemExit('Visible assignment does not name the GitHub parent issue.')
+    _check_story_source(repo, parent_number)
+    return _STORY_ISSUES.get((repo, parent_number)) or fetch_issue_data(repo, parent_number)
+
+
+def parent_story_context() -> list[dict]:
+    """Visible parent issue material; independent phase-2 and roundtable callers omit it."""
+    from .story_records import public_markdown
+    if _STORY_ROOT is None:
+        raise SystemExit('Parent context requires an active issue.')
+    repo, issue = _STORY_ROOT
+    _check_story_source(repo, issue)
+    result = []
+    for number in _STORY_ALLOWED[1:]:
+        parent = _STORY_ISSUES.get((repo, number))
+        if parent is None:
+            parent = fetch_issue_data(repo, number)
+        result.append({'repo': repo, 'issue': number, 'title': parent['title'],
+                       'body': public_markdown(parent.get('body') or ''),
+                       'comments': [{**c, 'body': public_markdown(c.get('body') or ''), '_workflow': '<!-- phase:' in c.get('body', '') or '## Workflow ' in c.get('body', '') or c.get('body', '').startswith('### Phase ')}
+                                    for c in parent.get('comments', [])]})
+    return result
+
+
+def check_story_payload(body: str, context: str) -> None:
+    # Conservative UTF-8 bound leaves room for GitHub's character limit.
+    if len(body.encode('utf-8')) > 60000:
+        raise SystemExit(f'{context} exceeds the 60,000-byte publication budget; split the individual output before publishing.')
+
+
 def fetch_issue_data(repo: str, issue_number: int) -> dict[str, Any]:
     """Fetch the issue payload used by prompt construction and label checks."""
+    ensure_story_source_root(repo, issue_number)
     log_info(f"Fetching issue #{issue_number} with labels and comments")
     issue = run_gh_json(
         ["issue", "view", str(issue_number), "--repo", repo, "--json", "id,title,body,number,labels"],
@@ -67,6 +139,8 @@ def fetch_issue_data(repo: str, issue_number: int) -> dict[str, Any]:
          "url": comment.get("html_url")}
         for comment in comments
     ]
+    issue['_repo'] = repo
+    _STORY_ISSUES[(repo, issue_number)] = issue
     return issue
 
 
@@ -220,13 +294,12 @@ def resolve_oldest_phased_issue(repo: str) -> tuple[int, str]:
     return int(selected["number"]), labels[0]
 
 
-def post_issue_comment(repo: str, issue_number: int, body: str) -> None:
-    """Post a GitHub comment to the target issue."""
-    log_info(f"Posting issue comment to #{issue_number}")
-    result = run_gh(["issue", "comment", str(issue_number), "--repo", repo, "--body", body])
-    if result.returncode != 0:
-        log_error(f"Failed to post comment to {repo}#{issue_number}")
-        raise SystemExit(f"Failed to post comment to {repo}#{issue_number}.")
+def post_issue_comment(repo: str, issue_number: int, body: str) -> dict:
+    """Publish visible content and return its durable GitHub source locator."""
+    check_story_payload(body, f'Comment on {repo}#{issue_number}')
+    comment = run_gh_json(['api', f'repos/{repo}/issues/{issue_number}/comments', '--method', 'POST', '-f', f'body={body}'],
+                          failure_message=f'Failed to post comment to {repo}#{issue_number}', expect_type=dict)
+    return comment
 
 
 def edit_issue_labels(
@@ -320,6 +393,7 @@ def parse_repo(repo: str) -> tuple[str, str]:
 
 def create_issue_via_api(repo: str, title: str, body: str, *, labels: list[str] | None = None) -> dict[str, Any]:
     """Create an issue through the REST API and return its full metadata."""
+    check_story_payload(body, f'Child issue {title}')
     owner, repo_name = parse_repo(repo)
     args = [
         "api",
@@ -459,11 +533,12 @@ def create_child_issues(
     boundary requires explicit scope, readiness and a stable cycle/element key;
     narrative words never determine routing. Seasons are human-created only.
     """
+    from .cycles import assignment_keys
     prepared = []
     keys: set[str] = set()
     for item in sub_issues:
         scope, readiness, key = (item.get(field) for field in ("scope", "readiness", "delivery_key"))
-        if scope not in GENERATED_SCOPES or readiness not in {"ready", "develop"}:
+        if scope not in {"episode", "act", "scene"} or readiness not in {"ready", "develop"}:
             raise SystemExit("Child assignments require structured scope and readiness; re-establish legacy work through Keter.")
         if readiness == "ready" and scope != "scene":
             raise SystemExit("Only scene assignments can be ready for Netzach.")
@@ -472,58 +547,26 @@ def create_child_issues(
         keys.add(key)
         if any(not isinstance(item.get(field), str) or not item[field].strip() for field in ("title", "body")):
             raise SystemExit("Child assignment title and body must be nonempty.")
-        marker = f"<!-- creative-child:{key} -->"
+        marker = f"Assignment key: {key}"
         title = normalize_tiferet_child_title(item["title"])
-        body = (
-            f"Automatically created by Phase 4/Tiferet from parent issue #{parent_issue}.\n"
-            f"Parent issue: #{parent_issue}\n{marker}\n\n{item['body'].strip()}"
-        )
+        body = item['body'].strip()
+        if assignment_keys(body) != [key]:
+            raise SystemExit('Child assignment link differs from its delivery key.')
+        check_story_payload(body, f"Child issue {title}")
         labels = ["phase:netzach" if readiness == "ready" else "phase:keter", f"size:{scope}"]
         prepared.append((title, body, marker, key, labels))
 
     if not prepared:
         return []
     existing = fetch_paginated_items(repo, "issues?state=all&per_page=100")
-    comments = fetch_issue_data(repo, parent_issue).get("comments")
-    if not isinstance(comments, list) or any(not isinstance(comment, dict) for comment in comments):
-        raise SystemExit("Cannot reconcile child delivery records: invalid parent comments.")
-    records: dict[str, dict[str, Any]] = {}
-    delivered_keys: set[str] = set()
-    for comment in comments:
-        comment_body = str(comment.get("body") or "")
-        delivered_keys.update(re.findall(r"<!-- creative-child-delivered:([A-Za-z0-9_.:-]+) -->", comment_body))
-        for encoded in re.findall(r"<!-- creative-child-record:(.*?) -->", comment_body):
-            try:
-                record = json.loads(encoded)
-            except ValueError as exc:
-                raise SystemExit("Malformed child delivery record; reconciliation required.") from exc
-            if (not isinstance(record, dict) or record.get("parent") != parent_issue
-                    or not isinstance(record.get("key"), str)
-                    or not re.fullmatch(r"[A-Za-z0-9_.:-]+", record["key"])
-                    or type(record.get("id")) is not int or type(record.get("number")) is not int):
-                raise SystemExit("Invalid child delivery record; reconciliation required.")
-            key = record["key"]
-            if key in records and records[key] != record:
-                raise SystemExit("Conflicting child delivery records; reconciliation required.")
-            records[key] = record
-    if delivered_keys != set(records):
-        raise SystemExit("Incomplete child delivery records; reconciliation required.")
-    for key, record in records.items():
-        matches = [item for item in existing if "pull_request" not in item
-                   and f"<!-- creative-child:{key} -->" in str(item.get("body") or "")]
-        if (len(matches) != 1 or matches[0].get("id") != record["id"]
-                or matches[0].get("number") != record["number"]):
-            raise SystemExit(f"Recorded child {key} is missing or changed; reconciliation required.")
     attached = fetch_parent_sub_issue_ids(repo, parent_issue)
     # Check every existing assignment before any mutation, including later items.
     matched = []
     for title, body, marker, key, labels in prepared:
-        matches = [item for item in existing if marker in str(item.get("body") or "") and "pull_request" not in item]
+        matches = [item for item in existing if key in assignment_keys(str(item.get("body") or "")) and "pull_request" not in item]
         if len(matches) > 1:
             raise SystemExit(f"Duplicate child delivery marker {key}; human reconciliation required.")
         payload = matches[0] if matches else None
-        if payload is not None and (payload.get("title") != title or payload.get("body") != body):
-            raise SystemExit(f"Conflicting child delivery {key}; human reconciliation required.")
         matched.append(payload)
 
     created = []
@@ -535,10 +578,6 @@ def create_child_issues(
         except (KeyError, TypeError, ValueError) as exc:
             raise SystemExit(f"Invalid child metadata for {key}; reconcile before retrying.") from exc
         record = {"title": title, "url": url, "number": number, "id": issue_id}
-        record_marker = f"<!-- creative-child-delivered:{key} -->"
-        if not any(record_marker in str(comment.get("body") or "") for comment in comments):
-            ownership = json.dumps({"parent": parent_issue, "number": number, "id": issue_id, "key": key}, separators=(",", ":"))
-            post_issue_comment(repo, parent_issue, f"{record_marker}\n<!-- creative-child-record:{ownership} -->\nCreated child #{number}: {title} ({url}); GitHub issue ID: {issue_id}.")
         if issue_id not in attached:
             add_sub_issue_relationship(repo, parent_issue, issue_id)
             attached.add(issue_id)
@@ -587,38 +626,16 @@ def _fetch_parent_issue(repo: str, issue_number: int) -> dict[str, Any] | None:
     return parent
 
 
-def _owns_child_delivery(parent_number: int, children: list[dict[str, Any]], comments: list[dict[str, Any]]) -> bool:
-    """Require a complete structured delivery record and matching child markers.
-
-    This is operational provenance, not protection against forged GitHub edits.
-    Legacy prose records and unrelated manually attached children are insufficient.
-    """
-    records: dict[int, dict[str, Any]] = {}
-    for comment in comments:
-        for encoded in re.findall(r"<!-- creative-child-record:(.*?) -->", str(comment.get("body") or "")):
-            try:
-                record = json.loads(encoded)
-            except ValueError:
-                return False
-            if not isinstance(record, dict) or record.get("parent") != parent_number:
-                return False
-            issue_id = record.get("id")
-            if not isinstance(issue_id, int) or (issue_id in records and records[issue_id] != record):
-                return False
-            records[issue_id] = record
-    if not records or set(records) != {child.get("id") for child in children}:
-        return False
+def _owns_child_delivery(parent_number: int, children: list[dict[str, Any]]) -> bool:
+    """GitHub provides membership; child bodies identify the assigned elements."""
+    from .cycles import assignment_keys
+    keys = set()
     for child in children:
-        record = records[child["id"]]
-        key = record.get("key")
-        if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]+", key):
+        matches = assignment_keys(str(child.get('body') or ''))
+        if len(matches) != 1 or not matches[0].startswith(f'{parent_number}:') or matches[0] in keys:
             return False
-        body = str(child.get("body") or "")
-        if (record.get("number") != child.get("number")
-                or f"<!-- creative-child:{key} -->" not in body
-                or f"Parent issue: #{parent_number}" not in body.splitlines()):
-            return False
-    return True
+        keys.add(matches[0])
+    return bool(keys)
 
 
 def complete_scene_and_roll_up(repo: str, issue_number: int) -> list[int]:
@@ -682,7 +699,18 @@ def _complete_parent_chain(repo: str, parent: dict[str, Any] | None,
         if not child_ids <= {dependency.get("id") for dependency in dependencies}:
             return closed
         comments = fetch_paginated_items(repo, f"issues/{parent_number}/comments")
-        if not _owns_child_delivery(parent_number, children, comments):
+        if not _owns_child_delivery(parent_number, children):
+            return closed
+        from . import cycles
+        source_issue = {**parent, 'comments': comments}
+        cycles.bind_issue(source_issue, repo, parent_number)
+        cycles.inherited_assignment(source_issue)
+        accepted = cycles.accepted_results(source_issue)
+        if '4' not in accepted:
+            return closed
+        expected = {f"{parent_number}:{element['id']}" for element in accepted['4']['elements']}
+        delivered = {key for child in children for key in cycles.assignment_keys(str(child.get('body') or ''))}
+        if not expected <= delivered:
             return closed
         _close_completed_issue(repo, parent, closed)
         parent = _fetch_parent_issue(repo, parent_number)

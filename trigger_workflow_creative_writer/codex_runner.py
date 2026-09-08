@@ -40,7 +40,7 @@ Execution boundary: Python owns commit, push, pull request, GitHub comment, and 
 Never perform any of those operations. Do not create or switch branches. Work only within the
 requested phase scope in the already prepared checkout; Python will validate and deliver afterward.
 """.strip()
-REPOSITORY_VALIDATION_PHASES = {"5", "6", "10"}
+REPOSITORY_VALIDATION_PHASES = {"6", "10"}
 CODEX_CONFIG_OVERRIDES = ('sandbox_mode="workspace-write"',)
 
 
@@ -508,6 +508,10 @@ def run_codex_json_phase(
 ) -> dict[str, Any]:
     """Run a fresh Codex phase and parse its final response as a JSON object."""
     from .response_schemas import phase_response_schema
+    from .reference_resolution import phase_source_beats, retained_beat_names, new_beat_prefix
+    source_beats = phase_source_beats(issue_data, phase) if issue_data is not None else []
+    retained_ids = retained_beat_names(source_beats) if issue_data is not None else None
+    new_prefix = new_beat_prefix(source_beats, phase) if issue_data is not None and phase in {'1', '2A', '2B', '2C', '3'} else None
 
     content = _run_preparation_phase(
         prompt,
@@ -516,7 +520,7 @@ def run_codex_json_phase(
         phase=phase,
         session_scope=session_scope,
         issue_data=issue_data,
-        schema=phase_response_schema(phase),
+        schema=phase_response_schema(phase, retained_ids=retained_ids, new_prefix=new_prefix),
     )
     try:
         payload = json.loads(_strip_optional_json_fence(content))
@@ -567,6 +571,13 @@ def run_codex_implementation_phase(
         if response:
             log_multiline("Assistant response", response)
 
+        if phase == '5':
+            scene = ready_assignment(issue_data)['element']
+            preparation = context.local_path / 'scene_materials' / scene['placement']['scene_id'] / 'preparation.md'
+            if not preparation.is_file() or not preparation.read_text().strip():
+                raise SystemExit('Netzach must produce nonempty scene preparation.md before delivery.')
+            validate_required_artifacts(context.local_path)
+            return
         if phase in {"7", "8"}:
             from .scene_materials import validate_phase_artifacts
 

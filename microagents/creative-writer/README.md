@@ -6,7 +6,7 @@ Phases 7–9 prepare dramatic action, preserve performance materials, and perfor
 
 ## Identity, Creative Attention, and Execution
 
-[Daneel](../../personas/daneel.md) supplies the enduring identity: service to the human partner, humility about uncertainty, and respect for the showrunner's decisions. The twelve [creative-writing personas](../../personas/creative-writer/) give that identity a different mode of attention at each phase. Their lyrical language describes how to approach the work; the functional microagents specify its tasks, boundaries, and products.
+[Daneel](../../personas/creative-writer/daneel.md) supplies the enduring identity: care for the supplied intention, honesty about uncertainty, and independent creative judgment. The twelve [creative-writing personas](../../personas/creative-writer/) give that identity a different mode of attention at each phase. Their lyrical language describes how to approach the work; the functional microagents specify its tasks, boundaries, and products.
 
 [Prompt construction](../../trigger_workflow_creative_writer/prompts.py) composes the base identity (when enabled), the selected phase persona, and its functional microagent, then supplies issue context and response requirements. The character bible is a separate source of fictional identities: an actor's knowledge, wants, fears, secrets, and voice belong to the character being performed.
 
@@ -20,7 +20,7 @@ The table describes narrative responsibilities and completion conditions. Runtim
 
 | Phase and persona | Functional contract | Incoming material | Responsibility and outcome | Narrative completion condition |
 | --- | --- | --- | --- | --- |
-| 1 — [Keter: intent](../../personas/creative-writer/keter_intentformation.md) | [Intent formation](phase_1_keter.md) | Human premise or show bible and established artifacts | Translate intent into a Narrative Brief, logline, theme, and sized Master Story Beats without inventing canon. | Sources exist and scope is clear enough for ideation; uncertainty requires clarification. |
+| 1 — [Keter: intent](../../personas/creative-writer/keter_intentformation.md) | [Intent formation](phase_1_keter.md) | Human premise or show bible and established artifacts | Translate intent into a Narrative Brief, logline, theme, and sized Master Story Beats without inventing canon. | The supplied intention and sources support ideation; useful assumptions and development questions carry uncertainty forward. |
 | 2A — [Chokhmah: expansion](../../personas/creative-writer/chokhmah_generativeexpansion.md) | [Generative expansion](phase_2A_chokhmah.md) | Keter's clarification only as task content | Offer premise-level possibilities, one short sentence per item. | Structured possibilities preserve the brief and established arc colors. |
 | 2B — [Binah: containment](../../personas/creative-writer/binah_criticalrestriction.md) | [Critical restriction](phase_2B_binah.md) | Keter's clarification only as task content | Offer resistance, limits, and costs, one short sentence per item. | Each idea identifies a distinct pressure within established canon. |
 | 2C — [Chesed: grounding](../../personas/creative-writer/chesed_mechanisticgrounding.md) | [Mechanistic grounding](phase_2C_chesed.md) | Keter's clarification only as task content | Offer causal conditions, material circumstances, and stakes, one short sentence per item. | Concise ideas supply plausible conditions for later character discovery. |
@@ -116,20 +116,20 @@ While the `[SIZE]` property measures *dramaturgical* weight, the swarm must rema
 
 ## Narrative Recursion and Implemented Handoffs
 
-The narrative design is recursive. Human-created roots use `size:season`; generated
-artifacts and issues use `size:episode`, `size:act`, or `size:scene`. All issue trees
+The narrative design is recursive. Existing project roots use `size:season`; generated
+artifacts and issues use `size:episode`, `size:act`, `size:scene`, or `size:undetermined`. All issue trees
 ultimately yield ready scene leaves. Python validates structured scope, source
 coverage and readiness; quoted size words never control routing.
 
 The label order is `1 → 2A → 2B → 2C → 3 → 4`, then ready scenes enter
 `5 → 6 → 7 → 8 → 9`. Each exploration reads its current accepted Keter brief
 independently. Gevurah receives all three current explorations and Tiferet preserves
-its organization. Questions pause advancement until a partner reply and explicit tick.
+its organization. Agents resolve creative choices independently and carry open form into development assignments.
 
 Tiferet creates ready scenes and/or recursive development assignments. Python owns
 parent links, dependencies, retry reconciliation and completion rollup; it removes
 only the active parent phase label. Phase 5 requires a validated ready scene.
-All descendants share the human season root's Git branch and PR to main.
+All descendants share the season root's Git branch and PR to main.
 See [exploration contracts](../../docs/creative-writing-exploration.md).
 
 Malkhut has no automatic successor. Phase 10 is separately triggered editorial
@@ -186,10 +186,80 @@ Malkhut environmental stimuli, turn selection, and observation routing. Revision
 contributes editorial notes for the originating characters.
 
 All three phase-2 explorations use one short sentence on one line per item and one
-short orienting sentence in the narrative field. Scope and source references remain
-metadata. Outlines and beats express circumstances and dramatic purposes; characters
+short orienting sentence in the narrative field. Each artifact retains its scope and pivotal BEAT identity. Outlines and beats express circumstances and dramatic purposes; characters
 create their expression. Character action and delivery tags remain neutral vessels
 until performance. Existing canon supplies context, while newly authored character
 performance originates in character turns. Revision notes live in
 scene_materials/<scene_id>/revision_notes.md; character changes await a separately
 requested performance, with the current episode script preserved verbatim.
+
+
+## Pivotal beats and open scope
+
+Each Keter anchor and exploration artifact carries a one-sentence pivotal event,
+its stable `BEAT-*` identity, and predecessor references where applicable. The same
+event keeps its identity through transformation; a new or split event names its
+predecessors. Gevurah gives each element exactly one pivotal beat. Ready scenes
+also require concrete placement, an outline, ordered beats, and an identified pivotal event.
+
+Public references use compact labels such as `BEAT-K1`, linked to canonical IDs
+in the Markdown. There is no private beat-evolution explanation or stored history
+of earlier definitions. Earlier issue comments remain available as ordinary history.
+
+## Issue and repository memory
+
+The active issue, its GitHub parents, and repository files are the memory. Recent
+issue conversation appears ahead of generated proposals without a special comment
+format or a reply-waiting mechanism. Phase 2 keeps independent Keter-only generated
+inputs while receiving current conversation. Roundtable session boundaries remain.
+
+Phase output is visible Markdown with a small vocabulary of headings and field
+labels. Python reads those same paragraphs and identifiers. There are no hidden
+creative records, text locators, JSON ancestry graphs, or recursive record resolver.
+Structured model responses are transient input for validation and rendering.
+Anchor source-reference lists are omitted; BEAT identities and predecessor links
+carry pivotal continuity. Parent assignments select supporting material by the
+element’s pivotal BEAT ID. Every synthesized pivotal identity enters an element.
+
+Phase prose appears directly below its heading. Titles appear in element headings,
+and purpose sentences appear directly below their item. Routine outcome, repeated
+phase scope, reference-prefix explanations, and boolean pivotal labels are omitted.
+Element scope/readiness and placement remain visible. A development or execution
+failure heading appears only when needed. Older visible field labels remain readable.
+
+The Keter comment starts each run; phase headings and comment order identify its
+later outputs. Separate workflow cycle/result blocks are not published. Scope and
+readiness route work. Sources and BEAT references preserve immediate relationships. Elements appear
+before collapsible supporting anchors. Child bodies link to the parent assignment
+and name their element, cycle, scope, and readiness. Scene entry reads the immediate
+parent element and outline, without replaying the whole exploration history.
+
+Visible assignment keys prevent duplicate child creation. GitHub child issues,
+parent relationships, and blocking dependencies govern completion. Existing
+issue edits are not rejected merely because their prose differs from creation.
+
+Historical comments are not rewritten or migrated. Older hidden records are not
+read; begin a fresh Keter cycle before using the visible format. No live execution
+is part of this code change. Verification follows the instruction to run no tests:
+syntax parsing, source review, and `git diff --check` only.
+# Readable pivotal beat identities
+
+New beats use names such as `BEAT-K1-1-1` (Keter) or `BEAT-CH1-2A-1`
+(Chokhmah). The first number distinguishes a stem and the last distinguishes
+beats under that stem. Both are positive integers. Phase letters are K, CH, B,
+C, and G for 1, 2A, 2B, 2C, and 3. Cycle and issue ownership remain on the
+containing result; a beat name alone is not a global lookup key.
+
+Retain existing names across phases and inherited work. New events must not
+reuse source or ancestor names. Cycle-qualified IDs remain valid. A unique
+source may acquire its readable name (for example,
+`BEAT-4d6a1d8707fe-1-1` becomes `BEAT-K1-1-1`); Python preserves the original source
+ID in predecessor links. Ambiguous readable names require the exact source ID.
+Derived beats also carry transitive predecessor IDs so later cycles cannot
+reuse the name of a distant ancestor. Published history remains intact.
+
+Source references may use an exact full ID or an unambiguous label from the
+published source link. This applies to predecessor beats, Gevurah's selected
+pivotal beat, and Tiferet's assigned element. Python reads the actual link
+targets, including historical qualifiers, and stores full IDs after resolution.
+If source comments use the same label for different targets, use the full ID.
